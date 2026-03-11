@@ -2,7 +2,6 @@
   "name": "emdecob-consultas",
   "version": "1.0.0",
   "scripts": {
-    "install": "npm install --prefix frontend",
-    "build": "npm run build --prefix frontend"
+    "vercel-build": "cd frontend && npm install && npm run build"
   }
 }
