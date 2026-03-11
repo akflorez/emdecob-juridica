@@ -11,7 +11,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = 'emdecob_auth_token';
 const AUTH_USER_KEY    = 'emdecob_auth_user';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string || (import.meta.env.PROD ? '/api' : 'http://localhost:8000')).replace(/\/$/, '');
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
