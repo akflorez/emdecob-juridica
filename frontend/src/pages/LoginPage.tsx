@@ -85,7 +85,7 @@ export default function LoginPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">EMDECOB</h1>
-              <p className="text-muted-foreground text-sm">Sistema de Gestión Jurídica</p>
+              <p className="text-muted-foreground text-sm">Sistema de consulta Jurídica</p>
             </div>
           </div>
 
@@ -105,7 +105,7 @@ export default function LoginPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">EMDECOB</h1>
-              <p className="text-muted-foreground text-xs">Gestión Jurídica</p>
+              <p className="text-muted-foreground text-xs">Consulta Jurídica</p>
             </div>
           </div>
 
