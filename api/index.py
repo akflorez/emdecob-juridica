@@ -1,12 +1,23 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from app.main import app as original_app
+from fastapi.responses import FileResponse, PlainTextResponse
 import os
+import traceback
 
-# Create a top-level app that mounts the original app under /api
 app = FastAPI(title="Vercel Mount")
-app.mount("/api", original_app)
+
+try:
+    from app.main import app as original_app
+    app.mount("/api", original_app)
+except Exception as e:
+    err_str = traceback.format_exc()
+    @app.api_route("/api/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    async def serve_error(full_path: str):
+        return PlainTextResponse(content=f"IMPORT ERROR IN BACKEND:\n\n{err_str}", status_code=500)
+    
+    @app.api_route("/api", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    async def serve_error_root():
+        return PlainTextResponse(content=f"IMPORT ERROR IN BACKEND:\n\n{err_str}", status_code=500)
 
 # Serve the static frontend files
 # This is a fallback because Vercel sometimes ignores vercel.json rewrites for monorepos
