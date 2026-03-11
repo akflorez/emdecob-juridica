@@ -8,8 +8,7 @@ requests
 beautifulsoup4
 python-multipart
 cryptography
-bcrypt
-passlib
+passlib[bcrypt]
 pytz
 httpx
 psycopg2-binary

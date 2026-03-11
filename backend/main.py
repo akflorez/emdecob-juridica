@@ -26,7 +26,7 @@ import asyncio
 import random
 import pytz
 import httpx
-import bcrypt
+from passlib.context import CryptContext
 import secrets
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -749,13 +749,14 @@ _active_sessions: dict[str, int] = {}
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def _hash_password(plain: str) -> str:
+    return pwd_context.hash(plain)
 
 def _verify_password(plain: str, hashed: str) -> bool:
     try:
-        return bcrypt.checkpw(plain.encode(), hashed.encode())
+        return pwd_context.verify(plain, hashed)
     except Exception:
         return False
 
