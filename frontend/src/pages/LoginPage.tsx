@@ -89,46 +89,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="space-y-6 max-w-md">
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-card/50 border border-border/50 backdrop-blur-sm">
-              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Gavel className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Gestión de Casos</h3>
-                <p className="text-sm text-muted-foreground">
-                  Administre y consulte todos sus procesos jurídicos en un solo lugar
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-card/50 border border-border/50 backdrop-blur-sm">
-              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Seguridad</h3>
-                <p className="text-sm text-muted-foreground">
-                  Información protegida con los más altos estándares de seguridad
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-card/50 border border-border/50 backdrop-blur-sm">
-              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Building2 className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Institucional</h3>
-                <p className="text-sm text-muted-foreground">
-                  Plataforma oficial de consulta de procesos EMDECOB
-                </p>
-              </div>
-            </div>
-          </div>
-
           <p className="absolute bottom-8 text-xs text-muted-foreground">
-            © 2025 EMDECOB. Todos los derechos reservados.
+            © 2026 EMDECOB. Todos los derechos reservados.
           </p>
         </div>
       </div>
