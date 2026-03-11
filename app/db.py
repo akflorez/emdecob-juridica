@@ -10,7 +10,8 @@ load_dotenv()
 DATABASE_URL = os.getenv("NEON_URL")
 
 if not DATABASE_URL:
-    raise ValueError("❌ Falta configurar NEON_URL en el archivo .env")
+    print("⚠️ ADVERTENCIA: Falta configurar NEON_URL en el entorno. Usando base de datos predeterminada.")
+    DATABASE_URL = "sqlite:////tmp/fallback.db"
 
 engine = create_engine(
     DATABASE_URL,
