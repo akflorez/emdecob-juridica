@@ -1,0 +1,63 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AppLayout } from "./components/AppLayout";
+import LoginPage from "./pages/LoginPage";
+import AccesoDenegadoPage from "./pages/AccesoDenegadoPage";
+import ImportarPage from "./pages/ImportarPage";
+import ConsultarPage from "./pages/ConsultarPage";
+import CasosPage from "./pages/CasosPage";
+import CasoDetailPage from "./pages/CasoDetailPage";
+import ConfiguracionPage from "./pages/ConfiguracionPage";
+import NoEncontradosPage from "./pages/NoEncontradosPage";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Sonner />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Rutas públicas */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
+            
+            {/* Rutas protegidas */}
+            <Route element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }>
+              <Route path="/" element={<Navigate to="/consultar" replace />} />
+              <Route path="/importar" element={
+                <ProtectedRoute requiredPermission="importar">
+                  <ImportarPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/consultar" element={<ConsultarPage />} />
+              <Route path="/casos" element={<CasosPage />} />
+              <Route path="/casos/:radicado" element={<CasoDetailPage />} />
+              <Route path="/no-encontrados" element={<NoEncontradosPage />} />
+              <Route path="/configuracion" element={
+                <ProtectedRoute requiredPermission="importar">
+                  <ConfiguracionPage />
+                </ProtectedRoute>
+              } />
+            </Route>
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;

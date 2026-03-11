@@ -1,0 +1,636 @@
+const BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+
+export type ApiErrorPayload = { detail?: any } | any;
+
+export class ApiError extends Error {
+  status: number;
+  payload?: ApiErrorPayload;
+
+  constructor(status: number, message: string, payload?: ApiErrorPayload) {
+    super(message);
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+function getToken() {
+  return localStorage.getItem("access_token");
+}
+
+async function parseError(res: Response) {
+  const text = await res.text().catch(() => "");
+  try {
+    return text ? JSON.parse(text) : undefined;
+  } catch {
+    return text;
+  }
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  auth = true
+): Promise<T> {
+  if (!BASE_URL) throw new Error("VITE_API_BASE_URL no está definido");
+
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  const headers = new Headers(options.headers || {});
+  const isFormData = options.body instanceof FormData;
+
+  if (!isFormData) headers.set("Content-Type", "application/json");
+
+  if (auth) {
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${cleanBaseUrl}${cleanPath}`, { ...options, headers });
+
+  if (!res.ok) {
+    const payload = await parseError(res);
+    const msg =
+      (payload && (payload.detail || payload.message)) || `Error ${res.status}`;
+    throw new ApiError(res.status, String(msg), payload);
+  }
+
+  if (res.status === 204) return undefined as T;
+
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return (await res.json()) as T;
+
+  return (await res.text()) as unknown as T;
+}
+
+/** ---------------------------
+ * AUTH
+ * -------------------------- */
+export type LoginResponse = { access_token: string; role: "ADMIN" | "ABOGADO" };
+
+export function login(username: string, password: string) {
+  return apiFetch<LoginResponse>(
+    "/auth/login",
+    { method: "POST", body: JSON.stringify({ username, password }) },
+    false
+  );
+}
+
+/** ---------------------------
+ * ESTADÍSTICAS
+ * -------------------------- */
+export type StatsResponse = {
+  total_validos: number;
+  total_pendientes: number;
+  total_invalidos: number;
+  total_no_leidos: number;
+  total_actualizados_hoy: number;
+};
+
+export function getStats() {
+  return apiFetch<StatsResponse>("/stats");
+}
+
+/** ---------------------------
+ * CONSULTA POR RADICADO
+ * -------------------------- */
+export type CaseByRadicadoResponse = {
+  id?: number | null;
+  radicado: string;
+  demandante?: string | null;
+  demandado?: string | null;
+  juzgado?: string | null;
+  alias?: string | null;
+  fecha_radicacion?: string | null;
+  ultima_actuacion?: string | null;
+  last_check_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  unread?: boolean;
+};
+
+export function getCaseByRadicado(radicado: string) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<CaseByRadicadoResponse>(`/cases/by-radicado/${r}`);
+}
+
+/** ---------------------------
+ * EVENTOS / ACTUACIONES POR RADICADO
+ * -------------------------- */
+export type EventOut = {
+  id_reg_actuacion?: number | null;
+  cons_actuacion?: number | null;
+  llave_proceso?: string | null;
+  event_date?: string | null;
+  title?: string | null;
+  detail?: string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  fecha_registro?: string | null;
+  con_documentos?: boolean;
+  cant?: number | null;
+};
+
+export function getCaseEvents(radicado: string) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/by-radicado/${r}/events`);
+}
+
+/** ---------------------------
+ * DESCARGAR ACTUACIONES EXCEL (un radicado)
+ * -------------------------- */
+export function downloadEventsExcel(radicado: string) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const r = encodeURIComponent(radicado.trim());
+  window.open(`${cleanBaseUrl}/cases/by-radicado/${r}/events.xlsx`, "_blank");
+}
+
+/** ---------------------------
+ * DESCARGAR ACTUACIONES MÚLTIPLES
+ * -------------------------- */
+export async function downloadMultipleEventsExcel(radicados: string[]) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${cleanBaseUrl}/cases/events/download-multiple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(radicados),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Error descargando archivo");
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `actuaciones_multiple_${new Date().toISOString().split("T")[0]}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  a.remove();
+}
+
+/** ---------------------------
+ * IMPORTAR EXCEL
+ * -------------------------- */
+export type ImportExcelResponse = {
+  ok: boolean;
+  created: number;
+  skipped: number;
+  invalid_count: number;
+  message?: string;
+};
+
+export function importExcel(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiFetch<ImportExcelResponse>("/cases/import-excel", { method: "POST", body: fd });
+}
+
+/** ---------------------------
+ * DESCARGAR REPORTE DE INVÁLIDOS (desde importar)
+ * -------------------------- */
+export function downloadInvalidReport(invalidList: { radicado: string; motivo: string }[]) {
+  const header = "Radicado,Motivo\n";
+  const rows = invalidList.map((item) => `${item.radicado},"${item.motivo}"`).join("\n");
+  const csv = header + rows;
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `radicados_no_encontrados_${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  a.remove();
+}
+
+/** ---------------------------
+ * LISTAR CASOS
+ * -------------------------- */
+export type CaseRow = {
+  id: number;
+  radicado: string;
+  demandante?: string | null;
+  demandado?: string | null;
+  juzgado?: string | null;
+  alias?: string | null;
+  fecha_radicacion?: string | null;
+  ultima_actuacion?: string | null;
+  last_check_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  unread?: boolean;
+  has_documents?: boolean;
+};
+
+export type CasesResponse = {
+  items: CaseRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  unread_count?: number;
+};
+
+export type GetCasesParams = {
+  search?: string;
+  juzgado?: string;
+  mes_actuacion?: string;
+  solo_validos?: boolean;
+  solo_pendientes?: boolean;
+  solo_no_leidos?: boolean;
+  solo_actualizados_hoy?: boolean;
+  con_documentos?: boolean;
+  page?: number;
+  page_size?: number;
+};
+
+export function getCases(params: GetCasesParams) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.juzgado) qs.set("juzgado", params.juzgado);
+  if (params.mes_actuacion) qs.set("mes_actuacion", params.mes_actuacion);
+  if (params.solo_validos !== undefined) qs.set("solo_validos", String(params.solo_validos));
+  if (params.solo_pendientes) qs.set("solo_pendientes", "true");
+  if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
+  if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
+  if (params.con_documentos !== undefined) qs.set("con_documentos", String(params.con_documentos));
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  const q = qs.toString();
+  return apiFetch<CasesResponse>(`/cases${q ? `?${q}` : ""}`);
+}
+
+/** ---------------------------
+ * DESCARGAR CASOS EXCEL
+ * -------------------------- */
+export function downloadCasesExcel(params: {
+  search?: string;
+  juzgado?: string;
+  solo_no_leidos?: boolean;
+  solo_actualizados_hoy?: boolean;
+}) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.juzgado) qs.set("juzgado", params.juzgado);
+  if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
+  if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
+  const q = qs.toString();
+  window.open(`${cleanBaseUrl}/cases/download${q ? `?${q}` : ""}`, "_blank");
+}
+
+/** ---------------------------
+ * ELIMINAR CASO
+ * -------------------------- */
+export function deleteCase(caseId: number) {
+  return apiFetch<{ ok: boolean; message: string }>(`/cases/${caseId}`, {
+    method: "DELETE",
+  });
+}
+
+/** ---------------------------
+ * MARCAR COMO LEÍDO (uno)
+ * -------------------------- */
+export function markCaseRead(caseId: number) {
+  return apiFetch<{ ok: boolean; id: number }>(`/cases/${caseId}/mark-read`, {
+    method: "POST",
+  });
+}
+
+/** ---------------------------
+ * MARCAR COMO LEÍDOS (varios)
+ * -------------------------- */
+export function markReadBulk(caseIds: number[]) {
+  return apiFetch<{ ok: boolean; updated: number }>("/cases/mark-read-bulk", {
+    method: "POST",
+    body: JSON.stringify({ case_ids: caseIds }),
+  });
+}
+
+/** ---------------------------
+ * MARCAR TODOS COMO LEÍDOS
+ * -------------------------- */
+export function markReadAll(params: {
+  search?: string;
+  juzgado?: string;
+  solo_no_leidos?: boolean;
+  solo_actualizados_hoy?: boolean;
+}) {
+  return apiFetch<{ ok: boolean; updated: number; total: number }>("/cases/mark-read-all", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+/** ---------------------------
+ * ACTUALIZAR TODOS LOS CASOS
+ * -------------------------- */
+export type RefreshAllResponse = {
+  ok: boolean;
+  total_cases?: number;
+  checked?: number;
+  updated_cases: number;
+  cases_with_changes: {
+    radicado: string;
+    demandante?: string;
+    demandado?: string;
+    juzgado?: string;
+  }[];
+};
+
+export function refreshAllCases() {
+  return apiFetch<RefreshAllResponse>("/cases/refresh-all", { method: "POST" });
+}
+
+/** ---------------------------
+ * VALIDAR LOTE DE PENDIENTES
+ * -------------------------- */
+export type ValidateBatchResponse = {
+  ok: boolean;
+  processed: number;
+  validated: number;
+  not_found: number;
+  remaining: number;
+  message: string;
+};
+
+export function validateBatch(batchSize: number = 50) {
+  return apiFetch<ValidateBatchResponse>(`/cases/validate-batch?batch_size=${batchSize}`, {
+    method: "POST",
+  });
+}
+
+/** ---------------------------
+ * RADICADOS NO ENCONTRADOS
+ * -------------------------- */
+export type InvalidRadicado = {
+  id: number;
+  radicado: string;
+  motivo: string;
+  intentos: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type InvalidRadicadosResponse = {
+  items: InvalidRadicado[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export function getInvalidRadicados(params: { search?: string; page?: number; page_size?: number }) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  const q = qs.toString();
+  return apiFetch<InvalidRadicadosResponse>(`/invalid-radicados${q ? `?${q}` : ""}`);
+}
+
+export function deleteInvalidRadicado(id: number) {
+  return apiFetch<{ ok: boolean }>(`/invalid-radicados/${id}`, { method: "DELETE" });
+}
+
+export function retryInvalidRadicado(id: number) {
+  return apiFetch<{ ok: boolean; found: boolean; message: string }>(
+    `/invalid-radicados/${id}/retry`,
+    { method: "POST" }
+  );
+}
+
+export function downloadInvalidRadicadosExcel() {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  window.open(`${cleanBaseUrl}/invalid-radicados/download`, "_blank");
+}
+
+/** ---------------------------
+ * RADICADOS NO ENCONTRADOS - OPERACIONES MASIVAS
+ * -------------------------- */
+export type RetryBatchInvalidResponse = {
+  ok: boolean;
+  processed: number;
+  found: number;
+  still_not_found: number;
+  remaining: number;
+  message: string;
+};
+
+export function retryBatchInvalidRadicados(batchSize: number = 20) {
+  return apiFetch<RetryBatchInvalidResponse>(`/invalid-radicados/retry-batch?batch_size=${batchSize}`, {
+    method: "POST",
+  });
+}
+
+export function retryAllInvalidRadicados() {
+  return apiFetch<RetryBatchInvalidResponse>("/invalid-radicados/retry-all", {
+    method: "POST",
+  });
+}
+
+export function deleteAllInvalidRadicados() {
+  return apiFetch<{ ok: boolean; deleted: number; message: string }>("/invalid-radicados/delete-all", {
+    method: "DELETE",
+  });
+}
+
+/** ---------------------------
+ * CONFIGURACIÓN DE NOTIFICACIONES
+ * -------------------------- */
+export type NotificationConfigResponse = {
+  id: number;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user?: string | null;
+  smtp_from?: string | null;
+  notification_emails?: string | null;
+  is_active: boolean;
+  has_password: boolean;
+  updated_at?: string | null;
+};
+
+export type NotificationConfigUpdate = {
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_pass?: string;
+  smtp_from?: string;
+  notification_emails?: string;
+  is_active?: boolean;
+};
+
+export function getNotificationConfig() {
+  return apiFetch<NotificationConfigResponse>("/config/notifications");
+}
+
+export function updateNotificationConfig(data: NotificationConfigUpdate) {
+  return apiFetch<{ ok: boolean; message: string }>("/config/notifications", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function testNotificationEmail(email: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/config/notifications/test", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function sendManualNotification() {
+  return apiFetch<{ ok: boolean; sent: boolean; message: string; count: number }>(
+    "/config/notifications/send-manual",
+    { method: "POST" }
+  );
+}
+
+export type NotificationLogItem = {
+  id: number;
+  sent_at?: string | null;
+  recipients?: string | null;
+  subject?: string | null;
+  cases_count: number;
+  status: string;
+  error_message?: string | null;
+};
+
+export type NotificationLogsResponse = {
+  items: NotificationLogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export function getNotificationLogs(page: number = 1, pageSize: number = 20) {
+  return apiFetch<NotificationLogsResponse>(
+    `/config/notifications/logs?page=${page}&page_size=${pageSize}`
+  );
+}
+
+/** ---------------------------
+ * DOCUMENTOS DE ACTUACIONES
+ * Campo real confirmado por Network Inspector en la página oficial de Rama Judicial:
+ *   - Endpoint: GET /api/v2/Proceso/DocumentosActuacion/{idRegActuacion}
+ *   - Campo ID del documento: "idRegDocumento"  (NO idRegistroDocumento)
+ *   - Campo nombre:           "nombre"
+ *   - Campo descripción:      "descripcion"
+ *   - Campo fecha:            "fechaCarga"
+ * -------------------------- */
+export type DocumentoActuacion = {
+  // ✅ Campo real confirmado por inspección de red
+  idRegDocumento?: number;
+  // Fallbacks por si la API varía
+  idRegistroDocumento?: number;
+  idDocumento?: number;
+  id?: number;
+  // Datos del documento
+  nombre?: string;
+  nombreDocumento?: string;
+  descripcion?: string;
+  tipo?: string;
+  fechaCarga?: string | null;
+  fechaCargue?: string | null;
+  // Campos internos de Rama Judicial
+  idConexion?: number;
+  consActuacion?: number;
+  guidDocumento_SXXIN?: string;
+};
+
+export type DocumentosActuacionResponse = {
+  items: DocumentoActuacion[];
+  total?: number;
+};
+
+export function getDocumentosActuacion(radicado: string, idRegActuacion: number) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<DocumentosActuacionResponse>(
+    `/cases/events/${idRegActuacion}/documents?llave_proceso=${r}`
+  );
+}
+
+export function downloadDocumento(doc: DocumentoActuacion) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+
+  // ✅ Priorizar el campo real confirmado: idRegDocumento
+  const idDocumento =
+    doc.idRegDocumento ??
+    doc.idRegistroDocumento ??
+    doc.idDocumento ??
+    doc.id ??
+    null;
+
+  if (!idDocumento) {
+    console.error("El documento no tiene un ID válido.", doc);
+    return;
+  }
+
+  window.open(`${cleanBaseUrl}/documentos/${idDocumento}/descargar`, "_blank");
+}
+
+/** ---------------------------
+ * VALIDACIÓN AUTOMÁTICA
+ * -------------------------- */
+export type ValidationStatus = {
+  running: boolean;
+  processed: number;
+  validated: number;
+  not_found: number;
+  errors: number;
+  total: number;
+  started_at?: string | null;
+  last_update?: string | null;
+};
+
+export function getValidationStatus() {
+  return apiFetch<ValidationStatus>("/validation/status");
+}
+
+export function startAutoValidation(batchSize: number = 20) {
+  return apiFetch<{ ok: boolean; message: string; stats?: ValidationStatus }>(
+    `/validation/start?batch_size=${batchSize}`,
+    { method: "POST" }
+  );
+}
+
+export function stopAutoValidation() {
+  return apiFetch<{ ok: boolean; message: string }>("/validation/stop", {
+    method: "POST",
+  });
+}
+
+export function startRetryInvalid() {
+  return apiFetch<{ ok: boolean; message: string; stats?: ValidationStatus }>(
+    "/validation/retry-invalid/start",
+    { method: "POST" }
+  );
+}
+
+/** ---------------------------
+ * AUTO-REFRESH STATUS
+ * -------------------------- */
+export type AutoRefreshStatus = {
+  running: boolean;
+  scheduled_hours: string;
+  last_run?: string | null;
+  next_run?: string | null;
+  last_result?: {
+    ok?: boolean;
+    checked?: number;
+    updated_cases?: number;
+    errors?: number;
+  } | null;
+};
+
+export function getAutoRefreshStatus() {
+  return apiFetch<AutoRefreshStatus>("/auto-refresh/status");
+}
+
+export function runAutoRefreshNow() {
+  return apiFetch<{ ok: boolean; message: string }>("/auto-refresh/run-now", {
+    method: "POST",
+  });
+}
