@@ -8,7 +8,7 @@ backend_app = None
 init_error = None
 
 try:
-    from app.main import app as original_app
+    from backend.main import app as original_app
     backend_app = original_app
     app.mount("/api", backend_app)
 except Exception as e:
