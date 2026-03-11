@@ -188,7 +188,7 @@ export default function LoginPage() {
 
           <p className="text-center text-xs text-muted-foreground">
             ¿Problemas para acceder?{' '}
-            <a href="#" className="text-primary hover:underline">
+            <a href="mailto:direccionanalitica@emdecob.com" className="text-primary hover:underline">
               Contacte al administrador
             </a>
           </p>
@@ -197,4 +197,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
