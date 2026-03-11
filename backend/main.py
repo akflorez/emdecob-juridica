@@ -683,6 +683,11 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:8081",
         "http://127.0.0.1:8081",
+        # ── Producción Vercel ──
+        "https://emdecob-juridica.vercel.app",
+        # ── Dominio de producción final ──
+        "http://consultasjuridicas.emdecob.co",
+        "https://consultasjuridicas.emdecob.co",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -751,8 +756,6 @@ SECRET_KEY_DEV = base64.urlsafe_b64encode(b'emdecob_secret_jwt_key_123456789')
 fernet = Fernet(SECRET_KEY_DEV)
 
 def create_access_token(user_id: int) -> str:
-    # We include timestamp directly or we can rely on fernet.decrypt TTL.
-    # Fernet includes a timestamp itself!
     payload = json.dumps({"user_id": user_id}).encode('utf-8')
     return fernet.encrypt(payload).decode('utf-8')
 
@@ -791,7 +794,7 @@ def get_current_user(
     user_id = verify_access_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
-    
+
     # Fake ID for hardcoded admin
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
@@ -879,35 +882,19 @@ def _asignar_roles_inteligente(nombre_a: Optional[str], nombre_b: Optional[str])
     Si ninguno es FNA, respeta el orden original.
     """
     if nombre_a and _es_fna(nombre_a):
-        return nombre_a, nombre_b   # FNA=demandante, persona=demandado
+        return nombre_a, nombre_b
     if nombre_b and _es_fna(nombre_b):
-        return nombre_b, nombre_a   # FNA=demandante, persona=demandado
-    return nombre_a, nombre_b       # Sin FNA → respetar orden original
+        return nombre_b, nombre_a
+    return nombre_a, nombre_b
 
 
 def parse_sujetos_procesales(sujetos):
-    """
-    Extrae demandante y demandado del campo sujetosProcesales de la Rama Judicial.
-    - Siempre devuelve nombres en MAYÚSCULAS.
-    - Si detecta el Fondo Nacional del Ahorro, lo asigna automáticamente
-      como demandante y a la persona natural como demandado,
-      independientemente del orden que venga de la API.
-
-    FORMATO 1 — String con separador pipe:
-      "Demandante: NOMBRE|Demandado: NOMBRE"
-      "Demandante/accionante: NOMBRE|Demandado: NOMBRE"
-      "fONDO nACIONAL dEL aHORRO..." (cualquier casing)
-
-    FORMATO 2 — Lista de objetos JSON:
-      [{"tipoSujeto": "Demandante", "nombre": "NOMBRE"}, ...]
-    """
     if not sujetos:
         return None, None
 
     demandante = None
     demandado = None
 
-    # ── FORMATO 2: lista de objetos ──────────────────────────────────────────
     if isinstance(sujetos, list):
         ROLES_DEMANDANTE = {"demandante", "accionante", "demandante/accionante", "accionante/demandante", "ejecutante"}
         ROLES_DEMANDADO  = {"demandado", "accionado", "demandado/accionado", "ejecutado", "deudor"}
@@ -925,7 +912,6 @@ def parse_sujetos_procesales(sujetos):
         demandante, demandado = _asignar_roles_inteligente(demandante, demandado)
         return demandante, demandado
 
-    # ── FORMATO 1: string ─────────────────────────────────────────────────────
     if not isinstance(sujetos, str):
         try:
             sujetos = str(sujetos)
@@ -1054,36 +1040,25 @@ async def delay_between_requests(min_delay: float = 0.3, max_delay: float = 0.6)
 
 
 def extract_documentos_from_response(raw) -> list:
-    """
-    Extrae la lista de documentos de cualquier formato que devuelva la Rama Judicial.
-    Maneja: lista directa, dict con clave 'documentos', 'items', 'data', etc.
-    """
     if not raw:
         return []
     if isinstance(raw, list):
         return raw
     if isinstance(raw, dict):
-        # Intentar las claves más comunes
         for key in ("documentos", "Documentos", "items", "Items", "data", "Data", "result", "Result"):
             val = raw.get(key)
             if val and isinstance(val, list):
                 return val
-        # Si el propio dict tiene idRegistroDocumento, es un documento único
         if any(k in raw for k in ("idRegistroDocumento", "IdRegistroDocumento", "id", "idDocumento")):
             return [raw]
     return []
 
 
 async def fetch_documentos_rama_directa(id_reg_actuacion: int, llave_proceso: str = "") -> list:
-    """
-    Fallback: llamada HTTP directa a Rama Judicial.
-    URL confirmada: GET /api/v2/Proceso/DocumentosActuacion/{id_reg_actuacion}
-    Sin llaveProceso — la Rama no lo requiere.
-    """
     iid = int(id_reg_actuacion)
 
     candidate_paths = [
-        f"/Proceso/DocumentosActuacion/{iid}",   # ← URL REAL confirmada por Network Inspector
+        f"/Proceso/DocumentosActuacion/{iid}",
         f"/Proceso/Actuacion/Documentos/{iid}",
         f"/Proceso/Actuacion/{iid}/Documentos",
         f"/Proceso/Documento/{iid}",
@@ -1170,7 +1145,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
         fecha_ult = parse_fecha(fecha_ult_str)
 
         if fecha_ult and fecha_ult >= ayer:
-            pass # No asignar last_hash para que sea "no leído"
+            pass  # No asignar last_hash para que sea "no leído"
         else:
             c.last_hash = new_hash
 
@@ -1267,7 +1242,6 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
-
 # =========================
 # AUTH — LOGIN / LOGOUT / USUARIOS
 # =========================
@@ -1277,13 +1251,27 @@ def login(data: LoginRequest):
     """Autentica un usuario y retorna un token de sesión."""
     db = SessionLocal()
     try:
+        # ── Primero intentar contra la base de datos ──
         user = db.query(User).filter(
             User.username == data.username,
             User.is_active == True
         ).first()
 
-        # Hardcoded fallback para el usuario administrador
-        if data.username == "admin" and data.password == "12345":
+        if user and _verify_password(data.password, user.hashed_password):
+            token = create_access_token(user.id)
+            return {
+                "token": token,
+                "token_type": "bearer",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "nombre": user.nombre,
+                    "is_admin": user.is_admin,
+                }
+            }
+
+        # ── Fallback hardcodeado para admin (usa la contraseña real) ──
+        if data.username == "admin" and data.password == "Margarita1393$%":
             token = create_access_token(9999)
             return {
                 "token": token,
@@ -1291,26 +1279,13 @@ def login(data: LoginRequest):
                 "user": {
                     "id": 9999,
                     "username": "admin",
-                    "nombre": "Administrador Vercel",
+                    "nombre": "Administrador",
                     "is_admin": True,
                 }
             }
 
-        if not user or not _verify_password(data.password, user.hashed_password):
-            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
-        token = create_access_token(user.id)
-
-        return {
-            "token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "nombre": user.nombre,
-                "is_admin": user.is_admin,
-            }
-        }
     finally:
         db.close()
 
@@ -2017,15 +1992,12 @@ async def validate_batch(db: Session = Depends(get_db), batch_size: int = Query(
                 validated += 1
             else:
                 not_found += 1
-                # NO borramos el caso — queda como pendiente para reintento automático.
-                # Solo registramos el intento fallido en InvalidRadicado para trazabilidad.
                 inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
                 if inv:
                     inv.intentos += 1
                     inv.updated_at = now_colombia()
                 else:
                     db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
-                # c sigue en BD con juzgado=None → aparecerá en próximos ciclos de validación
             db.flush()
         except Exception:
             pass
@@ -2365,7 +2337,7 @@ async def _background_validate_pendientes():
     """
     BATCH = 50
     DELAY = 2.0
-    MAX_CYCLES = 20  # Tope de seguridad
+    MAX_CYCLES = 20
 
     print("🔄 [bg-validate] Iniciando validación automática de pendientes...")
     for cycle in range(MAX_CYCLES):
@@ -2388,7 +2360,6 @@ async def _background_validate_pendientes():
                         if inv:
                             db.delete(inv)
                     else:
-                        # Registrar intento pero NO borrar el caso
                         inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
                         if inv:
                             inv.intentos += 1
@@ -2405,7 +2376,7 @@ async def _background_validate_pendientes():
             if remaining == 0:
                 break
 
-            await asyncio.sleep(5)  # Pausa entre ciclos
+            await asyncio.sleep(5)
 
         except Exception as e:
             print(f"💥 [bg-validate] Error ciclo {cycle+1}: {e}")
@@ -2461,9 +2432,6 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
         db.commit()
 
-        # ── Disparar validación automática en background ──────────────────────
-        # No bloqueamos la respuesta: el usuario ya puede usar la app mientras
-        # se van validando los radicados nuevos en segundo plano.
         if created > 0:
             asyncio.create_task(_background_validate_pendientes())
 
@@ -2495,26 +2463,16 @@ async def refresh_all_cases():
 
 # =========================
 # DOCUMENTOS DE ACTUACIÓN
-# ─────────────────────────────────────────────────────────────────────────────
-# CAMBIO PRINCIPAL: ahora tiene 3 capas de fallback para encontrar los docs:
-#   1. Llamada al servicio documentos_actuacion() de service/rama.py
-#   2. Si retorna vacío → llamada HTTP directa a la API de Rama Judicial
-#   3. Normalización de múltiples formatos de respuesta posibles
 # =========================
 @app.get("/cases/events/{id_reg_actuacion}/documents")
 async def get_event_documents(
     id_reg_actuacion: int,
     llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 dígitos")
 ):
-    """
-    Obtiene los documentos PDF de una actuación en la Rama Judicial.
-    Incluye fallback directo a la API si el servicio retorna vacío.
-    """
     print(f"\n📄 [DOCS] id_reg_actuacion={id_reg_actuacion} | llave_proceso={llave_proceso}")
 
     items = []
 
-    # ── Capa 1: intentar con el servicio rama existente ──
     try:
         raw = await documentos_actuacion(id_reg_actuacion, llave_proceso)
         print(f"📄 [DOCS] service/rama.documentos_actuacion() → tipo={type(raw).__name__} | valor={str(raw)[:300]}")
@@ -2526,7 +2484,6 @@ async def get_event_documents(
         print(f"📄 [DOCS] Error en servicio: {e}")
         traceback.print_exc()
 
-    # ── Capa 2: fallback – llamada HTTP directa a Rama Judicial ──
     if not items:
         print(f"📄 [DOCS] Servicio retornó vacío. Intentando llamada directa a Rama Judicial...")
         try:
@@ -2545,19 +2502,10 @@ async def get_event_documents(
 # =========================
 @app.get("/documentos/{id_documento}/descargar")
 async def descargar_documento_endpoint(id_documento: int):
-    """
-    Hace de puente para descargar el PDF directamente de la Rama Judicial.
-
-    IMPORTANTE: No se puede lanzar HTTPException dentro de un generador async
-    de StreamingResponse — el navegador lo interpreta como error de conexión.
-    Por eso verificamos el status ANTES de abrir el stream al cliente.
-    """
     url_rama = f"{RAMA_BASE}/Descarga/Documento/{id_documento}"
     print(f"📥 Descargando documento ID={id_documento} → {url_rama}")
 
     try:
-        # Abrimos la conexión con stream=True para no cargar el PDF en memoria,
-        # pero capturamos el status code ANTES de hacer yield al cliente.
         client = httpx.AsyncClient(timeout=60.0, verify=False, headers=RAMA_HEADERS)
         response = await client.send(
             client.build_request("GET", url_rama),
@@ -2574,12 +2522,10 @@ async def descargar_documento_endpoint(id_documento: int):
                 detail=f"La Rama Judicial devolvió {response.status_code} para el documento {id_documento}."
             )
 
-        # Content-type: forzar PDF si viene como octet-stream
         content_type = response.headers.get("content-type", "application/pdf")
         if "octet-stream" in content_type:
             content_type = "application/pdf"
 
-        # Generador limpio — sin try/raise, solo yield de bytes
         async def stream_content():
             try:
                 async for chunk in response.aiter_bytes(chunk_size=8192):
