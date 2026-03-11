@@ -1,0 +1,6 @@
+LOAD DATABASE
+  FROM mysql:///$MYSQL_USER:$MYSQL_PASSWORD@$MYSQL_HOST:$MYSQL_PORT/$MYSQL_DB
+  INTO $NEON_URL
+
+WITH include drop, create tables, create indexes, reset sequences,
+     batch rows = 5000, prefetch rows = 10000;

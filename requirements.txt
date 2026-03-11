@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+pandas
+openpyxl
+requests
+beautifulsoup4
+python-multipart
+cryptography
