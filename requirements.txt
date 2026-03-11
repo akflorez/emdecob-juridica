@@ -8,3 +8,7 @@ requests
 beautifulsoup4
 python-multipart
 cryptography
+bcrypt
+pytz
+httpx
+psycopg2-binary
