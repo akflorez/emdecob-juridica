@@ -738,13 +738,32 @@ class UserUpdateRequest(BaseModel):
     is_admin: Optional[bool] = None
 
 
+from cryptography.fernet import Fernet
+import base64
+import json
+
 # =========================
-# AUTH — tokens simples en memoria
-# (sin JWT externo: token = hex aleatorio guardado en Neon)
+# AUTH — Stateless Tokens (Vercel Serverless Compatible)
 # =========================
 
-# Tabla de sesiones activas: token → user_id (en memoria, se limpia al reiniciar)
-_active_sessions: dict[str, int] = {}
+# Symmetric key for encrypting user_id in the token (32 bytes url-safe base64)
+SECRET_KEY_DEV = base64.urlsafe_b64encode(b'emdecob_secret_jwt_key_123456789')
+fernet = Fernet(SECRET_KEY_DEV)
+
+def create_access_token(user_id: int) -> str:
+    # We include timestamp directly or we can rely on fernet.decrypt TTL.
+    # Fernet includes a timestamp itself!
+    payload = json.dumps({"user_id": user_id}).encode('utf-8')
+    return fernet.encrypt(payload).decode('utf-8')
+
+def verify_access_token(token: str) -> Optional[int]:
+    try:
+        # 1 day TTL = 86400 seconds
+        payload = fernet.decrypt(token.encode('utf-8'), ttl=86400).decode('utf-8')
+        data = json.loads(payload)
+        return data.get("user_id")
+    except Exception:
+        return None
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -769,9 +788,14 @@ def get_current_user(
     if not credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
     token = credentials.credentials
-    user_id = _active_sessions.get(token)
+    user_id = verify_access_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    
+    # Fake ID for hardcoded admin
+    if user_id == 9999:
+        return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
+
     db_local = SessionLocal()
     try:
         user = db_local.query(User).filter(User.id == user_id, User.is_active == True).first()
@@ -1260,8 +1284,7 @@ def login(data: LoginRequest):
 
         # Hardcoded fallback para el usuario administrador
         if data.username == "admin" and data.password == "12345":
-            token = secrets.token_hex(32)
-            _active_sessions[token] = 9999  # Fake ID
+            token = create_access_token(9999)
             return {
                 "token": token,
                 "token_type": "bearer",
@@ -1276,8 +1299,7 @@ def login(data: LoginRequest):
         if not user or not _verify_password(data.password, user.hashed_password):
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
-        token = secrets.token_hex(32)
-        _active_sessions[token] = user.id
+        token = create_access_token(user.id)
 
         return {
             "token": token,
@@ -1294,10 +1316,8 @@ def login(data: LoginRequest):
 
 
 @app.post("/auth/logout")
-def logout(credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme)):
-    """Invalida el token de sesión actual."""
-    if credentials and credentials.credentials in _active_sessions:
-        del _active_sessions[credentials.credentials]
+def logout():
+    """Para tokens stateless (Fernet), basta con que el frontend lo borre."""
     return {"ok": True, "message": "Sesión cerrada"}
 
 
