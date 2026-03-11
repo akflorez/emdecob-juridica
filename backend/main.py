@@ -50,7 +50,6 @@ from .service.rama import (
 # =========================
 TIMEZONE_CO = pytz.timezone("America/Bogota")
 
-# Headers compartidos para peticiones a Rama Judicial
 RAMA_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -62,12 +61,10 @@ RAMA_BASE = "https://consultaprocesos.ramajudicial.gov.co:448/api/v2"
 
 
 def now_colombia() -> datetime:
-    """Retorna la fecha/hora actual en zona horaria de Colombia."""
     return datetime.now(TIMEZONE_CO).replace(tzinfo=None)
 
 
 def today_colombia() -> date:
-    """Retorna la fecha actual en zona horaria de Colombia."""
     return datetime.now(TIMEZONE_CO).date()
 
 
@@ -84,29 +81,22 @@ auto_refresh_stats = {
     "interval_minutes": 60,
 }
 
-# Acumulador de casos con nuevas actuaciones para envío por bloque
 _notification_accumulator: List[dict] = []
-_notification_accumulator_date: Optional[date] = None  # fecha del acumulador actual
-NOTIFICATION_BATCH_SIZE = 15   # Enviar cuando se acumulen 15 casos
-NOTIFICATION_FLUSH_HOUR = 17   # Enviar lo que haya a las 5 PM aunque sean menos de 15
+_notification_accumulator_date: Optional[date] = None
+NOTIFICATION_BATCH_SIZE = 15
+NOTIFICATION_FLUSH_HOUR = 17
 
 
 async def notification_flush_loop():
-    """
-    Loop independiente que revisa cada minuto si son las 5 PM
-    y hay casos acumulados pendientes de enviar.
-    No depende del ciclo de auto-refresh.
-    """
     global _notification_accumulator
     _already_flushed_today: Optional[date] = None
 
     while True:
-        await asyncio.sleep(60)  # revisar cada minuto
+        await asyncio.sleep(60)
         try:
             now  = now_colombia()
             hoy  = today_colombia()
 
-            # Solo actuar una vez por día a las 5 PM
             if (
                 now.hour == NOTIFICATION_FLUSH_HOUR
                 and _already_flushed_today != hoy
@@ -124,12 +114,6 @@ async def notification_flush_loop():
 # AUTO-REFRESH EN BACKGROUND
 # =========================
 async def auto_refresh_loop():
-    """
-    Loop CONTINUO que revisa TODOS los casos validados sin límite de batch.
-    - Corre al arrancar (después de 60s)
-    - Al terminar una vuelta completa, espera 10 minutos y vuelve a empezar
-    - Así todos los casos se revisan en cada ciclo (~53 min para 1600 casos)
-    """
     global auto_refresh_running, auto_refresh_stats
 
     print("⏳ Esperando 60 segundos antes del primer auto-refresh...")
@@ -149,14 +133,12 @@ async def auto_refresh_loop():
             auto_refresh_stats["last_result"] = result
             print(f"✅ Ciclo completo: {result.get('checked', 0)} revisados, {result.get('updated_cases', 0)} con cambios")
 
-            # Flush forzado a las 5 PM — enviar lo acumulado aunque sean menos de 15
             hora = now_colombia().hour
             if hora >= NOTIFICATION_FLUSH_HOUR and _notification_accumulator:
                 print(f"📧 Flush de 5 PM: enviando {len(_notification_accumulator)} casos acumulados")
                 send_grouped_notification(_notification_accumulator)
                 _notification_accumulator.clear()
 
-            # Esperar 10 minutos antes del siguiente ciclo
             auto_refresh_stats["next_run"] = "En 10 minutos"
             await asyncio.sleep(600)
 
@@ -167,18 +149,12 @@ async def auto_refresh_loop():
 
 
 async def do_auto_refresh() -> dict:
-    """
-    Refresh INTELIGENTE con manejo de conexión Neon (serverless PostgreSQL).
-    - Procesa en mini-lotes de 10 casos y hace commit parcial para no perder la conexión
-    - Si la conexión SSL se cae, reconecta y continúa
-    - Envía UN correo con todos los casos que tuvieron cambios
-    """
     from sqlalchemy import text
 
-    BATCH_SIZE = 9999        # Sin límite — revisar TODOS los casos en cada ciclo
-    MINI_BATCH = 10          # Commit cada N casos (evita timeout SSL de Neon)
-    DELAY_BETWEEN = 3.0      # Segundos entre peticiones a la Rama
-    EXTRA_EVERY_N = 10       # Cada N casos, pausa extra
+    BATCH_SIZE = 9999
+    MINI_BATCH = 10
+    DELAY_BETWEEN = 3.0
+    EXTRA_EVERY_N = 10
     EXTRA_DELAY   = 5.0
 
     updated_cases = []
@@ -187,7 +163,6 @@ async def do_auto_refresh() -> dict:
     db       = None
 
     def get_fresh_db():
-        """Abre una sesión nueva y verifica la conexión."""
         session = SessionLocal()
         try:
             session.execute(text("SELECT 1"))
@@ -200,7 +175,6 @@ async def do_auto_refresh() -> dict:
     try:
         db = get_fresh_db()
 
-        # Obtener IDs de los casos a verificar (solo IDs, para no mantener objetos stale)
         case_ids = [
             row[0] for row in
             db.query(Case.id)
@@ -226,7 +200,6 @@ async def do_auto_refresh() -> dict:
                         delay += EXTRA_DELAY
                     await asyncio.sleep(delay)
 
-                # ── Abrir sesión fresca cada mini-lote ──
                 if i % MINI_BATCH == 0:
                     if db:
                         try: db.close()
@@ -238,7 +211,6 @@ async def do_auto_refresh() -> dict:
                 if not c:
                     continue
 
-                # Consultar la Rama Judicial
                 try:
                     resp = await consulta_por_radicado(c.radicado, solo_activos=False, pagina=1)
                     items = extract_items(resp)
@@ -301,7 +273,6 @@ async def do_auto_refresh() -> dict:
                     c.current_hash = new_hash
                     c.last_hash    = new_hash
 
-                # Siempre actualizar demandante/demandado (corrige casing histórico)
                 sujetos_raw = p.get("sujetosProcesales") or ""
                 if sujetos_raw:
                     d1f, d2f = parse_sujetos_procesales(sujetos_raw)
@@ -311,7 +282,6 @@ async def do_auto_refresh() -> dict:
                 c.last_check_at = now_colombia()
                 checked += 1
 
-                # ── Commit parcial cada mini-lote ──
                 if (i + 1) % MINI_BATCH == 0:
                     try:
                         db.commit()
@@ -327,14 +297,12 @@ async def do_auto_refresh() -> dict:
             except Exception as e:
                 print(f"   💥 Error procesando caso_id={case_id}: {e}")
                 errors += 1
-                # Si es error de conexión, reconectar
                 if "ssl" in str(e).lower() or "connection" in str(e).lower():
                     try:
                         if db: db.close()
                     except: pass
                     db = get_fresh_db()
 
-        # Commit final con los últimos casos del lote
         if db:
             try:
                 db.commit()
@@ -366,7 +334,6 @@ async def do_auto_refresh() -> dict:
 
 
 async def save_new_actuaciones(case: Case, id_proceso: int, db: Session):
-    """Guarda las actuaciones nuevas de un caso."""
     try:
         await asyncio.sleep(random.uniform(0.2, 0.5))
         acts_resp = await actuaciones_proceso(int(id_proceso))
@@ -412,25 +379,16 @@ async def save_new_actuaciones(case: Case, id_proceso: int, db: Session):
 
 
 def _accumulate_and_notify(new_cases: List[dict]):
-    """
-    Acumula casos con nuevas actuaciones y envía correo cuando:
-    1. Se llega a NOTIFICATION_BATCH_SIZE (15) casos acumulados, O
-    2. Es la hora de cierre del día (5 PM) y hay al menos 1 caso acumulado.
-
-    Si el acumulador es de un día anterior, se resetea antes de agregar los nuevos.
-    """
     global _notification_accumulator, _notification_accumulator_date
 
     hoy = today_colombia()
 
-    # Si el acumulador es de otro día, descartarlo (no enviar casos viejos)
     if _notification_accumulator_date and _notification_accumulator_date < hoy:
         print(f"📧 Acumulador de {_notification_accumulator_date} descartado — nuevo día")
         _notification_accumulator = []
 
     _notification_accumulator_date = hoy
 
-    # Agregar nuevos casos evitando duplicados por radicado
     radicados_existentes = {c["radicado"] for c in _notification_accumulator}
     for c in new_cases:
         if c["radicado"] not in radicados_existentes:
@@ -443,14 +401,14 @@ def _accumulate_and_notify(new_cases: List[dict]):
     print(f"📧 Acumulador: {total} casos | hora={hora}:00")
 
     should_send = (
-        total >= NOTIFICATION_BATCH_SIZE                         # llegó al bloque de 15
-        or (hora >= NOTIFICATION_FLUSH_HOUR and total > 0)       # son las 5 PM y hay algo
+        total >= NOTIFICATION_BATCH_SIZE
+        or (hora >= NOTIFICATION_FLUSH_HOUR and total > 0)
     )
 
     if should_send:
         print(f"📧 Enviando correo con {total} casos acumulados...")
         send_grouped_notification(_notification_accumulator)
-        _notification_accumulator = []   # resetear después de enviar
+        _notification_accumulator = []
     else:
         print(f"📧 Acumulando... {total}/{NOTIFICATION_BATCH_SIZE} casos (envío a las {NOTIFICATION_FLUSH_HOUR}:00 si no se llega antes)")
 
@@ -570,16 +528,12 @@ def get_unread_cases_for_notification(db: Session) -> List[dict]:
 
 
 async def _pending_validation_loop():
-    """
-    Loop permanente que valida casos pendientes (juzgado = NULL) cada 5 minutos.
-    Arranca con el servidor y corre indefinidamente.
-    """
     BATCH = 30
     DELAY_BETWEEN = 2.5
-    CYCLE_WAIT = 300  # 5 minutos entre ciclos
+    CYCLE_WAIT = 300
 
     print("🔄 [pending-loop] Loop de validación de pendientes activo")
-    await asyncio.sleep(15)  # Esperar que el servidor termine de iniciar
+    await asyncio.sleep(15)
 
     while True:
         db = None
@@ -602,7 +556,6 @@ async def _pending_validation_loop():
                                 db.delete(inv)
                             print(f"   ✅ [pending-loop] Validado: {c.radicado}")
                         else:
-                            # NO borrar — queda pendiente para el próximo ciclo
                             inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
                             if inv:
                                 inv.intentos += 1
@@ -647,7 +600,6 @@ async def lifespan(app: FastAPI):
     auto_refresh_task = asyncio.create_task(auto_refresh_loop())
     print(f"⏰ Auto-refresh iniciado (cada {auto_refresh_stats['interval_minutes']} minutos)")
 
-    # Loop independiente: valida casos pendientes (juzgado=None) cada 5 minutos
     asyncio.create_task(_pending_validation_loop())
     print("🔄 Validación continua de pendientes iniciada")
 
@@ -683,9 +635,7 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:8081",
         "http://127.0.0.1:8081",
-        # ── Producción Vercel ──
         "https://emdecob-juridica.vercel.app",
-        # ── Dominio de producción final ──
         "http://consultasjuridicas.emdecob.co",
         "https://consultasjuridicas.emdecob.co",
     ],
@@ -725,7 +675,6 @@ class ValidateSelectedRequest(BaseModel):
 class AutoRefreshConfigRequest(BaseModel):
     interval_minutes: int = 60
 
-# ── Auth schemas ──
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -748,10 +697,8 @@ import base64
 import json
 
 # =========================
-# AUTH — Stateless Tokens (Vercel Serverless Compatible)
+# AUTH — Stateless Tokens
 # =========================
-
-# Symmetric key for encrypting user_id in the token (32 bytes url-safe base64)
 SECRET_KEY_DEV = base64.urlsafe_b64encode(b'emdecob_secret_jwt_key_123456789')
 fernet = Fernet(SECRET_KEY_DEV)
 
@@ -761,7 +708,6 @@ def create_access_token(user_id: int) -> str:
 
 def verify_access_token(token: str) -> Optional[int]:
     try:
-        # 1 day TTL = 86400 seconds
         payload = fernet.decrypt(token.encode('utf-8'), ttl=86400).decode('utf-8')
         data = json.loads(payload)
         return data.get("user_id")
@@ -769,7 +715,6 @@ def verify_access_token(token: str) -> Optional[int]:
         return None
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -783,11 +728,29 @@ def _verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+# =========================
+# USUARIOS HARDCODEADOS (fallback si la BD falla)
+# =========================
+HARDCODED_USERS = {
+    "admin": {
+        "password": "Margarita1393$%",
+        "id": 9999,
+        "nombre": "Administrador",
+        "is_admin": True,
+    },
+    "fna_juridica": {
+        "password": "juridicaEmdecob2026$",
+        "id": 9998,
+        "nombre": "FNA Jurídica",
+        "is_admin": True,
+    },
+}
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     db: Session = Depends(lambda: next(iter([SessionLocal()]))),
 ) -> "User":
-    """Dependency que valida el Bearer token y retorna el usuario."""
     if not credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
     token = credentials.credentials
@@ -795,9 +758,11 @@ def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
-    # Fake ID for hardcoded admin
+    # Fake users para hardcoded fallback
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
+    if user_id == 9998:
+        return User(id=9998, username="fna_juridica", nombre="FNA Jurídica", is_admin=True, is_active=True)
 
     db_local = SessionLocal()
     try:
@@ -810,7 +775,6 @@ def get_current_user(
 
 
 def _ensure_default_user():
-    """Crea el usuario fna_juridica si no existe."""
     db = SessionLocal()
     try:
         exists = db.query(User).filter(User.username == "fna_juridica").first()
@@ -859,28 +823,18 @@ def sha256_obj(obj) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 def _normalizar_nombre(nombre: str) -> Optional[str]:
-    """Limpia y convierte a mayúsculas un nombre."""
     if not nombre:
         return None
     n = nombre.strip().upper()
     return n if n else None
 
-
-# Palabras clave que identifican al Fondo Nacional del Ahorro como demandante
 _FNA_KEYWORDS = {"FONDO NACIONAL DEL AHORRO", "FNA", "FONDO NAL DEL AHORRO", "F.N.A."}
 
 def _es_fna(nombre: str) -> bool:
-    """Devuelve True si el nombre corresponde al Fondo Nacional del Ahorro."""
     n = nombre.upper()
     return any(kw in n for kw in _FNA_KEYWORDS)
 
-
 def _asignar_roles_inteligente(nombre_a: Optional[str], nombre_b: Optional[str]):
-    """
-    Si uno de los dos nombres es el FNA, lo pone siempre como demandante
-    y el otro como demandado (persona natural).
-    Si ninguno es FNA, respeta el orden original.
-    """
     if nombre_a and _es_fna(nombre_a):
         return nombre_a, nombre_b
     if nombre_b and _es_fna(nombre_b):
@@ -1145,13 +1099,12 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
         fecha_ult = parse_fecha(fecha_ult_str)
 
         if fecha_ult and fecha_ult >= ayer:
-            pass  # No asignar last_hash para que sea "no leído"
+            pass
         else:
             c.last_hash = new_hash
 
     db.flush()
 
-    # Guardar actuaciones
     if id_proceso:
         try:
             await delay_between_requests(0.1, 0.3)
@@ -1249,9 +1202,10 @@ def get_stats(db: Session = Depends(get_db)):
 @app.post("/auth/login")
 def login(data: LoginRequest):
     """Autentica un usuario y retorna un token de sesión."""
+
+    # ── Primero intentar contra la base de datos ──
     db = SessionLocal()
     try:
-        # ── Primero intentar contra la base de datos ──
         user = db.query(User).filter(
             User.username == data.username,
             User.is_active == True
@@ -1269,36 +1223,36 @@ def login(data: LoginRequest):
                     "is_admin": user.is_admin,
                 }
             }
-
-        # ── Fallback hardcodeado para admin (usa la contraseña real) ──
-        if data.username == "admin" and data.password == "Margarita1393$%":
-            token = create_access_token(9999)
-            return {
-                "token": token,
-                "token_type": "bearer",
-                "user": {
-                    "id": 9999,
-                    "username": "admin",
-                    "nombre": "Administrador",
-                    "is_admin": True,
-                }
-            }
-
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-
+    except Exception as e:
+        print(f"⚠️ [login] Error consultando BD: {e} — usando fallback")
     finally:
         db.close()
+
+    # ── Fallback hardcodeado (funciona aunque la BD falle) ──
+    hc = HARDCODED_USERS.get(data.username)
+    if hc and data.password == hc["password"]:
+        token = create_access_token(hc["id"])
+        return {
+            "token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": hc["id"],
+                "username": data.username,
+                "nombre": hc["nombre"],
+                "is_admin": hc["is_admin"],
+            }
+        }
+
+    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
 
 @app.post("/auth/logout")
 def logout():
-    """Para tokens stateless (Fernet), basta con que el frontend lo borre."""
     return {"ok": True, "message": "Sesión cerrada"}
 
 
 @app.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
-    """Retorna los datos del usuario autenticado."""
     return {
         "id": current_user.id,
         "username": current_user.username,
@@ -1310,7 +1264,6 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.get("/auth/users")
 def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Lista todos los usuarios (solo admins)."""
     if not current_user.is_admin:
         raise HTTPException(403, "Solo administradores pueden ver los usuarios")
     users = db.query(User).order_by(User.created_at).all()
@@ -1329,7 +1282,6 @@ def list_users(current_user: User = Depends(get_current_user), db: Session = Dep
 
 @app.post("/auth/users")
 def create_user(data: UserCreateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Crea un nuevo usuario (solo admins)."""
     if not current_user.is_admin:
         raise HTTPException(403, "Solo administradores pueden crear usuarios")
     existing = db.query(User).filter(User.username == data.username).first()
@@ -1350,7 +1302,6 @@ def create_user(data: UserCreateRequest, current_user: User = Depends(get_curren
 
 @app.put("/auth/users/{user_id}")
 def update_user(user_id: int, data: UserUpdateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Actualiza un usuario (solo admins, o el propio usuario cambiando su contraseña)."""
     if not current_user.is_admin and current_user.id != user_id:
         raise HTTPException(403, "Sin permisos")
     user = db.query(User).filter(User.id == user_id).first()
@@ -1370,7 +1321,6 @@ def update_user(user_id: int, data: UserUpdateRequest, current_user: User = Depe
 
 @app.delete("/auth/users/{user_id}")
 def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Elimina un usuario (solo admins, no puede eliminarse a sí mismo)."""
     if not current_user.is_admin:
         raise HTTPException(403, "Solo administradores pueden eliminar usuarios")
     if current_user.id == user_id:
@@ -1400,7 +1350,6 @@ def set_auto_refresh_config(data: AutoRefreshConfigRequest):
         raise HTTPException(400, "El intervalo mínimo es 5 minutos")
     if data.interval_minutes > 1440:
         raise HTTPException(400, "El intervalo máximo es 1440 minutos (24 horas)")
-
     auto_refresh_stats["interval_minutes"] = data.interval_minutes
     return {"ok": True, "interval_minutes": data.interval_minutes}
 
@@ -2330,11 +2279,6 @@ async def download_multiple_events_excel(radicados: List[str] = Body(...), db: S
 # BACKGROUND VALIDATE PENDIENTES
 # =========================
 async def _background_validate_pendientes():
-    """
-    Valida en background todos los casos sin juzgado (pendientes).
-    Se dispara automáticamente al importar un Excel.
-    Los no encontrados NO se eliminan — quedan en cola para el próximo ciclo.
-    """
     BATCH = 50
     DELAY = 2.0
     MAX_CYCLES = 20
@@ -2453,7 +2397,6 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 # =========================
 @app.post("/cases/refresh-all")
 async def refresh_all_cases():
-    """Actualiza todos los casos manualmente (mismo efecto que auto-refresh)."""
     try:
         result = await do_auto_refresh()
         return result
