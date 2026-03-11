@@ -54,7 +54,7 @@ async def _get(path: str, params: dict | None = None, retry_count: int = 0):
             headers=HEADERS,
             timeout=30,
             follow_redirects=True,
-            http2=True
+            http2=False  # ← corregido: h2 no está instalado en Vercel
         ) as client:
             r = await client.get(url, params=params)
 
