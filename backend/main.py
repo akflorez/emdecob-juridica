@@ -151,11 +151,11 @@ async def auto_refresh_loop():
 async def do_auto_refresh() -> dict:
     from sqlalchemy import text
 
-    BATCH_SIZE = 15
+    BATCH_SIZE = 5
     MINI_BATCH = 10
-    DELAY_BETWEEN = 1.5
+    DELAY_BETWEEN = 1.0
     EXTRA_EVERY_N = 10
-    EXTRA_DELAY   = 3.0
+    EXTRA_DELAY   = 1.0
 
     updated_cases = []
     checked  = 0
@@ -1356,8 +1356,73 @@ def set_auto_refresh_config(data: AutoRefreshConfigRequest):
 @app.post("/auto-refresh/run-now")
 async def run_auto_refresh_now():
     try:
+        # 1. Refrescar casos activos
         result = await do_auto_refresh()
-        return result
+
+        # 2. Validar pendientes (juzgado is None)
+        pending_result = {"validated": 0, "not_found": 0}
+        try:
+            db = SessionLocal()
+            pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(5).all()
+            for i, c in enumerate(pendientes):
+                try:
+                    if i > 0:
+                        await asyncio.sleep(1.0)
+                    r = await validar_radicado_completo(c.radicado, db, is_new_import=True)
+                    if r["found"]:
+                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        if inv:
+                            db.delete(inv)
+                        pending_result["validated"] += 1
+                    else:
+                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        if inv:
+                            inv.intentos += 1
+                            inv.updated_at = now_colombia()
+                        else:
+                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                        pending_result["not_found"] += 1
+                    db.flush()
+                except Exception as e:
+                    print(f"⚠️ [cron-pending] Error en {c.radicado}: {e}")
+            db.commit()
+            db.close()
+        except Exception as e:
+            print(f"⚠️ [cron-pending] Error general: {e}")
+
+        # 3. Reintentar no encontrados
+        invalid_result = {"found": 0, "still_not_found": 0}
+        try:
+            db = SessionLocal()
+            invalidos = db.query(InvalidRadicado).order_by(InvalidRadicado.updated_at.asc()).limit(5).all()
+            for i, item in enumerate(invalidos):
+                try:
+                    if i > 0:
+                        await asyncio.sleep(1.0)
+                    r = await validar_radicado_completo(item.radicado, db, is_new_import=True)
+                    if r["found"]:
+                        db.delete(item)
+                        invalid_result["found"] += 1
+                    else:
+                        item.intentos += 1
+                        item.updated_at = now_colombia()
+                        invalid_result["still_not_found"] += 1
+                    db.flush()
+                except Exception as e:
+                    print(f"⚠️ [cron-invalid] Error en {item.radicado}: {e}")
+            db.commit()
+            db.close()
+        except Exception as e:
+            print(f"⚠️ [cron-invalid] Error general: {e}")
+
+        return {
+            **result,
+            "pending_validated": pending_result["validated"],
+            "pending_not_found": pending_result["not_found"],
+            "invalid_recovered": invalid_result["found"],
+            "invalid_still_pending": invalid_result["still_not_found"],
+        }
+
     except Exception as e:
         raise HTTPException(500, f"Error ejecutando auto-refresh: {str(e)}")
 
