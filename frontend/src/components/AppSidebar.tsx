@@ -29,11 +29,9 @@ export function AppSidebar() {
           Menú Principal
         </p>
 
-        {isAdmin && (
-          <SidebarNavLink to="/importar" icon={Upload}>
-            Importar Excel
-          </SidebarNavLink>
-        )}
+        <SidebarNavLink to="/importar" icon={Upload}>
+          Importar Excel
+        </SidebarNavLink>
 
         <SidebarNavLink to="/consultar" icon={Search}>
           Consultar Caso
