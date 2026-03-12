@@ -151,7 +151,7 @@ async def auto_refresh_loop():
 async def do_auto_refresh() -> dict:
     from sqlalchemy import text
 
-    BATCH_SIZE = 9999
+    BATCH_SIZE = 50
     MINI_BATCH = 10
     DELAY_BETWEEN = 3.0
     EXTRA_EVERY_N = 10
