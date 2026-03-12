@@ -742,7 +742,7 @@ HARDCODED_USERS = {
         "password": "juridicaEmdecob2026$",
         "id": 9998,
         "nombre": "FNA Jurídica",
-        "is_admin": True,
+        "is_admin": False,
     },
 }
 
@@ -762,7 +762,7 @@ def get_current_user(
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
     if user_id == 9998:
-        return User(id=9998, username="fna_juridica", nombre="FNA Jurídica", is_admin=True, is_active=True)
+        return User(id=9998, username="fna_juridica", nombre="FNA Jurídica", is_admin=False, is_active=True)
 
     db_local = SessionLocal()
     try:
@@ -784,7 +784,7 @@ def _ensure_default_user():
                 hashed_password=_hash_password("juridicaEmdecob2026$"),
                 nombre="FNA Jurídica",
                 is_active=True,
-                is_admin=True,
+                is_admin=False,
             ))
             db.commit()
             print("✅ Usuario fna_juridica creado automáticamente")
