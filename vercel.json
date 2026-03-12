@@ -26,5 +26,11 @@
       "src": "/(.*)",
       "dest": "/frontend/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/auto-refresh/run-now",
+      "schedule": "0 * * * *"
+    }
   ]
 }
