@@ -36,11 +36,7 @@ const App = () => (
               </ProtectedRoute>
             }>
               <Route path="/" element={<Navigate to="/consultar" replace />} />
-              <Route path="/importar" element={
-                <ProtectedRoute requiredPermission="importar">
-                  <ImportarPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/importar" element={<ImportarPage />} />
               <Route path="/consultar" element={<ConsultarPage />} />
               <Route path="/casos" element={<CasosPage />} />
               <Route path="/casos/:radicado" element={<CasoDetailPage />} />
