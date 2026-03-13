@@ -124,9 +124,6 @@ export default function CasosPage() {
   const [caseToDelete, setCaseToDelete] = useState<CaseRow | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
 
-  // Ref para saber si hay una carga en curso (evita solapamientos en polling)
-  const isFetchingRef = useRef(false);
-
   const pageSize = 50;
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -223,21 +220,20 @@ export default function CasosPage() {
     else fetchCases();
   }, [activeTab, fetchCases, fetchInvalidRadicados]);
 
-  // ✅ AUTO-POLLING cada 30 segundos — directo a la API sin depender de callbacks
+  // ✅ AUTO-POLLING cada 30 segundos
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
+    // Ejecutar inmediatamente al montar/cambiar filtros
+    const runPoll = async () => {
       try {
-        // Actualizar stats
         const statsData = await getStats();
         setStats(statsData);
 
-        // Actualizar tabla según tab activa
         if (activeTab === "no_encontrados") {
           const resp = await getInvalidRadicados({ search: appliedSearch, page, page_size: pageSize });
           setInvalidRows(resp.items || []);
           setInvalidTotal(resp.total || 0);
+          const tp = Math.max(1, Math.ceil((resp.total || 0) / pageSize));
+          setTotalPages(tp);
         } else {
           const resp = await getCases({
             search: appliedSearch,
@@ -257,13 +253,11 @@ export default function CasosPage() {
           setTotalPages(tp);
         }
       } catch (e) {
-        // silencioso — no mostrar error en polling
         console.error("Polling error:", e);
-      } finally {
-        isFetchingRef.current = false;
       }
-    }, POLL_INTERVAL);
+    };
 
+    const interval = setInterval(runPoll, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, page, pageSize]);
 
