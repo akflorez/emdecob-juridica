@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FolderOpen,
@@ -73,7 +73,6 @@ import {
 
 type FilterTab = "todos" | "pendientes" | "no_leidos" | "hoy" | "no_encontrados";
 
-// Generar lista de meses (últimos 24 meses)
 const generateMonthOptions = () => {
   const options = [];
   const now = new Date();
@@ -87,25 +86,21 @@ const generateMonthOptions = () => {
 };
 
 const MONTH_OPTIONS = generateMonthOptions();
+const POLL_INTERVAL = 30_000; // 30 segundos
 
 export default function CasosPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>("todos");
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  // Casos encontrados
   const [rows, setRows] = useState<CaseRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Validación de pendientes
   const [isValidatingBatch, setIsValidatingBatch] = useState(false);
-
-  // Marcar como leídos
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
-  // Radicados no encontrados
   const [invalidRows, setInvalidRows] = useState<InvalidRadicado[]>([]);
   const [invalidTotal, setInvalidTotal] = useState(0);
   const [retryingId, setRetryingId] = useState<number | null>(null);
@@ -113,59 +108,44 @@ export default function CasosPage() {
   const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
 
-  // Filtros
   const [searchInput, setSearchInput] = useState("");
   const [juzgadoInput, setJuzgadoInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState<string | undefined>(undefined);
   const [appliedJuzgado, setAppliedJuzgado] = useState<string | undefined>(undefined);
-  
-  // Filtro por mes
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [appliedMonth, setAppliedMonth] = useState<string | undefined>(undefined);
 
-  // Paginación
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Eliminar caso
   const [caseToDelete, setCaseToDelete] = useState<CaseRow | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
 
-  const pageSize = 50;
+  // Ref para saber si hay una carga en curso (evita solapamientos en polling)
+  const isFetchingRef = useRef(false);
 
+  const pageSize = 50;
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // ✅ CORREGIDO: Agregar T12:00:00 para evitar problema de zona horaria
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return "—";
     const dateToUse = dateString.includes("T") ? dateString : `${dateString}T12:00:00`;
     const d = new Date(dateToUse);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("es-CO", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
   };
 
   const formatDateTime = (dateString?: string | null) => {
     if (!dateString) return "—";
     const d = new Date(dateString);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("es-CO", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  // Stats
   const fetchStats = useCallback(async () => {
     try {
       const data = await getStats();
@@ -175,11 +155,9 @@ export default function CasosPage() {
     }
   }, []);
 
-  // Casos encontrados
-  const fetchCases = useCallback(async () => {
+  const fetchCases = useCallback(async (silent = false) => {
     if (activeTab === "no_encontrados") return;
-
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
       const response: CasesResponse = await getCases({
         search: appliedSearch,
@@ -202,57 +180,40 @@ export default function CasosPage() {
 
       const tp = Math.max(1, Math.ceil(totalCount / pageSize));
       setTotalPages(tp);
-
       if (page > tp) setPage(tp);
     } catch (error: any) {
-      toast({
-        title: "Error al cargar casos",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
-      setRows([]);
-      setTotal(0);
-      setTotalPages(1);
+      if (!silent) {
+        toast({ title: "Error al cargar casos", description: error?.message || "Error desconocido", variant: "destructive" });
+      }
+      if (!silent) { setRows([]); setTotal(0); setTotalPages(1); }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, page, pageSize, toast]);
 
-  // No encontrados
-  const fetchInvalidRadicados = useCallback(async () => {
+  const fetchInvalidRadicados = useCallback(async (silent = false) => {
     if (activeTab !== "no_encontrados") return;
-
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
-      const response = await getInvalidRadicados({
-        search: appliedSearch,
-        page,
-        page_size: pageSize,
-      });
-
+      const response = await getInvalidRadicados({ search: appliedSearch, page, page_size: pageSize });
       const items = response.items || [];
       const totalCount = response.total || 0;
-
       setInvalidRows(items);
       setInvalidTotal(totalCount);
-
       const tp = Math.max(1, Math.ceil(totalCount / pageSize));
       setTotalPages(tp);
       if (page > tp) setPage(tp);
     } catch (error: any) {
-      toast({
-        title: "Error al cargar no encontrados",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
-      setInvalidRows([]);
-      setInvalidTotal(0);
-      setTotalPages(1);
+      if (!silent) {
+        toast({ title: "Error al cargar no encontrados", description: error?.message || "Error desconocido", variant: "destructive" });
+        setInvalidRows([]); setInvalidTotal(0); setTotalPages(1);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [activeTab, appliedSearch, page, pageSize, toast]);
 
+  // Carga inicial
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
@@ -262,28 +223,65 @@ export default function CasosPage() {
     else fetchCases();
   }, [activeTab, fetchCases, fetchInvalidRadicados]);
 
-  // Sincronizar pageInput cuando cambia page
+  // ✅ AUTO-POLLING cada 30 segundos — directo a la API sin depender de callbacks
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      try {
+        // Actualizar stats
+        const statsData = await getStats();
+        setStats(statsData);
+
+        // Actualizar tabla según tab activa
+        if (activeTab === "no_encontrados") {
+          const resp = await getInvalidRadicados({ search: appliedSearch, page, page_size: pageSize });
+          setInvalidRows(resp.items || []);
+          setInvalidTotal(resp.total || 0);
+        } else {
+          const resp = await getCases({
+            search: appliedSearch,
+            juzgado: appliedJuzgado,
+            mes_actuacion: appliedMonth,
+            solo_validos: activeTab !== "pendientes",
+            solo_pendientes: activeTab === "pendientes",
+            solo_no_leidos: activeTab === "no_leidos",
+            solo_actualizados_hoy: activeTab === "hoy",
+            page,
+            page_size: pageSize,
+          });
+          setRows(resp.items || []);
+          setTotal(resp.total || 0);
+          setUnreadCount(resp.unread_count || 0);
+          const tp = Math.max(1, Math.ceil((resp.total || 0) / pageSize));
+          setTotalPages(tp);
+        }
+      } catch (e) {
+        // silencioso — no mostrar error en polling
+        console.error("Polling error:", e);
+      } finally {
+        isFetchingRef.current = false;
+      }
+    }, POLL_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, page, pageSize]);
+
   useEffect(() => {
     setPageInput(String(page));
   }, [page]);
 
   const handleTabChange = (tab: FilterTab) => {
     setActiveTab(tab);
-    setPage(1);
-    setPageInput("1");
+    setPage(1); setPageInput("1");
     setSelectedIds(new Set());
-    setAppliedSearch(undefined);
-    setAppliedJuzgado(undefined);
-    setAppliedMonth(undefined);
-    setSearchInput("");
-    setJuzgadoInput("");
-    setSelectedMonth("");
+    setAppliedSearch(undefined); setAppliedJuzgado(undefined); setAppliedMonth(undefined);
+    setSearchInput(""); setJuzgadoInput(""); setSelectedMonth("");
   };
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
-    setPage(1);
-    setPageInput("1");
+    setPage(1); setPageInput("1");
     setSelectedIds(new Set());
     setAppliedSearch(searchInput.trim() || undefined);
     setAppliedJuzgado(juzgadoInput.trim() || undefined);
@@ -291,32 +289,20 @@ export default function CasosPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchInput("");
-    setJuzgadoInput("");
-    setSelectedMonth("");
-    setAppliedSearch(undefined);
-    setAppliedJuzgado(undefined);
-    setAppliedMonth(undefined);
-    setPage(1);
-    setPageInput("1");
+    setSearchInput(""); setJuzgadoInput(""); setSelectedMonth("");
+    setAppliedSearch(undefined); setAppliedJuzgado(undefined); setAppliedMonth(undefined);
+    setPage(1); setPageInput("1");
   };
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
     try {
       const result = await refreshAllCases();
-      toast({
-        title: "Actualización completada",
-        description: `Se verificaron ${result.checked || 0} casos. ${result.updated_cases || 0} con cambios.`,
-      });
+      toast({ title: "Actualización completada", description: `Se verificaron ${result.checked || 0} casos. ${result.updated_cases || 0} con cambios.` });
       await fetchCases();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error actualizando",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error actualizando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsRefreshing(false);
     }
@@ -326,48 +312,26 @@ export default function CasosPage() {
     setIsValidatingBatch(true);
     try {
       const result = await validateBatch(50);
-      toast({
-        title: "Validación completada",
-        description: result.message,
-      });
+      toast({ title: "Validación completada", description: result.message });
       await fetchCases();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error validando",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error validando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsValidatingBatch(false);
     }
   };
 
   const handleMarkAllRead = async () => {
-    if (!confirm(`¿Marcar todos los casos ${activeTab === "no_leidos" ? "sin leer" : "visibles"} como leídos?`)) {
-      return;
-    }
-
+    if (!confirm(`¿Marcar todos los casos ${activeTab === "no_leidos" ? "sin leer" : "visibles"} como leídos?`)) return;
     setIsMarkingAllRead(true);
     try {
-      const result = await markReadAll({
-        search: appliedSearch,
-        juzgado: appliedJuzgado,
-        solo_no_leidos: activeTab === "no_leidos",
-        solo_actualizados_hoy: activeTab === "hoy",
-      });
-      toast({
-        title: "Marcados como leídos",
-        description: `Se marcaron ${result.updated} caso(s) como leídos`,
-      });
+      const result = await markReadAll({ search: appliedSearch, juzgado: appliedJuzgado, solo_no_leidos: activeTab === "no_leidos", solo_actualizados_hoy: activeTab === "hoy" });
+      toast({ title: "Marcados como leídos", description: `Se marcaron ${result.updated} caso(s) como leídos` });
       await fetchCases();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsMarkingAllRead(false);
     }
@@ -377,68 +341,42 @@ export default function CasosPage() {
     setIsRetryingAll(true);
     try {
       const result = await retryBatchInvalidRadicados(20);
-      toast({
-        title: "Reintento completado",
-        description: result.message,
-      });
+      toast({ title: "Reintento completado", description: result.message });
       await fetchInvalidRadicados();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error reintentando",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error reintentando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsRetryingAll(false);
     }
   };
 
   const handleDeleteAllInvalid = async () => {
-    if (!confirm(`¿Eliminar TODOS los ${invalidTotal} radicados no encontrados?\n\nEsta acción no se puede deshacer.`)) {
-      return;
-    }
-
+    if (!confirm(`¿Eliminar TODOS los ${invalidTotal} radicados no encontrados?\n\nEsta acción no se puede deshacer.`)) return;
     setIsDeletingAll(true);
     try {
       const result = await deleteAllInvalidRadicados();
-      toast({
-        title: "Eliminados",
-        description: result.message,
-      });
+      toast({ title: "Eliminados", description: result.message });
       await fetchInvalidRadicados();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error eliminando",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error eliminando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsDeletingAll(false);
     }
   };
 
-  // Eliminar caso validado
   const handleDeleteCase = async () => {
     if (!caseToDelete) return;
-    
     setIsDeletingCase(true);
     try {
       await deleteCase(caseToDelete.id);
-      toast({
-        title: "Caso eliminado",
-        description: `El radicado ${caseToDelete.radicado} fue eliminado correctamente`,
-      });
+      toast({ title: "Caso eliminado", description: `El radicado ${caseToDelete.radicado} fue eliminado correctamente` });
       setCaseToDelete(null);
       await fetchCases();
       await fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error eliminando",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error eliminando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsDeletingCase(false);
     }
@@ -448,9 +386,7 @@ export default function CasosPage() {
     if (c.unread) {
       try {
         await markCaseRead(c.id);
-        setRows((prev) =>
-          prev.map((x) => (x.id === c.id ? { ...x, unread: false } : x))
-        );
+        setRows((prev) => prev.map((x) => (x.id === c.id ? { ...x, unread: false } : x)));
         setUnreadCount((n) => Math.max(0, n - 1));
         fetchStats();
       } catch {}
@@ -460,8 +396,7 @@ export default function CasosPage() {
 
   const toggleSelect = (id: number) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedIds(next);
   };
 
@@ -472,29 +407,17 @@ export default function CasosPage() {
 
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) {
-      toast({
-        title: "Selecciona casos",
-        description: "Debes seleccionar al menos un caso para descargar",
-        variant: "destructive",
-      });
+      toast({ title: "Selecciona casos", description: "Debes seleccionar al menos un caso para descargar", variant: "destructive" });
       return;
     }
-
     setIsDownloading(true);
     try {
       const radicados = rows.filter((r) => selectedIds.has(r.id)).map((r) => r.radicado);
       await downloadMultipleEventsExcel(radicados);
-      toast({
-        title: "Descarga completada",
-        description: `Se descargaron las actuaciones de ${radicados.length} caso(s)`,
-      });
+      toast({ title: "Descarga completada", description: `Se descargaron las actuaciones de ${radicados.length} caso(s)` });
       setSelectedIds(new Set());
     } catch (error: any) {
-      toast({
-        title: "Error al descargar",
-        description: error?.message || "Error desconocido",
-        variant: "destructive",
-      });
+      toast({ title: "Error al descargar", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsDownloading(false);
     }
@@ -502,44 +425,23 @@ export default function CasosPage() {
 
   const handleDownloadExcel = () => {
     if (activeTab === "no_encontrados" || activeTab === "pendientes") return;
-    downloadCasesExcel({
-      search: appliedSearch,
-      juzgado: appliedJuzgado,
-      solo_no_leidos: activeTab === "no_leidos",
-      solo_actualizados_hoy: activeTab === "hoy",
-    });
-    toast({
-      title: "Descargando...",
-      description: "El archivo Excel se descargará en unos segundos",
-    });
+    downloadCasesExcel({ search: appliedSearch, juzgado: appliedJuzgado, solo_no_leidos: activeTab === "no_leidos", solo_actualizados_hoy: activeTab === "hoy" });
+    toast({ title: "Descargando...", description: "El archivo Excel se descargará en unos segundos" });
   };
 
   const handleRetryInvalid = async (item: InvalidRadicado) => {
     setRetryingId(item.id);
     try {
       const result = await retryInvalidRadicado(item.id);
-
       if (result.found) {
-        toast({
-          title: "¡Radicado encontrado!",
-          description: "El radicado fue agregado a los casos válidos",
-        });
+        toast({ title: "¡Radicado encontrado!", description: "El radicado fue agregado a los casos válidos" });
         fetchStats();
       } else {
-        toast({
-          title: "Sigue sin aparecer",
-          description: "El radicado continúa sin encontrarse en Rama Judicial",
-          variant: "destructive",
-        });
+        toast({ title: "Sigue sin aparecer", description: "El radicado continúa sin encontrarse en Rama Judicial", variant: "destructive" });
       }
-
       fetchInvalidRadicados();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error?.message || "Error al reintentar",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error?.message || "Error al reintentar", variant: "destructive" });
     } finally {
       setRetryingId(null);
     }
@@ -549,27 +451,17 @@ export default function CasosPage() {
     setDeletingId(item.id);
     try {
       await deleteInvalidRadicado(item.id);
-      toast({
-        title: "Eliminado",
-        description: "El radicado fue eliminado de la lista",
-      });
+      toast({ title: "Eliminado", description: "El radicado fue eliminado de la lista" });
       fetchInvalidRadicados();
       fetchStats();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error?.message || "Error al eliminar",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error?.message || "Error al eliminar", variant: "destructive" });
     } finally {
       setDeletingId(null);
     }
   };
 
-  // Paginación por número
-  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPageInput(e.target.value);
-  };
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setPageInput(e.target.value);
 
   const handlePageInputSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -578,18 +470,11 @@ export default function CasosPage() {
       setPage(newPage);
     } else {
       setPageInput(String(page));
-      toast({
-        title: "Página inválida",
-        description: `Ingresa un número entre 1 y ${totalPages}`,
-        variant: "destructive",
-      });
+      toast({ title: "Página inválida", description: `Ingresa un número entre 1 y ${totalPages}`, variant: "destructive" });
     }
   };
 
-  // ✅ Handler para el Select de mes (convierte "all" a "" internamente)
-  const handleMonthChange = (val: string) => {
-    setSelectedMonth(val === "all" ? "" : val);
-  };
+  const handleMonthChange = (val: string) => setSelectedMonth(val === "all" ? "" : val);
 
   const canPaginate = totalPages > 1;
   const currentTotal = activeTab === "no_encontrados" ? invalidTotal : total;
@@ -620,11 +505,7 @@ export default function CasosPage() {
           )}
 
           <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="outline">
-            {isRefreshing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
+            {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Actualizar todo
           </Button>
         </div>
@@ -632,66 +513,29 @@ export default function CasosPage() {
 
       {/* Tabs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Button
-          variant={activeTab === "todos" ? "default" : "outline"}
-          className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleTabChange("todos")}
-        >
+        <Button variant={activeTab === "todos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("todos")}>
           <List className="h-6 w-6" />
-          <div className="text-center">
-            <div className="font-semibold">Validados</div>
-            <div className="text-xs opacity-80">{stats?.total_validos || 0}</div>
-          </div>
+          <div className="text-center"><div className="font-semibold">Validados</div><div className="text-xs opacity-80">{stats?.total_validos || 0}</div></div>
         </Button>
 
-        <Button
-          variant={activeTab === "pendientes" ? "secondary" : "outline"}
-          className={`h-auto py-4 flex flex-col items-center gap-2 ${
-            activeTab === "pendientes" ? "bg-yellow-500/20 border-yellow-500 text-yellow-700 dark:text-yellow-300" : ""
-          }`}
-          onClick={() => handleTabChange("pendientes")}
-        >
+        <Button variant={activeTab === "pendientes" ? "secondary" : "outline"} className={`h-auto py-4 flex flex-col items-center gap-2 ${activeTab === "pendientes" ? "bg-yellow-500/20 border-yellow-500 text-yellow-700 dark:text-yellow-300" : ""}`} onClick={() => handleTabChange("pendientes")}>
           <Clock className="h-6 w-6" />
-          <div className="text-center">
-            <div className="font-semibold">Pendientes</div>
-            <div className="text-xs opacity-80">{stats?.total_pendientes || 0}</div>
-          </div>
+          <div className="text-center"><div className="font-semibold">Pendientes</div><div className="text-xs opacity-80">{stats?.total_pendientes || 0}</div></div>
         </Button>
 
-        <Button
-          variant={activeTab === "no_leidos" ? "default" : "outline"}
-          className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleTabChange("no_leidos")}
-        >
+        <Button variant={activeTab === "no_leidos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_leidos")}>
           <Bell className="h-6 w-6" />
-          <div className="text-center">
-            <div className="font-semibold">Sin Leer</div>
-            <div className="text-xs opacity-80">{stats?.total_no_leidos || 0}</div>
-          </div>
+          <div className="text-center"><div className="font-semibold">Sin Leer</div><div className="text-xs opacity-80">{stats?.total_no_leidos || 0}</div></div>
         </Button>
 
-        <Button
-          variant={activeTab === "hoy" ? "default" : "outline"}
-          className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleTabChange("hoy")}
-        >
+        <Button variant={activeTab === "hoy" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("hoy")}>
           <Calendar className="h-6 w-6" />
-          <div className="text-center">
-            <div className="font-semibold">Hoy</div>
-            <div className="text-xs opacity-80">{stats?.total_actualizados_hoy || 0}</div>
-          </div>
+          <div className="text-center"><div className="font-semibold">Hoy</div><div className="text-xs opacity-80">{stats?.total_actualizados_hoy || 0}</div></div>
         </Button>
 
-        <Button
-          variant={activeTab === "no_encontrados" ? "destructive" : "outline"}
-          className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleTabChange("no_encontrados")}
-        >
+        <Button variant={activeTab === "no_encontrados" ? "destructive" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_encontrados")}>
           <AlertTriangle className="h-6 w-6" />
-          <div className="text-center">
-            <div className="font-semibold">No Encontrados</div>
-            <div className="text-xs opacity-80">{stats?.total_invalidos || 0}</div>
-          </div>
+          <div className="text-center"><div className="font-semibold">No Encontrados</div><div className="text-xs opacity-80">{stats?.total_invalidos || 0}</div></div>
         </Button>
       </div>
 
@@ -707,76 +551,39 @@ export default function CasosPage() {
           <form onSubmit={handleFilter} className="flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row gap-3">
               <Input
-                placeholder={
-                  activeTab === "no_encontrados" || activeTab === "pendientes"
-                    ? "Buscar radicado..."
-                    : "Buscar por radicado, demandante o demandado..."
-                }
+                placeholder={activeTab === "no_encontrados" || activeTab === "pendientes" ? "Buscar radicado..." : "Buscar por radicado, demandante o demandado..."}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="flex-1"
               />
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && (
-                <Input
-                  placeholder="Filtrar por juzgado..."
-                  value={juzgadoInput}
-                  onChange={(e) => setJuzgadoInput(e.target.value)}
-                  className="sm:w-64"
-                />
+                <Input placeholder="Filtrar por juzgado..." value={juzgadoInput} onChange={(e) => setJuzgadoInput(e.target.value)} className="sm:w-64" />
               )}
             </div>
-            
-            {/* Filtro por mes - solo en Validados */}
+
             {activeTab === "todos" && (
               <div className="flex flex-col sm:flex-row gap-3 items-end">
                 <div className="w-full sm:w-64">
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Mes de última actuación
-                  </label>
-                  {/* ✅ CORREGIDO: Usar "all" en lugar de "" para evitar error de Radix UI */}
+                  <label className="text-xs text-muted-foreground mb-1 block">Mes de última actuación</label>
                   <Select value={selectedMonth || "all"} onValueChange={handleMonthChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos los meses" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Todos los meses" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos los meses</SelectItem>
-                      {MONTH_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
+                      {MONTH_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                
                 <div className="flex gap-2">
-                  <Button type="submit" disabled={isLoading}>
-                    <Search className="mr-2 h-4 w-4" />
-                    Filtrar
-                  </Button>
-                  
-                  {(appliedSearch || appliedJuzgado || appliedMonth) && (
-                    <Button type="button" variant="outline" onClick={handleClearFilters}>
-                      Limpiar
-                    </Button>
-                  )}
+                  <Button type="submit" disabled={isLoading}><Search className="mr-2 h-4 w-4" />Filtrar</Button>
+                  {(appliedSearch || appliedJuzgado || appliedMonth) && <Button type="button" variant="outline" onClick={handleClearFilters}>Limpiar</Button>}
                 </div>
               </div>
             )}
-            
-            {/* Botón filtrar para otras pestañas */}
+
             {activeTab !== "todos" && (
               <div className="flex gap-2">
-                <Button type="submit" disabled={isLoading}>
-                  <Search className="mr-2 h-4 w-4" />
-                  Filtrar
-                </Button>
-                
-                {(appliedSearch || appliedJuzgado) && (
-                  <Button type="button" variant="outline" onClick={handleClearFilters}>
-                    Limpiar
-                  </Button>
-                )}
+                <Button type="submit" disabled={isLoading}><Search className="mr-2 h-4 w-4" />Filtrar</Button>
+                {(appliedSearch || appliedJuzgado) && <Button type="button" variant="outline" onClick={handleClearFilters}>Limpiar</Button>}
               </div>
             )}
           </form>
@@ -795,49 +602,25 @@ export default function CasosPage() {
                 {activeTab === "hoy" && `Actualizados hoy (${total})`}
                 {activeTab === "no_encontrados" && `No encontrados (${invalidTotal})`}
               </CardTitle>
-
-              <span className="text-sm text-muted-foreground">
-                Mostrando {showingFrom}-{showingTo} de {currentTotal}
-              </span>
+              <span className="text-sm text-muted-foreground">Mostrando {showingFrom}-{showingTo} de {currentTotal}</span>
             </div>
 
             <div className="flex items-center gap-2">
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && unreadCount > 0 && (
-                <Button
-                  onClick={handleMarkAllRead}
-                  disabled={isMarkingAllRead}
-                  variant="outline"
-                  size="sm"
-                >
-                  {isMarkingAllRead ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                  )}
+                <Button onClick={handleMarkAllRead} disabled={isMarkingAllRead} variant="outline" size="sm">
+                  {isMarkingAllRead ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                   Marcar leídos
                 </Button>
               )}
-
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && selectedIds.size > 0 && (
-                <Button
-                  onClick={handleDownloadSelected}
-                  disabled={isDownloading}
-                  variant="outline"
-                  size="sm"
-                >
-                  {isDownloading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
-                  )}
+                <Button onClick={handleDownloadSelected} disabled={isDownloading} variant="outline" size="sm">
+                  {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                   Descargar {selectedIds.size}
                 </Button>
               )}
-
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && total > 0 && (
                 <Button onClick={handleDownloadExcel} variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
+                  <Download className="h-4 w-4 mr-2" />Exportar
                 </Button>
               )}
             </div>
@@ -858,39 +641,18 @@ export default function CasosPage() {
             ) : (
               <div className="space-y-4">
                 <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <span className="text-destructive text-sm font-medium">
-                    ⚠️ {invalidTotal} radicados no encontrados en Rama Judicial
-                  </span>
+                  <span className="text-destructive text-sm font-medium">⚠️ {invalidTotal} radicados no encontrados en Rama Judicial</span>
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRetryBatchInvalid}
-                      disabled={isRetryingAll}
-                    >
-                      {isRetryingAll ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
+                    <Button size="sm" variant="outline" onClick={handleRetryBatchInvalid} disabled={isRetryingAll}>
+                      {isRetryingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                       Reintentar 20
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={handleDeleteAllInvalid}
-                      disabled={isDeletingAll}
-                    >
-                      {isDeletingAll ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 mr-2" />
-                      )}
+                    <Button size="sm" variant="destructive" onClick={handleDeleteAllInvalid} disabled={isDeletingAll}>
+                      {isDeletingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
                       Eliminar todos
                     </Button>
                   </div>
                 </div>
-
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -906,42 +668,16 @@ export default function CasosPage() {
                       {invalidRows.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-mono text-sm">{item.radicado}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {item.motivo}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline">{item.intentos}</Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDateTime(item.updated_at)}
-                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{item.motivo}</TableCell>
+                          <TableCell className="text-center"><Badge variant="outline">{item.intentos}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatDateTime(item.updated_at)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleRetryInvalid(item)}
-                                disabled={retryingId === item.id}
-                              >
-                                {retryingId === item.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="h-4 w-4" />
-                                )}
+                              <Button variant="outline" size="sm" onClick={() => handleRetryInvalid(item)} disabled={retryingId === item.id}>
+                                {retryingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                               </Button>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteInvalid(item)}
-                                disabled={deletingId === item.id}
-                              >
-                                {deletingId === item.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
+                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeleteInvalid(item)} disabled={deletingId === item.id}>
+                                {deletingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             </div>
                           </TableCell>
@@ -957,31 +693,17 @@ export default function CasosPage() {
               <div className="text-center py-12">
                 <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
                 <p className="text-muted-foreground">No hay radicados pendientes de validar</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Todos los radicados importados han sido validados
-                </p>
+                <p className="text-sm text-muted-foreground mt-2">Todos los radicados importados han sido validados</p>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium">
-                    ⚠️ {total} radicados pendientes de validar contra Rama Judicial
-                  </span>
-                  <Button
-                    size="sm"
-                    className="bg-yellow-600 hover:bg-yellow-500 text-white"
-                    onClick={handleValidateBatch}
-                    disabled={isValidatingBatch}
-                  >
-                    {isValidatingBatch ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
+                  <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium">⚠️ {total} radicados pendientes de validar contra Rama Judicial</span>
+                  <Button size="sm" className="bg-yellow-600 hover:bg-yellow-500 text-white" onClick={handleValidateBatch} disabled={isValidatingBatch}>
+                    {isValidatingBatch ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                     Validar 50 radicados
                   </Button>
                 </div>
-
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -994,9 +716,7 @@ export default function CasosPage() {
                       {rows.map((c) => (
                         <TableRow key={c.id}>
                           <TableCell className="font-mono text-sm">{c.radicado}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDateTime(c.created_at)}
-                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatDateTime(c.created_at)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1015,10 +735,7 @@ export default function CasosPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 px-2">
-                      <Checkbox
-                        checked={selectedIds.size === rows.length && rows.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                      />
+                      <Checkbox checked={selectedIds.size === rows.length && rows.length > 0} onCheckedChange={toggleSelectAll} />
                     </TableHead>
                     <TableHead className="min-w-[180px]">Radicado</TableHead>
                     <TableHead className="hidden md:table-cell">Demandante</TableHead>
@@ -1028,66 +745,28 @@ export default function CasosPage() {
                     <TableHead className="w-28 text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
-
                 <TableBody>
                   {rows.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className={c.unread ? "bg-primary/10 font-semibold" : "hover:bg-muted/30"}
-                    >
+                    <TableRow key={c.id} className={c.unread ? "bg-primary/10 font-semibold" : "hover:bg-muted/30"}>
                       <TableCell className="px-2">
-                        <Checkbox
-                          checked={selectedIds.has(c.id)}
-                          onCheckedChange={() => toggleSelect(c.id)}
-                        />
+                        <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} />
                       </TableCell>
-
                       <TableCell className="font-mono text-xs">
                         <div className="flex items-center gap-1">
-                          {c.unread && (
-                            <Badge variant="default" className="animate-pulse text-[10px] px-1 py-0">
-                              N
-                            </Badge>
-                          )}
-                          <span className={c.unread ? "text-primary font-bold" : ""}>
-                            {c.radicado.length > 23 ? `${c.radicado.substring(0, 23)}...` : c.radicado}
-                          </span>
+                          {c.unread && <Badge variant="default" className="animate-pulse text-[10px] px-1 py-0">N</Badge>}
+                          <span className={c.unread ? "text-primary font-bold" : ""}>{c.radicado.length > 23 ? `${c.radicado.substring(0, 23)}...` : c.radicado}</span>
                         </div>
                       </TableCell>
-
-                      <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">
-                        {c.demandante || "—"}
-                      </TableCell>
-
-                      <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">
-                        {c.demandado || "—"}
-                      </TableCell>
-
-                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
-                        {c.juzgado || "—"}
-                      </TableCell>
-
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(c.ultima_actuacion)}
-                      </TableCell>
-
+                      <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant={c.unread ? "default" : "outline"}
-                            size="sm"
-                            className="h-8 px-2"
-                            onClick={() => onOpenCase(c)}
-                          >
+                          <Button variant={c.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(c)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10"
-                            onClick={() => setCaseToDelete(c)}
-                          >
+                          <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(c)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1099,50 +778,21 @@ export default function CasosPage() {
             </div>
           )}
 
-          {/* Paginación mejorada */}
           {canPaginate && (
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground">
-                Página {page} de {totalPages}
-              </p>
-
+              <p className="text-sm text-muted-foreground">Página {page} de {totalPages}</p>
               <div className="flex items-center gap-4">
-                {/* Input para ir a página específica */}
                 <form onSubmit={handlePageInputSubmit} className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">Ir a:</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={totalPages}
-                    value={pageInput}
-                    onChange={handlePageInputChange}
-                    className="w-20 h-9 text-center"
-                  />
-                  <Button type="submit" variant="outline" size="sm">
-                    Ir
-                  </Button>
+                  <Input type="number" min={1} max={totalPages} value={pageInput} onChange={handlePageInputChange} className="w-20 h-9 text-center" />
+                  <Button type="submit" variant="outline" size="sm">Ir</Button>
                 </form>
-
-                {/* Botones anterior/siguiente */}
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Anterior
+                  <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                    <ChevronLeft className="h-4 w-4" />Anterior
                   </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                    Siguiente<ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -1151,33 +801,20 @@ export default function CasosPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog de confirmación para eliminar caso */}
       <AlertDialog open={!!caseToDelete} onOpenChange={() => setCaseToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este caso?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>Estás a punto de eliminar el siguiente radicado:</p>
-              <p className="font-mono text-sm bg-muted p-2 rounded">
-                {caseToDelete?.radicado}
-              </p>
-              <p className="text-destructive font-medium">
-                Esta acción no se puede deshacer. Se eliminarán también todas las actuaciones asociadas.
-              </p>
+              <p className="font-mono text-sm bg-muted p-2 rounded">{caseToDelete?.radicado}</p>
+              <p className="text-destructive font-medium">Esta acción no se puede deshacer. Se eliminarán también todas las actuaciones asociadas.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeletingCase}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteCase}
-              disabled={isDeletingCase}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingCase ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
+            <AlertDialogAction onClick={handleDeleteCase} disabled={isDeletingCase} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeletingCase ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Sí, eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1186,4 +823,3 @@ export default function CasosPage() {
     </div>
   );
 }
-
