@@ -151,11 +151,11 @@ async def auto_refresh_loop():
 async def do_auto_refresh() -> dict:
     from sqlalchemy import text
 
-    BATCH_SIZE = 5
+    BATCH_SIZE = 3
     MINI_BATCH = 10
-    DELAY_BETWEEN = 1.0
+    DELAY_BETWEEN = 0.5
     EXTRA_EVERY_N = 10
-    EXTRA_DELAY   = 1.0
+    EXTRA_DELAY   = 0.5
 
     updated_cases = []
     checked  = 0
@@ -1363,11 +1363,11 @@ async def run_auto_refresh_now():
         pending_result = {"validated": 0, "not_found": 0}
         try:
             db = SessionLocal()
-            pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(5).all()
+            pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(2).all()
             for i, c in enumerate(pendientes):
                 try:
                     if i > 0:
-                        await asyncio.sleep(1.0)
+                        await asyncio.sleep(0.5)
                     r = await validar_radicado_completo(c.radicado, db, is_new_import=True)
                     if r["found"]:
                         inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
@@ -1394,7 +1394,7 @@ async def run_auto_refresh_now():
         invalid_result = {"found": 0, "still_not_found": 0}
         try:
             db = SessionLocal()
-            invalidos = db.query(InvalidRadicado).order_by(InvalidRadicado.updated_at.asc()).limit(5).all()
+            invalidos = db.query(InvalidRadicado).order_by(InvalidRadicado.updated_at.asc()).limit(2).all()
             for i, item in enumerate(invalidos):
                 try:
                     if i > 0:
