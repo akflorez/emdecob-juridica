@@ -638,6 +638,8 @@ app.add_middleware(
         "https://emdecob-juridica.vercel.app",
         "http://consultasjuridicas.emdecob.co",
         "https://consultasjuridicas.emdecob.co",
+        "http://consultasjuridicas.emdecob.com",
+        "https://consultasjuridicas.emdecob.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

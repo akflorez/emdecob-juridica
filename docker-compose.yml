@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: emdecob-backend
+    restart: always
+    environment:
+      - NEON_URL=${NEON_URL}
+    # Port 8000 is internal to the docker network
+    # Not exposed to the host to avoid port 8000 conflict
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: emdecob-frontend
+    restart: always
+    ports:
+      - "8081:80" # Maps host port 8081 to container port 80
+    depends_on:
+      - backend
+
+networks:
+  default:
+    name: emdecob-network
