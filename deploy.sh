@@ -19,3 +19,8 @@ docker compose up -d
 echo "✅ Despliegue completado con éxito!"
 echo "🌐 La aplicación debería estar disponible en: http://<tu-ip-contabo>:8081"
 echo "🔍 Revisa los logs con: docker compose logs -f"
+
+# --- NOTA DE MIGRACIÓN ---
+# Si es la primera vez que despliegas con la base de datos local,
+# ejecuta el script de migración una vez que los contenedores estén listos:
+# bash migrate_neon_to_local.sh

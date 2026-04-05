@@ -1,4 +1,17 @@
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: emdecob-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${DB_USER:-emdecob}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-emdecob2026}
+      - POSTGRES_DB=${DB_NAME:-emdecob_consultas}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
   backend:
     build:
       context: .
@@ -6,9 +19,10 @@ services:
     container_name: emdecob-backend
     restart: always
     environment:
-      - NEON_URL=${NEON_URL}
-    # Port 8000 is internal to the docker network
-    # Not exposed to the host to avoid port 8000 conflict
+      - DATABASE_URL=postgresql://${DB_USER:-emdecob}:${DB_PASSWORD:-emdecob2026}@db:5432/${DB_NAME:-emdecob_consultas}
+      - NEON_URL=${NEON_URL} # Keep temporarily for migration
+    depends_on:
+      - db
 
   frontend:
     build:
@@ -17,10 +31,13 @@ services:
     container_name: emdecob-frontend
     restart: always
     ports:
-      - "8081:80" # Maps host port 8081 to container port 80
+      - "8081:80"
     depends_on:
       - backend
 
 networks:
   default:
     name: emdecob-network
+
+volumes:
+  postgres_data:

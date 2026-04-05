@@ -6,11 +6,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
 
-# Neon PostgreSQL
-DATABASE_URL = os.getenv("NEON_URL")
+# Database Connection
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("NEON_URL")
 
 if not DATABASE_URL:
-    print("⚠️ ADVERTENCIA: Falta configurar NEON_URL en el entorno. Usando base de datos predeterminada.")
+    print("⚠️ ADVERTENCIA: Falta configurar DATABASE_URL o NEON_URL en el entorno. Usando base de datos predeterminada.")
     DATABASE_URL = "sqlite:////tmp/fallback.db"
 
 engine = create_engine(
