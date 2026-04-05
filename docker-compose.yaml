@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_USER=${DB_USER:-emdecob}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-emdecob2026}
-      - POSTGRES_DB=${DB_NAME:-emdecob_consultas}
+      - POSTGRES_DB=${DB_NAME:-juricob}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -19,7 +19,7 @@ services:
     container_name: emdecob-backend
     restart: always
     environment:
-      - DATABASE_URL=postgresql://${DB_USER:-emdecob}:${DB_PASSWORD:-emdecob2026}@db:5432/${DB_NAME:-emdecob_consultas}
+      - DATABASE_URL=postgresql://${DB_USER:-emdecob}:${DB_PASSWORD:-emdecob2026}@db:5432/${DB_NAME:-juricob}
       - NEON_URL=${NEON_URL} # Keep temporarily for migration
     depends_on:
       - db
