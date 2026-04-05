@@ -8,7 +8,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-emdecob2026}
       - POSTGRES_DB=${DB_NAME:-juricob}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - juricob_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
 
@@ -40,4 +40,4 @@ networks:
     name: emdecob-network
 
 volumes:
-  postgres_data:
+  juricob_data:
