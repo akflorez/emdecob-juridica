@@ -1,7 +1,7 @@
 import httpx
 from bs4 import BeautifulSoup
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import re
 import unicodedata
 import hashlib
@@ -132,7 +132,7 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
         
     return None
 
-def parse_fecha_pub(fecha_str: str) -> datetime.date | None:
+def parse_fecha_pub(fecha_str: str) -> date | None:
     if not fecha_str: return None
     try:
         return datetime.strptime(fecha_str[:10], "%Y-%m-%d").date()
