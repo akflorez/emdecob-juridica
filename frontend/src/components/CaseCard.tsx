@@ -59,18 +59,15 @@ export function CaseCard({ caseData, compact = false }: CaseCardProps) {
    * Si no vienen, usar raw_proceso (solo si ese endpoint lo incluye)
    */
   const fechaRadicacion = formatDateSafe(
-    // @ts-expect-error: algunos tipos no incluyen snake_case, pero el backend sí lo envía
     (caseData as any)?.fecha_radicacion ?? rawProceso?.fechaProceso ?? null
   );
 
   const ultimaActuacion = formatDateSafe(
-    // @ts-expect-error
     (caseData as any)?.ultima_actuacion ?? rawProceso?.fechaUltimaActuacion ?? null
   );
 
   // Fecha de consulta: creada en tu sistema
   const fechaConsulta = formatDateSafe(
-    // @ts-expect-error
     (caseData as any)?.created_at ?? null
   );
 
@@ -113,8 +110,13 @@ export function CaseCard({ caseData, compact = false }: CaseCardProps) {
               <Tag className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Radicado</p>
-              <p className="font-mono text-sm font-medium mt-1 break-all">{radicado}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Radicado / ID Proceso</p>
+              <p className="font-mono text-sm font-medium mt-1 break-all">
+                {radicado}
+                {caseData?.id_proceso && (
+                  <span className="block text-xs text-primary/70 mt-0.5">ID: {caseData.id_proceso}</span>
+                )}
+              </p>
             </div>
           </div>
 

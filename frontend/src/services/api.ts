@@ -95,8 +95,9 @@ export function getStats() {
  * CONSULTA POR RADICADO
  * -------------------------- */
 export type CaseByRadicadoResponse = {
-  id?: number | null;
+  id: number;
   radicado: string;
+  id_proceso?: string | null;
   demandante?: string | null;
   demandado?: string | null;
   juzgado?: string | null;
@@ -107,11 +108,17 @@ export type CaseByRadicadoResponse = {
   created_at?: string | null;
   updated_at?: string | null;
   unread?: boolean;
+  has_documents?: boolean;
+  note?: string | null;
 };
 
 export function getCaseByRadicado(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<CaseByRadicadoResponse>(`/cases/by-radicado/${r}`);
+  return apiFetch<CaseByRadicadoResponse[]>(`/cases/by-radicado/${r}`);
+}
+
+export function getCaseById(id: number) {
+  return apiFetch<CaseByRadicadoResponse>(`/cases/id/${id}`);
 }
 
 /** ---------------------------
@@ -136,6 +143,10 @@ export function getCaseEvents(radicado: string) {
   return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/by-radicado/${r}/events`);
 }
 
+export function getCaseEventsById(id: number) {
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/id/${id}/events`);
+}
+
 /** ---------------------------
  * DESCARGAR ACTUACIONES EXCEL (un radicado)
  * -------------------------- */
@@ -143,6 +154,11 @@ export function downloadEventsExcel(radicado: string) {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
   const r = encodeURIComponent(radicado.trim());
   window.open(`${cleanBaseUrl}/cases/by-radicado/${r}/events.xlsx`, "_blank");
+}
+
+export function downloadEventsByIdExcel(id: number) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  window.open(`${cleanBaseUrl}/cases/id/${id}/events.xlsx`, "_blank");
 }
 
 /** ---------------------------
@@ -224,7 +240,10 @@ export type CaseRow = {
   created_at?: string | null;
   updated_at?: string | null;
   unread?: boolean;
+  id_proceso?: string | null;
   has_documents?: boolean;
+  cedula?: string | null;
+  abogado?: string | null;
 };
 
 export type CasesResponse = {
@@ -244,6 +263,8 @@ export type GetCasesParams = {
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
   con_documentos?: boolean;
+  cedula?: string;
+  abogado?: string;
   page?: number;
   page_size?: number;
 };
@@ -258,6 +279,8 @@ export function getCases(params: GetCasesParams) {
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
   if (params.con_documentos !== undefined) qs.set("con_documentos", String(params.con_documentos));
+  if (params.cedula) qs.set("cedula", params.cedula);
+  if (params.abogado) qs.set("abogado", params.abogado);
   if (params.page) qs.set("page", String(params.page));
   if (params.page_size) qs.set("page_size", String(params.page_size));
   const q = qs.toString();
@@ -633,4 +656,104 @@ export function runAutoRefreshNow() {
   return apiFetch<{ ok: boolean; message: string }>("/auto-refresh/run-now", {
     method: "POST",
   });
+}
+
+/** ---------------------------
+ * PUBLICACIONES PROCESALES
+ * -------------------------- */
+export type CasePublication = {
+  id: number;
+  case_id: number;
+  fecha_publicacion?: string | null;
+  tipo_publicacion?: string | null;
+  descripcion?: string | null;
+  documento_url?: string | null;
+  source_url?: string | null;
+  source_id?: string | null;
+  created_at?: string | null;
+};
+
+export function getCasePublications(radicado: string) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<{ items: CasePublication[] }>(`/cases/${r}/publicaciones`);
+}
+
+export function getCasePublicationsById(id: number) {
+  return apiFetch<{ items: CasePublication[] }>(`/cases/id/${id}/publicaciones`);
+}
+
+export function refreshCasePublications(radicado: string) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<{ ok: boolean; items: CasePublication[] }>(`/cases/${r}/refresh-publicaciones`, {
+    method: "POST",
+  });
+}
+
+export function refreshCasePublicationsById(id: number) {
+  return apiFetch<{ ok: boolean; items: CasePublication[] }>(`/cases/id/${id}/refresh-publicaciones`, {
+    method: "POST",
+  });
+}
+
+/** ---------------------------
+ * BÚSQUEDA MASIVA (NAMES / RADICADOS)
+ * -------------------------- */
+export interface SearchJobResponse {
+  id: number;
+  type: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_items: number;
+  processed_items: number;
+  is_imported: boolean;
+  results: any[];
+  error?: string;
+  created_at?: string;
+}
+
+export function uploadNamesSearch(file: File, fromDate?: string, toDate?: string) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const qs = new URLSearchParams();
+  if (fromDate) qs.set("from_date", fromDate);
+  if (toDate) qs.set("to_date", toDate);
+  const q = qs.toString();
+  return apiFetch<{ job_id: number }>(`/search/names/upload${q ? `?${q}` : ""}`, { method: "POST", body: fd });
+}
+
+export function getSearchJob(jobId: number) {
+  return apiFetch<SearchJobResponse>(`/search/jobs/${jobId}`);
+}
+
+export function getLatestSearchJob() {
+  return apiFetch<SearchJobResponse | null>("/search/latest");
+}
+
+export function importSearchResults(jobId: number, selectedIndices: number[]) {
+  return apiFetch<{ ok: boolean; imported: number }>(`/search/jobs/${jobId}/import`, {
+    method: "POST",
+    body: JSON.stringify({ indices: selectedIndices }),
+  });
+}
+
+export async function downloadSearchResultsExcel(jobId: number) {
+  const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const token = getToken();
+  
+  const res = await fetch(`${cleanBaseUrl}/search/jobs/${jobId}/export`, {
+    headers: token ? { "Authorization": `Bearer ${token}` } : {}
+  });
+
+  if (!res.ok) {
+    throw new Error("Error al descargar el archivo");
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `resultados_busqueda_${jobId}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  a.remove();
 }

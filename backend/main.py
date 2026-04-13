@@ -8,6 +8,7 @@ from fastapi import (
     BackgroundTasks,
     Body,
     Security,
+    Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -35,14 +36,17 @@ from typing import List, Optional, Tuple
 from contextlib import asynccontextmanager
 
 from .db import SessionLocal, engine, Base
-from .models import Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, User
+from .models import Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, User, CasePublication, SearchJob
 from .service.rama import (
     consulta_por_radicado,
     detalle_proceso,
     actuaciones_proceso,
     documentos_actuacion,
+    consulta_por_nombre,
     RamaError,
 )
+from .service.publicaciones import consultar_publicaciones, parse_fecha_pub
+from .service.bulk_orchestrator import run_name_search_job, log_job
 
 
 # =========================
@@ -124,7 +128,7 @@ async def auto_refresh_loop():
     while auto_refresh_running:
         try:
             now = now_colombia()
-            print(f"\n🔄 [{now.strftime('%Y-%m-%d %H:%M:%S')}] Iniciando ciclo completo de auto-refresh...")
+            print(f"\n[AUTO-REFRESH] [{now.strftime('%Y-%m-%d %H:%M:%S')}] Iniciando ciclo completo de auto-refresh...")
             auto_refresh_stats["last_run"] = now.isoformat()
             auto_refresh_stats["next_run"] = "Al terminar este ciclo + 10 min"
 
@@ -135,7 +139,7 @@ async def auto_refresh_loop():
 
             hora = now_colombia().hour
             if hora >= NOTIFICATION_FLUSH_HOUR and _notification_accumulator:
-                print(f"📧 Flush de 5 PM: enviando {len(_notification_accumulator)} casos acumulados")
+                print(f"[EMAIL] Flush de 5 PM: enviando {len(_notification_accumulator)} casos acumulados")
                 send_grouped_notification(_notification_accumulator)
                 _notification_accumulator.clear()
 
@@ -143,7 +147,7 @@ async def auto_refresh_loop():
             await asyncio.sleep(600)
 
         except Exception as e:
-            print(f"💥 Error en auto-refresh: {e}")
+            print(f"[ERROR] Error en auto-refresh: {e}")
             auto_refresh_stats["last_result"] = {"error": str(e)}
             await asyncio.sleep(300)
 
@@ -215,7 +219,7 @@ async def do_auto_refresh() -> dict:
                     resp = await consulta_por_radicado(c.radicado, solo_activos=False, pagina=1)
                     items = extract_items(resp)
                 except RamaError as e:
-                    print(f"   ⚠️ Error consultando {c.radicado}: {e}")
+                    print(f"   [WARN] Error consultando {c.radicado}: {e}")
                     errors += 1
                     if "bloqueó" in str(e).lower() or "rate" in str(e).lower():
                         await asyncio.sleep(60)
@@ -253,9 +257,10 @@ async def do_auto_refresh() -> dict:
 
                 if hay_cambio and es_actuacion_reciente:
                     sujetos = p.get("sujetosProcesales") or ""
-                    d1, d2  = parse_sujetos_procesales(sujetos)
+                    d1, d2, abo  = parse_sujetos_procesales(sujetos)
                     c.demandante     = d1 or c.demandante
                     c.demandado      = d2 or c.demandado
+                    # c.abogado        = abo or c.abogado (Removido por petición del usuario)
                     c.ultima_actuacion = nueva_fecha
                     new_hash = sha256_obj({"radicado": c.radicado, "ultima_actuacion": str(nueva_fecha), "ts": now_colombia().isoformat()})
                     c.current_hash   = new_hash
@@ -275,9 +280,10 @@ async def do_auto_refresh() -> dict:
 
                 sujetos_raw = p.get("sujetosProcesales") or ""
                 if sujetos_raw:
-                    d1f, d2f = parse_sujetos_procesales(sujetos_raw)
+                    d1f, d2f, abof = parse_sujetos_procesales(sujetos_raw)
                     if d1f: c.demandante = d1f
                     if d2f: c.demandado  = d2f
+                    # if abof: c.abogado   = abof (Removido por petición del usuario)
 
                 c.last_check_at = now_colombia()
                 checked += 1
@@ -389,16 +395,21 @@ def _accumulate_and_notify(new_cases: List[dict]):
 
     _notification_accumulator_date = hoy
 
-    radicados_existentes = {c["radicado"] for c in _notification_accumulator}
+    # El acumulador ahora evita duplicar (radicado + juzgado) o (radicado + id_proceso)
+    def get_case_key(c_obj):
+        return f"{c_obj.get('radicado')}_{c_obj.get('juzgado', '')}"
+
+    llaves_existentes = {get_case_key(c) for c in _notification_accumulator}
     for c in new_cases:
-        if c["radicado"] not in radicados_existentes:
+        key = get_case_key(c)
+        if key not in llaves_existentes:
             _notification_accumulator.append(c)
-            radicados_existentes.add(c["radicado"])
+            llaves_existentes.add(key)
 
     total = len(_notification_accumulator)
     hora  = now_colombia().hour
 
-    print(f"📧 Acumulador: {total} casos | hora={hora}:00")
+    print(f"[EMAIL] Acumulador: {total} casos | hora={hora}:00")
 
     should_send = (
         total >= NOTIFICATION_BATCH_SIZE
@@ -589,19 +600,19 @@ async def _pending_validation_loop():
 async def lifespan(app: FastAPI):
     global auto_refresh_task, auto_refresh_running, auto_refresh_stats
 
-    print("🚀 Iniciando EMDECOB Consultas...")
+    print("[START] Iniciando EMDECOB Consultas...")
     Base.metadata.create_all(bind=engine)
     _ensure_default_user()
     asyncio.create_task(notification_flush_loop())
-    print("📧 Flush loop de notificaciones iniciado")
+    print("[EMAIL] Flush loop de notificaciones iniciado")
 
     auto_refresh_running = True
     auto_refresh_stats["running"] = True
     auto_refresh_task = asyncio.create_task(auto_refresh_loop())
-    print(f"⏰ Auto-refresh iniciado (cada {auto_refresh_stats['interval_minutes']} minutos)")
+    print(f"[RELOJ] Auto-refresh iniciado (cada {auto_refresh_stats['interval_minutes']} minutos)")
 
     asyncio.create_task(_pending_validation_loop())
-    print("🔄 Validación continua de pendientes iniciada")
+    print("[SYNC] Validación continua de pendientes iniciada")
 
     yield
 
@@ -634,6 +645,9 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8081",
+        "http://localhost:8085",
+        "http://localhost:8090",
+        "http://127.0.0.1:8090",
         "http://127.0.0.1:8081",
         "https://emdecob-juridica.vercel.app",
         "http://consultasjuridicas.emdecob.co",
@@ -846,14 +860,17 @@ def _asignar_roles_inteligente(nombre_a: Optional[str], nombre_b: Optional[str])
 
 def parse_sujetos_procesales(sujetos):
     if not sujetos:
-        return None, None
+        return None, None, None
 
     demandante = None
     demandado = None
+    abogado = None
 
     if isinstance(sujetos, list):
         ROLES_DEMANDANTE = {"demandante", "accionante", "demandante/accionante", "accionante/demandante", "ejecutante"}
         ROLES_DEMANDADO  = {"demandado", "accionado", "demandado/accionado", "ejecutado", "deudor"}
+        ROLES_ABOGADO    = {"defensor privado", "apoderado", "abogado"}
+        
         for suj in sujetos:
             if not isinstance(suj, dict):
                 continue
@@ -861,19 +878,24 @@ def parse_sujetos_procesales(sujetos):
             nombre = _normalizar_nombre(suj.get("nombre") or suj.get("name") or "")
             if not nombre:
                 continue
+            
             if tipo in ROLES_DEMANDANTE and demandante is None:
                 demandante = nombre
             elif tipo in ROLES_DEMANDADO and demandado is None:
                 demandado = nombre
+            elif tipo in ROLES_ABOGADO and abogado is None:
+                abogado = nombre
+                
         demandante, demandado = _asignar_roles_inteligente(demandante, demandado)
-        return demandante, demandado
+        return demandante, demandado, abogado
 
     if not isinstance(sujetos, str):
         try:
             sujetos = str(sujetos)
         except Exception:
-            return None, None
+            return None, None, None
 
+    # Regex para Demandante
     dem_match = re.search(
         r"(?:Demandante(?:[/\-]\w+)?|Accionante|Ejecutante)\s*:\s*([^|]+)",
         sujetos, re.IGNORECASE
@@ -881,15 +903,24 @@ def parse_sujetos_procesales(sujetos):
     if dem_match:
         demandante = _normalizar_nombre(dem_match.group(1))
 
+    # Regex para Demandado
     ddo_match = re.search(
         r"(?:Demandado(?:[/\-]\w+)?|Accionado|Ejecutado|Deudor)\s*:\s*([^|]+)",
         sujetos, re.IGNORECASE
     )
     if ddo_match:
         demandado = _normalizar_nombre(ddo_match.group(1))
+        
+    # Regex para Defensor / Abogado
+    abo_match = re.search(
+        r"(?:Defensor Privado|Apoderado|Abogado)\s*:\s*([^|]+)",
+        sujetos, re.IGNORECASE
+    )
+    if abo_match:
+        abogado = _normalizar_nombre(abo_match.group(1))
 
     demandante, demandado = _asignar_roles_inteligente(demandante, demandado)
-    return demandante, demandado
+    return demandante, demandado, abogado
 
 def parse_fecha(fecha_str: Optional[str]) -> Optional[date]:
     if not fecha_str:
@@ -1090,6 +1121,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
     c.demandante = d1
     c.demandado = d2
     c.juzgado = juzgado
+    c.id_proceso = str(id_proceso) if id_proceso else None
     c.fecha_radicacion = parse_fecha(fecha_proceso_str)
     c.ultima_actuacion = parse_fecha(fecha_ult_str)
     c.current_hash = new_hash
@@ -1108,6 +1140,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
     db.flush()
 
     if id_proceso:
+        print(f"[main.py] Obteniendo actuaciones para id_proceso={id_proceso}...")
         try:
             await delay_between_requests(0.1, 0.3)
             acts_resp = await actuaciones_proceso(int(id_proceso))
@@ -1116,7 +1149,9 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
                 acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
             elif isinstance(acts_resp, list):
                 acts = acts_resp
-
+            
+            print(f"[main.py] Procesando {len(acts)} actuaciones...")
+            added_count = 0
             for a in acts:
                 con_docs = bool(a.get("conDocumentos")) if a.get("conDocumentos") is not None else False
                 it = {
@@ -1146,8 +1181,14 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
                         event_hash=event_hash,
                         con_documentos=con_docs,
                     ))
+                    added_count += 1
                     if con_docs:
                         c.has_documents = True
+            
+            if added_count > 0:
+                print(f"[main.py] OK: Se agregaron {added_count} actuaciones nuevas a {c.radicado}")
+            else:
+                print(f"[main.py] INFO: No hubo actuaciones nuevas (o ya existían) para {c.radicado}")
         except Exception as e:
             print(f"   ⚠️ Error actuaciones: {e}")
 
@@ -1750,6 +1791,8 @@ def list_cases(
     search: Optional[str] = Query(default=None),
     juzgado: Optional[str] = Query(default=None),
     mes_actuacion: Optional[str] = Query(default=None),
+    cedula: Optional[str] = Query(default=None),
+    abogado: Optional[str] = Query(default=None),
     solo_validos: bool = Query(default=True),
     solo_pendientes: bool = Query(default=False),
     solo_no_leidos: bool = Query(default=False),
@@ -1787,6 +1830,12 @@ def list_cases(
 
     if juzgado:
         q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
+
+    if cedula:
+        q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
+
+    if abogado:
+        q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
 
     if con_documentos is not None:
         q = q.filter(Case.has_documents == con_documentos)
@@ -1841,6 +1890,8 @@ def list_cases(
             "updated_at": c.updated_at.isoformat() if c.updated_at else None,
             "unread": is_unread_case(c),
             "has_documents": c.has_documents,
+            "cedula": c.cedula,
+            "abogado": c.abogado,
         }
 
     return {
@@ -1860,6 +1911,8 @@ def download_cases_excel(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(default=None),
     juzgado: Optional[str] = Query(default=None),
+    cedula: Optional[str] = Query(default=None),
+    abogado: Optional[str] = Query(default=None),
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
 ):
@@ -1878,6 +1931,12 @@ def download_cases_excel(
     if juzgado:
         q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
 
+    if cedula:
+        q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
+
+    if abogado:
+        q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
+
     cases = q.order_by(desc(Case.ultima_actuacion)).all()
 
     data = [
@@ -1885,6 +1944,8 @@ def download_cases_excel(
             "Radicado": c.radicado,
             "Demandante": c.demandante or "",
             "Demandado": c.demandado or "",
+            "Cédula": c.cedula or "",
+            "Abogado": c.abogado or "",
             "Juzgado": c.juzgado or "",
             "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
             "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
@@ -2066,6 +2127,33 @@ async def validate_selected(data: ValidateSelectedRequest, db: Session = Depends
 # =========================
 # CASE BY RADICADO
 # =========================
+@app.get("/cases/{case_id}")
+async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+        
+    return {
+        "id": c.id,
+        "radicado": c.radicado,
+        "id_proceso": c.id_proceso,
+        "demandante": c.demandante,
+        "demandado": c.demandado,
+        "juzgado": c.juzgado,
+        "alias": c.alias,
+        "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
+        "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
+        "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "unread": is_unread_case(c),
+        "has_documents": c.has_documents,
+    }
+
+@app.get("/cases/id/{case_id}")
+async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db)):
+    return await get_case_by_id(case_id, db)
+
 @app.get("/cases/by-radicado/{radicado}")
 async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
     try:
@@ -2082,85 +2170,126 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
         if not items:
             raise HTTPException(404, "Caso no encontrado en Rama Judicial")
 
-        p = items[0] or {}
-        id_proceso = p.get("idProceso") or p.get("IdProceso")
+        synced_cases = []
+        
+        for p in items:
+            id_proceso = str(p.get("idProceso") or p.get("IdProceso") or "")
+            
+            det = {}
+            if id_proceso:
+                try:
+                    det = await detalle_proceso(int(id_proceso))
+                except:
+                    det = {}
 
-        det = {}
-        if id_proceso:
-            try:
-                det = await detalle_proceso(int(id_proceso))
-            except:
-                det = {}
+            # Buscar por id_proceso si existe, si no por radicado solo si es el único
+            c = None
+            if id_proceso:
+                c = db.query(Case).filter(Case.id_proceso == id_proceso).first()
+            
+            # Si no se encontró por ID único, buscamos por radicado pero siendo precavidos
+            if not c:
+                # Si hay varios con el mismo radicado sin id_proceso, es ambiguo.
+                # Pero si es una base vieja, quizás solo hay uno.
+                c = db.query(Case).filter(Case.radicado == r, Case.id_proceso == None).first()
 
-        c = db.query(Case).filter(Case.radicado == r).first()
-        is_new_case = False
-        if not c:
-            c = Case(radicado=r)
-            db.add(c)
-            db.flush()
-            is_new_case = True
+            is_new_case = False
+            if not c:
+                c = Case(radicado=r, id_proceso=id_proceso)
+                db.add(c)
+                db.flush()
+                is_new_case = True
+            elif not c.id_proceso and id_proceso:
+                # Actualizar registro legacy con su ID único
+                c.id_proceso = id_proceso
 
-        sujetos = p.get("sujetosProcesales") or ""
-        d1, d2 = parse_sujetos_procesales(sujetos)
+            sujetos = p.get("sujetosProcesales") or ""
+            d1, d2, abo = parse_sujetos_procesales(sujetos)
 
-        c.demandante = d1 or c.demandante
-        c.demandado = d2 or c.demandado
-        c.juzgado = extract_juzgado(p, det) or c.juzgado
+            c.demandante = d1 or c.demandante
+            c.demandado = d2 or c.demandado
+            # c.abogado = abo or c.abogado (Removido por petición del usuario)
+            c.juzgado = extract_juzgado(p, det) or c.juzgado
 
-        fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
-        c.fecha_radicacion = parse_fecha(fecha_proceso_str) or c.fecha_radicacion
-        c.ultima_actuacion = parse_fecha(fecha_ult_str) or c.ultima_actuacion
+            fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
+            c.fecha_radicacion = parse_fecha(fecha_proceso_str) or c.fecha_radicacion
+            c.ultima_actuacion = parse_fecha(fecha_ult_str) or c.ultima_actuacion
 
-        if is_new_case:
-            new_hash = sha256_obj({"proceso": p, "detalle": det})
-            c.current_hash = new_hash
-            c.last_hash = new_hash
+            if is_new_case:
+                new_hash = sha256_obj({"proceso": p, "detalle": det})
+                c.current_hash = new_hash
+                c.last_hash = new_hash
 
-        c.last_check_at = now_colombia()
+            c.last_check_at = now_colombia()
+            
+            synced_cases.append({
+                "id": c.id,
+                "radicado": c.radicado,
+                "demandante": c.demandante,
+                "demandado": c.demandado,
+                "juzgado": c.juzgado,
+                "alias": c.alias,
+                "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
+                "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
+                "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
+                "unread": is_unread_case(c),
+                "has_documents": c.has_documents,
+            })
+
         db.commit()
-
-        return {
-            "id": c.id,
-            "radicado": c.radicado,
-            "demandante": c.demandante,
-            "demandado": c.demandado,
-            "juzgado": c.juzgado,
-            "alias": c.alias,
-            "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
-            "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
-            "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-            "unread": is_unread_case(c),
-            "has_documents": c.has_documents,
-        }
+        
+        # Para compatibilidad con el frontend actual si solo hay uno, retornamos ese.
+        # Pero mi plan dice que el frontend debe cambiar para manejar listas.
+        # Por ahora retorno la lista y ajusto el frontend.
+        return synced_cases
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(500, f"Error interno: {str(e)}")
 
 
-# =========================
-# EVENTS BY RADICADO
-# =========================
+@app.get("/cases/id/{case_id}/events")
+async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene las actuaciones de un caso específico usando su ID de base de datos.
+    Esto asegura que traemos el id_proceso correcto si hay múltiples radicados iguales.
+    """
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+        
+    return await events_logic(c, db)
+
 @app.get("/cases/by-radicado/{radicado}/events")
 async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
+    r = clean_str(radicado)
+    if not r:
+        raise HTTPException(400, "Radicado requerido")
+
+    # Si hay múltiples con este radicado, tomamos el más reciente.
+    c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
+    if not c:
+        c = Case(radicado=r)
+        db.add(c)
+        db.flush()
+
+    return await events_logic(c, db)
+
+async def events_logic(c: Case, db: Session):
     try:
-        r = clean_str(radicado)
-        if not r:
-            raise HTTPException(400, "Radicado requerido")
-
-        c = db.query(Case).filter(Case.radicado == r).first()
-        if not c:
-            c = Case(radicado=r)
-            db.add(c)
-            db.flush()
-            db.commit()
-
-        try:
-            id_proceso = await obtener_id_proceso(r)
-        except RamaError as e:
-            raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
+        radicado = c.radicado
+        
+        # Si no tiene id_proceso, intentamos obtenerlo de la Rama
+        id_proceso = c.id_proceso
+        if not id_proceso:
+            try:
+                id_proceso = await obtener_id_proceso(radicado)
+                if id_proceso:
+                    c.id_proceso = str(id_proceso)
+                    db.commit()
+            except RamaError as e:
+                print(f"⚠️ [events] Error obteniendo id_proceso para {radicado}: {e}")
+                return {"items": [], "total": 0}
 
         if not id_proceso:
             return {"items": [], "total": 0}
@@ -2194,6 +2323,7 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
             }
             result_items.append(it)
 
+        # Guardar en DB para historial/notificaciones
         for it in result_items:
             event_hash = sha256_obj(it)
             exists = db.query(CaseEvent).filter(CaseEvent.case_id == c.id, CaseEvent.event_hash == event_hash).first()
@@ -2201,7 +2331,7 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
                 con_docs = it.get("con_documentos", False)
                 db.add(CaseEvent(
                     case_id=c.id,
-                    event_date=it.get("event_date"),
+                    event_date=parse_fecha(it.get("event_date")),
                     title=it.get("title"),
                     detail=it.get("detail"),
                     event_hash=event_hash,
@@ -2209,14 +2339,16 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
                 ))
                 if con_docs:
                     c.has_documents = True
+        
         db.commit()
-
         return {"items": result_items, "total": len(result_items)}
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Error interno: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Error procesando actuaciones: {str(e)}")
 
 
 # =========================
@@ -2263,6 +2395,59 @@ async def download_events_xlsx(radicado: str):
     output.seek(0)
 
     filename = f"actuaciones_{r[:20]}_{now_colombia().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/cases/id/{case_id}/events.xlsx")
+async def download_events_by_id_xlsx(case_id: int, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+
+    id_proceso = c.id_proceso
+    if not id_proceso:
+        # Fallback a buscar por radicado si no tiene ID proceso
+        try:
+            id_proceso = await obtener_id_proceso(c.radicado)
+        except:
+            raise HTTPException(404, "ID de proceso no disponible")
+
+    if not id_proceso:
+        raise HTTPException(404, "ID de proceso no disponible")
+
+    try:
+        acts_resp = await actuaciones_proceso(int(id_proceso))
+    except RamaError as e:
+        raise HTTPException(502, f"Error obteniendo actuaciones: {str(e)}")
+
+    acts = []
+    if isinstance(acts_resp, dict):
+        acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
+    elif isinstance(acts_resp, list):
+        acts = acts_resp
+
+    df = pd.DataFrame([{
+        "Radicado": c.radicado,
+        "ID_Proceso": id_proceso,
+        "Juzgado": c.juzgado,
+        "FechaActuacion": a.get("fechaActuacion"),
+        "Actuacion": a.get("actuacion"),
+        "Anotacion": a.get("anotacion"),
+        "FechaInicial": a.get("fechaInicial"),
+        "FechaFinal": a.get("fechaFinal"),
+        "FechaRegistro": a.get("fechaRegistro"),
+    } for a in acts])
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Actuaciones")
+    output.seek(0)
+
+    filename = f"actuaciones_{c.radicado[:15]}_{id_proceso}_{now_colombia().strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2350,7 +2535,7 @@ async def _background_validate_pendientes():
     DELAY = 2.0
     MAX_CYCLES = 20
 
-    print("🔄 [bg-validate] Iniciando validación automática de pendientes...")
+    print("[BG-VALIDATE] Iniciando validación automática de pendientes...")
     for cycle in range(MAX_CYCLES):
         db = None
         try:
@@ -2563,3 +2748,367 @@ async def descargar_documento_endpoint(id_documento: int):
         print(f"📥 Error inesperado descargando {id_documento}: {e}")
         traceback.print_exc()
         raise HTTPException(500, f"Error interno descargando documento: {str(e)}")
+
+# =========================
+# PUBLICACIONES PROCESALES
+# =========================
+@app.get("/cases/{radicado}/publicaciones")
+async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
+    return {
+        "items": [
+            {
+                "id": p.id,
+                "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
+                "tipo_publicacion": p.tipo_publicacion,
+                "descripcion": p.descripcion,
+                "documento_url": p.documento_url,
+                "source_url": p.source_url,
+                "source_id": p.source_id,
+            }
+            for p in pubs
+        ]
+    }
+
+@app.get("/cases/id/{case_id}/publicaciones")
+async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    
+    return await get_case_publications(case.radicado, db)
+
+@app.post("/cases/{radicado}/refresh-publicaciones")
+async def refresh_publications(radicado: str, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    await save_new_publications(case, db)
+    db.commit()
+    
+    return await get_case_publications(case.radicado, db)
+
+@app.post("/cases/id/{case_id}/refresh-publicaciones")
+async def refresh_publications_by_id(case_id: int, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    
+    return await refresh_publications(case.radicado, db)
+
+async def save_new_publications(case: Case, db: Session):
+    try:
+        from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango
+        
+        # 1. Obtener actuaciones del caso
+        actuaciones_json = case.actuaciones_json or "[]"
+        import json
+        actuaciones = json.loads(actuaciones_json)
+        
+        # 2. Filtrar actuaciones relevantes
+        relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
+        
+        if not relevantes:
+            return
+
+        # 3. Para cada actuación relevante, buscar en Publicaciones en su ventana de tiempo
+        for act in relevantes:
+            fecha_act_str = act.get("fechaActuacion") or ""
+            if not fecha_act_str: continue
+            
+            # Queremos buscar desde el día de la actuación hasta 2 días hábiles después
+            try:
+                dt_act = datetime.strptime(fecha_act_str[:10], "%Y-%m-%d")
+                
+                # Calcular ventana (mismo día + 2 días hábiles)
+                # Lógica simple de días hábiles (Sáb=5, Dom=6)
+                window = []
+                curr = dt_act
+                while len(window) < 3: # Hoy + 2 hábiles
+                    if curr.weekday() < 5: # 0-4 es L-V
+                        window.append(curr)
+                    curr += timedelta(days=1)
+                
+                f_ini = window[0].strftime("%d/%m/%Y")
+                f_fin = window[-1].strftime("%d/%m/%Y")
+                
+                results = await consultar_publicaciones_rango(case.radicado, f_ini, f_fin)
+                
+                for p in results:
+                    exists = db.query(CasePublication).filter(
+                        CasePublication.case_id == case.id,
+                        CasePublication.source_id == p["source_id"]
+                    ).first()
+                    
+                    if not exists:
+                        db.add(CasePublication(
+                            case_id=case.id,
+                            fecha_publicacion=parse_fecha_pub(p["fecha"]),
+                            tipo_publicacion=p["tipo"],
+                            descripcion=p["descripcion"],
+                            documento_url=p["url_documento"],
+                            source_url=p.get("source_url"),
+                            source_id=p["source_id"]
+                        ))
+                    else:
+                        exists.documento_url = p["url_documento"]
+            except Exception as e:
+                print(f"⚠️ Error procesando ventana de publicación para {case.radicado}: {e}")
+                
+    except Exception as e:
+        print(f"💥 Error guardando publicaciones: {e}")
+
+@app.post("/admin/backfill-publicaciones")
+async def backfill_publicaciones(db: Session = Depends(get_db)):
+    """Escanea todos los casos existentes y busca publicaciones para actuaciones relevantes."""
+    cases = db.query(Case).all()
+    count = 0
+    for case in cases:
+        await save_new_publications(case, db)
+        count += 1
+        if count % 10 == 0:
+            db.commit()
+    db.commit()
+    return {"status": "ok", "processed": count}
+
+# =========================
+# BÚSQUEDA MASIVA (NAMES / RADICADOS)
+# =========================
+
+@app.post("/search/names/upload")
+async def upload_names_search(
+    background_tasks: BackgroundTasks,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Crear el Job
+    job = SearchJob(job_type="name", status="pending")
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    # 2. Leer contenido y lanzar tarea en segundo plano
+    content = await file.read()
+    
+    date_range = {"from": from_date, "to": to_date}
+    
+    # Pasamos una factoría de sesión para que el hilo de fondo tenga su propia DB connection
+    background_tasks.add_task(run_name_search_job, job.id, content, lambda: SessionLocal(), date_range)
+
+    return {"job_id": job.id, "status": "pending"}
+
+@app.get("/search/jobs/{job_id}")
+async def get_search_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    
+    results = []
+    if job.results_json:
+        results = json.loads(job.results_json)
+
+    return {
+        "id": job.id,
+        "type": job.job_type,
+        "status": job.status,
+        "total_items": job.total_items,
+        "processed_items": job.processed_items,
+        "results": results,
+        "error": job.error_message,
+        "created_at": job.created_at.isoformat() if job.created_at else None
+    }
+
+@app.post("/search/jobs/{job_id}/import")
+async def import_search_results(
+    job_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    try:
+        body = await request.json()
+        selected_indices = body.get("indices", [])
+        
+        job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
+        if not job or not job.results_json:
+            raise HTTPException(status_code=404, detail="Resultados no encontrados")
+        
+        all_results = json.loads(job.results_json)
+        # Filtrar los seleccionados por el usuario
+        selected_data = [res for res in all_results if res.get("index") in selected_indices]
+        
+        imported_count = 0
+        for item in selected_data:
+            sel = item.get("selected")
+            if not sel: continue
+            
+            # Verificar si ya existe por idProceso (prioridad) o radicado
+            id_proceso = str(sel.get("idProceso")) if sel.get("idProceso") else None
+            radicado = str(sel.get("llaveProceso") or sel.get("numero", ""))
+            
+            case = None
+            if id_proceso:
+                case = db.query(Case).filter(Case.id_proceso == id_proceso).first()
+            if not case:
+                case = db.query(Case).filter(Case.radicado == radicado).first()
+            
+            if not case:
+                case = Case(radicado=radicado, id_proceso=id_proceso)
+                db.add(case)
+            
+            # Actualizar datos básicos
+            # Parsear sujetos para obtener demandante/demandado si están vacíos
+            sujetos_str = sel.get("sujetosProcesales") or ""
+            d1, d2, _ = parse_sujetos_procesales(sujetos_str)
+            
+            case.demandante = d1 or sel.get("demandante") or case.demandante
+            case.demandado = d2 or sel.get("demandado") or case.demandado
+            case.juzgado = sel.get("despacho") or case.juzgado
+            
+            # Cédula y Abogado del Excel de búsqueda
+            case.cedula = item.get("cedula") or case.cedula
+            case.abogado = item.get("abogado") or case.abogado
+            
+            # Fechas
+            if sel.get("fechaRadicacion"):
+                try:
+                    case.fecha_radicacion = parse_fecha_pub(sel["fechaRadicacion"])
+                except: pass
+            if sel.get("fechaUltimaActuacion"):
+                try:
+                    case.ultima_actuacion = parse_fecha_pub(sel["fechaUltimaActuacion"])
+                except: pass
+                
+            imported_count += 1
+        
+        job.is_imported = True
+        db.commit()
+        return {"ok": True, "imported": imported_count}
+    except Exception as e:
+        db.rollback()
+        log_job(f"💥 Error en import_search_results: {str(e)}")
+        log_job(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error al importar: {str(e)}")
+
+@app.get("/search/jobs/{job_id}/export")
+async def export_search_results(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
+    if not job or not job.results_json:
+        raise HTTPException(status_code=404, detail="Resultados no encontrados")
+    
+    results = json.loads(job.results_json)
+    
+    flattened = []
+    for res in results:
+        base = {
+            "NOMBRE BUSCADO": res.get("input_name1", ""),
+            "CEDULA": res.get("cedula", ""),
+            "ABOGADO": res.get("abogado", ""),
+            "CANT_ENCONTRADOS": res.get("found_count", 0),
+        }
+        
+        sel = res.get("selected")
+        if sel:
+            # Parsear sujetos para d1/d2
+            sujetos_str = sel.get("sujetosProcesales") or ""
+            d1, d2, _ = parse_sujetos_procesales(sujetos_str)
+            
+            id_p = sel.get("idProceso")
+            portal_url = ""
+            if id_p:
+                portal_url = f"https://consultaprocesos.ramajudicial.gov.co/Consulta/Detalle?idProceso={id_p}&esPrivado=false"
+
+            rad_val = sel.get("llaveProceso") or sel.get("numero")
+            base.update({
+                "RADICADO": str(rad_val) if rad_val else "No encontrado",
+                "DEMANDANTE": d1 or sel.get("demandante", ""),
+                "DEMANDADO": d2 or sel.get("demandado", ""),
+                "DESPACHO": sel.get("despacho", ""),
+                "FECHA_RADICACION": (sel.get("fechaRadicacion") or "")[:10],
+                "ULTIMA_ACTUACION": (sel.get("fechaUltimaActuacion") or "")[:10],
+                "ID_PROCESO": str(id_p) if id_p else "",
+                "PORTAL_RAMA": portal_url
+            })
+        else:
+            base.update({
+                "RADICADO": "No encontrado",
+                "DEMANDANTE": "",
+                "DEMANDADO": "",
+                "DESPACHO": "",
+                "FECHA_RADICACION": "",
+                "ULTIMA_ACTUACION": "",
+                "ID_PROCESO": "",
+            })
+        flattened.append(base)
+        
+    df = pd.DataFrame(flattened)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Resultados')
+        workbook = writer.book
+        worksheet = writer.sheets['Resultados']
+        
+        # Formato de texto para columnas de números largos
+        text_format = workbook.add_format({'num_format': '@'})
+        
+        # Aplicamos formato de texto a la columna RADICADO (índice 3 usualmente: Nombre, Cédula, Abogado, Cant, RADICADO...)
+        # Buscamos el índice dinámicamente
+        if "RADICADO" in df.columns:
+            col_idx = df.columns.get_loc("RADICADO")
+            # Aplicar a toda la columna (filas 1 a N)
+            worksheet.set_column(col_idx, col_idx, 30, text_format)
+            
+        # Opcionalmente ajustar anchos
+        worksheet.set_column('A:A', 30) # Nombre
+        worksheet.set_column('H:H', 20) # Ultima Actuación
+        worksheet.set_column('I:I', 15) # ID Proceso
+        worksheet.set_column('J:J', 50) # Link Portal
+    
+    output.seek(0)
+    
+    filename = f"resultado_busqueda_{job_id}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+    return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+@app.post("/cases/bulk-update-metadata")
+async def bulk_update_metadata(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        content = await file.read()
+        df = pd.read_excel(BytesIO(content))
+        # Normalizar columnas
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        
+        updated_cases = 0
+        for _, row in df.iterrows():
+            radicado = str(row.get("RADICADO", "")).strip()
+            if not radicado:
+                continue
+            
+            cedula = str(row.get("CEDULA", "")).strip() if "CEDULA" in df.columns else None
+            abogado = str(row.get("ABOGADO", "")).strip() if "ABOGADO" in df.columns else None
+            
+            # Buscamos todos los casos con este radicado
+            cases = db.query(Case).filter(Case.radicado == radicado).all()
+            for c in cases:
+                if cedula and cedula.lower() != "nan":
+                    c.cedula = cedula
+                if abogado and abogado.lower() != "nan":
+                    c.abogado = abogado
+                updated_cases += 1
+                
+        db.commit()
+        return {"ok": True, "updated_count": updated_cases}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error procesando Excel: {str(e)}")

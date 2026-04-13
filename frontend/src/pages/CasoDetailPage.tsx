@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, FileText, Loader2, Filter, AlertCircle, 
   Download, User, Users, Building2, Hash, Paperclip, ChevronDown,
-  FileDown, RefreshCw
+  FileDown, RefreshCw, ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { 
   getCaseByRadicado, 
+  getCaseById,
   getCaseEvents, 
-  downloadEventsExcel, 
+  getCaseEventsById,
+  downloadEventsExcel,
+  downloadEventsByIdExcel,
   markCaseRead,
   getDocumentosActuacion,
-  DocumentoActuacion
+  DocumentoActuacion,
+  CasePublication,
+  getCasePublications,
+  getCasePublicationsById
 } from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PublicacionesPanel } from '@/components/PublicacionesPanel';
 
 type DocsState = {
   items: any[];
@@ -26,15 +34,18 @@ type DocsState = {
 };
 
 export default function CasoDetailPage() {
-  const { radicado } = useParams<{ radicado: string }>();
+  const { radicado, id } = useParams<{ radicado: string, id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   
   const [caseData, setCaseData] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
+  const [publications, setPublications] = useState<CasePublication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isLoadingPubs, setIsLoadingPubs] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [multipleCases, setMultipleCases] = useState<any[] | null>(null);
   
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -47,30 +58,74 @@ export default function CasoDetailPage() {
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
 
   useEffect(() => {
-    if (!radicado) return;
+    if (!radicado && !id) return;
 
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
-      
-      const decoded = decodeURIComponent(radicado);
+      setMultipleCases(null);
       
       try {
-        const result = await getCaseByRadicado(decoded);
+        let result: any = null;
+        let activeRadicado = '';
+
+        if (id) {
+          result = await getCaseById(Number(id));
+          activeRadicado = result.radicado;
+          
+          setIsLoadingEvents(true);
+          setIsLoadingPubs(true);
+          try {
+            const [eventsResult, pubsResult] = await Promise.all([
+              getCaseEventsById(Number(id)),
+              getCasePublicationsById(Number(id))
+            ]);
+            setEvents(eventsResult.items || []);
+            setPublications(pubsResult.items || []);
+          } catch (e) {
+            console.error('Error cargando adicionales por ID:', e);
+          } finally {
+            setIsLoadingEvents(false);
+            setIsLoadingPubs(false);
+          }
+        } else if (radicado) {
+          const decoded = decodeURIComponent(radicado);
+          const results = await getCaseByRadicado(decoded);
+          
+          if (results.length === 1) {
+            result = results[0];
+            activeRadicado = result.radicado;
+            
+            setIsLoadingEvents(true);
+            setIsLoadingPubs(true);
+            try {
+              const [eventsResult, pubsResult] = await Promise.all([
+                getCaseEventsById(result.id),
+                getCasePublicationsById(result.id)
+              ]);
+              setEvents(eventsResult.items || []);
+              setPublications(pubsResult.items || []);
+            } catch (e) {
+              console.error('Error cargando adicionales por radicado:', e);
+            } finally {
+              setIsLoadingEvents(false);
+              setIsLoadingPubs(false);
+            }
+          } else if (results.length > 1) {
+            setMultipleCases(results);
+            setIsLoading(false);
+            return;
+          } else {
+            throw new Error("No se encontró el caso");
+          }
+        }
+
+        if (!result) return;
+        
         setCaseData(result);
         
         if (result.id && result.unread) {
           try { await markCaseRead(result.id); } catch {}
-        }
-        
-        setIsLoadingEvents(true);
-        try {
-          const eventsResult = await getCaseEvents(decoded);
-          setEvents(eventsResult.items || []);
-        } catch (e: any) {
-          console.error('Error cargando actuaciones:', e);
-        } finally {
-          setIsLoadingEvents(false);
         }
       } catch (e: any) {
         console.error('Error:', e);
@@ -86,7 +141,7 @@ export default function CasoDetailPage() {
     };
 
     fetchData();
-  }, [radicado, toast]);
+  }, [radicado, id, toast]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
@@ -108,14 +163,21 @@ export default function CasoDetailPage() {
   );
 
   const handleDownloadExcel = () => {
-    if (!radicado) return;
-    downloadEventsExcel(decodeURIComponent(radicado));
+    if (id || caseData?.id) {
+      downloadEventsByIdExcel(Number(id || caseData?.id));
+    } else if (radicado || caseData?.radicado) {
+      const r = radicado || caseData?.radicado;
+      if (r) downloadEventsExcel(decodeURIComponent(r));
+    } else {
+      return;
+    }
     toast({ title: 'Descargando...', description: 'El archivo Excel se descargará en unos segundos' });
   };
 
   const handleToggleDocumentos = async (event: any) => {
     const idReg: number = event.id_reg_actuacion;
-    if (!idReg || !radicado) return;
+    const r = radicado || caseData?.radicado;
+    if (!idReg || !r) return;
 
     // Si ya está expandido → colapsar
     if (expandedDocs[idReg]) {
@@ -157,15 +219,42 @@ export default function CasoDetailPage() {
   };
 
   const handleRefresh = async () => {
-    if (!radicado) return;
+    const r = radicado || caseData?.radicado;
+    if (!r) return;
     setIsLoading(true);
     setExpandedDocs({});
-    const decoded = decodeURIComponent(radicado);
+    const decoded = decodeURIComponent(r);
     try {
-      const result = await getCaseByRadicado(decoded);
-      setCaseData(result);
-      const eventsResult = await getCaseEvents(decoded);
-      setEvents(eventsResult.items || []);
+      // Si tenemos ID, usamos ID para ser precisos
+      if (id || caseData?.id) {
+        const result = await getCaseById(Number(id || caseData?.id));
+        setCaseData(result);
+        
+        const [eventsResult, pubsResult] = await Promise.all([
+          getCaseEventsById(result.id),
+          getCasePublicationsById(result.id)
+        ]);
+        
+        setEvents(eventsResult.items || []);
+        setPublications(pubsResult.items || []);
+      } else {
+        // Fallback a radicado (solo si no hay ID, ej. búsqueda inicial)
+        const results = await getCaseByRadicado(decoded);
+        if (results.length === 1) {
+          setCaseData(results[0]);
+          const [eventsResult, pubsResult] = await Promise.all([
+            getCaseEventsById(results[0].id),
+            getCasePublicationsById(results[0].id)
+          ]);
+          setEvents(eventsResult.items || []);
+          setPublications(pubsResult.items || []);
+        } else if (results.length > 1) {
+          setMultipleCases(results);
+        } else {
+          throw new Error("No se encontró el caso");
+        }
+      }
+      
       toast({ title: 'Actualizado', description: 'Información del caso actualizada' });
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Error al actualizar', variant: 'destructive' });
@@ -218,6 +307,38 @@ export default function CasoDetailPage() {
             </div>
             <div className="mt-4">
               <Button variant="outline" onClick={() => navigate(-1)}>Volver</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (multipleCases) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold">Múltiples procesos encontrados</h1>
+        </div>
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <p className="mb-6">El radicado <strong>{radicado}</strong> tiene varios procesos registrados. Por favor selecciona el que deseas ver:</p>
+            <div className="grid gap-4">
+              {multipleCases.map(c => (
+                <Card key={c.id} className="cursor-pointer hover:bg-muted/50 transition-colors border-primary/20" onClick={() => navigate(`/casos/id/${c.id}`)}>
+                  <CardContent className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold text-primary">{c.juzgado || 'Juzgado no especificado'}</p>
+                      <p className="text-sm text-muted-foreground">ID Proceso: {c.id_proceso || 'N/A'}</p>
+                      <p className="text-sm text-muted-foreground">{c.demandante} vs {c.demandado}</p>
+                    </div>
+                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -345,205 +466,231 @@ export default function CasoDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Tabla de Actuaciones */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              Actuaciones
-            </CardTitle>
-            <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
-              {filteredEvents.length} registros
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoadingEvents ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : filteredEvents.length === 0 ? (
-            <div className="text-center py-12">
-              <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No hay actuaciones</p>
-            </div>
-          ) : (
-            <div className="overflow-auto max-h-[600px] border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="w-[110px] sticky top-0 bg-muted z-10">Fecha</TableHead>
-                    <TableHead className="w-[200px] sticky top-0 bg-muted z-10">Actuación</TableHead>
-                    <TableHead className="sticky top-0 bg-muted z-10">Anotación</TableHead>
-                    <TableHead className="w-[60px] sticky top-0 bg-muted z-10 text-center">Docs</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEvents.map((event, i) => {
-                    const idReg: number = event.id_reg_actuacion;
-                    const isExpanded  = idReg ? !!expandedDocs[idReg] : false;
-                    const isLoadingDoc = idReg ? loadingDocs[idReg]   : false;
-                    const docsState: DocsState | undefined = idReg ? expandedDocs[idReg] : undefined;
-                    const docs = docsState?.items || [];
-                    const hasDocuments = event.con_documentos;
+      {/* Contenido con Tabs */}
+      <Tabs defaultValue="actuaciones" className="w-full">
+        <TabsList className="grid w-full max-w-[400px] grid-cols-2 mb-4">
+          <TabsTrigger value="actuaciones" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Actuaciones
+          </TabsTrigger>
+          <TabsTrigger value="publicaciones" className="flex items-center gap-2">
+            <FileDown className="h-4 w-4" />
+            Publicaciones
+          </TabsTrigger>
+        </TabsList>
 
-                    return (
-                      <Fragment key={i}>
-                        <TableRow className={isExpanded ? 'bg-primary/5' : ''}>
+        <TabsContent value="actuaciones">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Historial de Actuaciones
+                </CardTitle>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
+                    {filteredEvents.length} registros
+                  </span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingEvents ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredEvents.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No hay actuaciones</p>
+                </div>
+              ) : (
+                <div className="overflow-auto max-h-[600px] border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[110px] sticky top-0 bg-muted z-10">Fecha</TableHead>
+                        <TableHead className="w-[200px] sticky top-0 bg-muted z-10">Actuación</TableHead>
+                        <TableHead className="sticky top-0 bg-muted z-10">Anotación</TableHead>
+                        <TableHead className="w-[60px] sticky top-0 bg-muted z-10 text-center">Docs</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredEvents.map((event, i) => {
+                        const idReg: number = event.id_reg_actuacion;
+                        const isExpanded  = idReg ? !!expandedDocs[idReg] : false;
+                        const isLoadingDoc = idReg ? loadingDocs[idReg]   : false;
+                        const docsState: DocsState | undefined = idReg ? expandedDocs[idReg] : undefined;
+                        const docs = docsState?.items || [];
+                        const hasDocuments = event.con_documentos;
 
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                            {formatShortDate(event.event_date)}
-                          </TableCell>
+                        return (
+                          <Fragment key={i}>
+                            <TableRow className={isExpanded ? 'bg-primary/5' : ''}>
 
-                          <TableCell className="font-medium text-sm">{event.title || '—'}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                                {formatShortDate(event.event_date)}
+                              </TableCell>
 
-                          <TableCell className="text-sm text-muted-foreground">
-                            <p className="line-clamp-2">{event.detail || '—'}</p>
-                          </TableCell>
+                              <TableCell className="font-medium text-sm">{event.title || '—'}</TableCell>
 
-                          {/* ── Clip clickeable (sin número) ── */}
-                          <TableCell className="text-center">
-                            {hasDocuments && idReg ? (
-                              <button
-                                onClick={() => handleToggleDocumentos(event)}
-                                disabled={isLoadingDoc}
-                                title="Ver documentos"
-                                className="inline-flex items-center justify-center w-7 h-7 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500/25 transition-colors disabled:opacity-50"
-                              >
-                                {isLoadingDoc ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : isExpanded ? (
-                                  <ChevronDown className="h-3 w-3" />
+                              <TableCell className="text-sm text-muted-foreground">
+                                <p className="line-clamp-2">{event.detail || '—'}</p>
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {hasDocuments && idReg ? (
+                                  <button
+                                    onClick={() => handleToggleDocumentos(event)}
+                                    disabled={isLoadingDoc}
+                                    title="Ver documentos"
+                                    className="inline-flex items-center justify-center w-7 h-7 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500/25 transition-colors disabled:opacity-50"
+                                  >
+                                    {isLoadingDoc ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : isExpanded ? (
+                                      <ChevronDown className="h-3 w-3" />
+                                    ) : (
+                                      <Paperclip className="h-3 w-3" />
+                                    )}
+                                  </button>
                                 ) : (
-                                  <Paperclip className="h-3 w-3" />
+                                  <span className="text-muted-foreground text-xs">—</span>
                                 )}
-                              </button>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                              </TableCell>
+                            </TableRow>
 
-                        {/* ─── Fila expandida con documentos ─── */}
-                        {isExpanded && docsState && (
-                          <TableRow className="bg-primary/5 hover:bg-primary/5">
-                            <TableCell colSpan={4} className="py-3">
-                              <div className="pl-6">
+                            {isExpanded && docsState && (
+                              <TableRow className="bg-primary/5 hover:bg-primary/5">
+                                <TableCell colSpan={4} className="py-3">
+                                  <div className="pl-6">
 
-                                <div className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                                  <Paperclip className="h-3 w-3" />
-                                  DOCUMENTOS ADJUNTOS
-                                </div>
+                                    <div className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                                      <Paperclip className="h-3 w-3" />
+                                      DOCUMENTOS ADJUNTOS
+                                    </div>
 
-                                {/* Error de red */}
-                                {docsState.error && (
-                                  <div className="flex items-center gap-2 text-sm text-red-500 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
-                                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                                    Error al consultar: {docsState.error}
-                                  </div>
-                                )}
+                                    {docsState.error && (
+                                      <div className="flex items-center gap-2 text-sm text-red-500 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                                        Error al consultar: {docsState.error}
+                                      </div>
+                                    )}
 
-                                {/* Sin documentos */}
-                                {docs.length === 0 && !docsState.error && (
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-                                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                                    No se encontraron documentos disponibles para esta actuación.
-                                  </div>
-                                )}
+                                    {docs.length === 0 && !docsState.error && (
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
+                                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                                        No se encontraron documentos disponibles para esta actuación.
+                                      </div>
+                                    )}
 
-                                {/* Lista de documentos */}
-                                {docs.length > 0 && (
-                                  <div className="space-y-2">
-                                    {docs.map((doc: any, j: number) => {
-                                      const docId =
-                                        doc.idRegDocumento       ??
-                                        doc.idRegistroDocumento  ??
-                                        doc.IdRegDocumento       ??
-                                        doc.IdRegistroDocumento  ??
-                                        doc.idDocumento          ??
-                                        doc.id                   ??
-                                        null;
+                                    {docs.length > 0 && (
+                                      <div className="space-y-2">
+                                        {docs.map((doc: any, j: number) => {
+                                          const docId =
+                                            doc.idRegDocumento       ??
+                                            doc.idRegistroDocumento  ??
+                                            doc.IdRegDocumento       ??
+                                            doc.IdRegistroDocumento  ??
+                                            doc.idDocumento          ??
+                                            doc.id                   ??
+                                            null;
 
-                                      const docName =
-                                        doc.nombre          ||
-                                        doc.Nombre          ||
-                                        doc.nombreDocumento ||
-                                        doc.NombreDocumento ||
-                                        doc.nombreArchivo   ||
-                                        doc.NombreArchivo   ||
-                                        `Documento ${j + 1}`;
+                                          const docName =
+                                            doc.nombre          ||
+                                            doc.Nombre          ||
+                                            doc.nombreDocumento ||
+                                            doc.NombreDocumento ||
+                                            doc.nombreArchivo   ||
+                                            doc.NombreArchivo   ||
+                                            `Documento ${j + 1}`;
 
-                                      const docDate =
-                                        doc.fechaCarga   ||
-                                        doc.fechaCargue  ||
-                                        doc.FechaCargue  ||
-                                        doc.fechaRegistro ||
-                                        doc.FechaRegistro ||
-                                        doc.fecha        ||
-                                        '';
+                                          const docDate =
+                                            doc.fechaCarga   ||
+                                            doc.fechaCargue  ||
+                                            doc.FechaCargue  ||
+                                            doc.fechaRegistro ||
+                                            doc.FechaRegistro ||
+                                            doc.fecha        ||
+                                            '';
 
-                                      const downloadUrl = docId
-                                        ? `${cleanBaseUrl}/documentos/${docId}/descargar`
-                                        : null;
+                                          const downloadUrl = docId
+                                            ? `${cleanBaseUrl}/documentos/${docId}/descargar`
+                                            : null;
 
-                                      return (
-                                        <div
-                                          key={j}
-                                          className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background border border-border shadow-sm"
-                                        >
-                                          <div className="flex items-center gap-3 min-w-0">
-                                            <FileDown className="h-5 w-5 text-red-500 flex-shrink-0" />
-                                            <div className="min-w-0">
-                                              <p className="text-sm font-semibold truncate">{docName}</p>
-                                              {docDate && (
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                  {formatShortDate(docDate)}
-                                                </p>
+                                          return (
+                                            <div
+                                              key={j}
+                                              className="flex items-center justify-between gap-4 p-3 rounded-lg bg-background border border-border shadow-sm"
+                                            >
+                                              <div className="flex items-center gap-3 min-w-0">
+                                                <FileDown className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                                <div className="min-w-0">
+                                                  <p className="text-sm font-semibold truncate">{docName}</p>
+                                                  {docDate && (
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                      {formatShortDate(docDate)}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {downloadUrl ? (
+                                                <a
+                                                  href={downloadUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 flex-shrink-0"
+                                                  onClick={() =>
+                                                    toast({
+                                                      title: 'Descargando PDF',
+                                                      description: 'El documento se abrirá en una nueva pestaña',
+                                                    })
+                                                  }
+                                                >
+                                                  <Download className="h-4 w-4" />
+                                                  Descargar PDF
+                                                </a>
+                                              ) : (
+                                                <Button disabled size="sm" variant="outline">
+                                                  No disponible
+                                                </Button>
                                               )}
                                             </div>
-                                          </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
 
-                                          {downloadUrl ? (
-                                            <a
-                                              href={downloadUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-2 whitespace-nowrap rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 flex-shrink-0"
-                                              onClick={() =>
-                                                toast({
-                                                  title: 'Descargando PDF',
-                                                  description: 'El documento se abrirá en una nueva pestaña',
-                                                })
-                                              }
-                                            >
-                                              <Download className="h-4 w-4" />
-                                              Descargar PDF
-                                            </a>
-                                          ) : (
-                                            <Button disabled size="sm" variant="outline">
-                                              No disponible
-                                            </Button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
                                   </div>
-                                )}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="publicaciones">
+          <Card>
+            <CardContent className="pt-6">
+              <PublicacionesPanel 
+                radicado={caseData?.radicado || decodeURIComponent(radicado || '')} 
+                caseId={caseData?.id}
+                publications={publications}
+                isLoading={isLoadingPubs}
+                onRefresh={(newPubs) => setPublications(newPubs)}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Línea de tiempo */}
       {filteredEvents.length > 0 && (

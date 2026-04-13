@@ -3,6 +3,7 @@
 export interface Case {
   id: number;
   radicado: string;
+  id_proceso?: string | null;
   demandante: string;
   demandado: string;
   juzgado: string;

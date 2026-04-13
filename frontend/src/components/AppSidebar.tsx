@@ -2,9 +2,13 @@ import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle } from "luci
 import { SidebarNavLink } from "./SidebarNavLink";
 import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { Sun, Moon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 export function AppSidebar() {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const isAdmin = user?.is_admin === true;
 
@@ -37,6 +41,10 @@ export function AppSidebar() {
           Consultar Caso
         </SidebarNavLink>
 
+        <SidebarNavLink to="/consultar-nombre" icon={Search}>
+          Consultar por Nombre
+        </SidebarNavLink>
+
         <SidebarNavLink to="/casos" icon={FolderOpen}>
           Todos los Casos
         </SidebarNavLink>
@@ -52,8 +60,25 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* User Menu */}
-      <div className="p-4 border-t border-sidebar-border">
+      {/* Theme Toggle & User Menu */}
+      <div className="p-4 border-t border-sidebar-border space-y-4">
+        <div className="flex items-center justify-between px-4 py-2 bg-sidebar-accent/50 rounded-lg border border-sidebar-border/50">
+          <div className="flex items-center gap-2">
+            {theme === "dark" ? (
+              <Moon className="h-4 w-4 text-primary" />
+            ) : (
+              <Sun className="h-4 w-4 text-warning" />
+            )}
+            <span className="text-xs font-medium text-foreground">
+              Modo {theme === "dark" ? "Oscuro" : "Claro"}
+            </span>
+          </div>
+          <Switch 
+            checked={theme === "light"} 
+            onCheckedChange={toggleTheme}
+            className="data-[state=checked]:bg-primary"
+          />
+        </div>
         <UserMenu />
       </div>
 

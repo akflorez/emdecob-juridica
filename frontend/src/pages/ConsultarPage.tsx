@@ -20,7 +20,7 @@ import { CaseCard } from "@/components/CaseCard";
 export default function ConsultarPage() {
   const [radicado, setRadicado] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [caseData, setCaseData] = useState<CaseByRadicadoResponse | null>(null);
+  const [cases, setCases] = useState<CaseByRadicadoResponse[] | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const { toast } = useToast();
@@ -40,17 +40,17 @@ export default function ConsultarPage() {
     }
 
     setIsLoading(true);
-    setCaseData(null);
+    setCases(null);
     setNotFound(false);
 
     try {
       const result = await getCaseByRadicado(clean);
-      setCaseData(result);
+      setCases(result);
 
-      if (result?.note) {
+      if (result.length > 0 && result[0].note) {
         toast({
           title: "Consulta realizada",
-          description: result.note,
+          description: result[0].note,
         });
       }
     } catch (error: any) {
@@ -68,17 +68,9 @@ export default function ConsultarPage() {
     }
   };
 
-  const goToEvents = () => {
-    if (!caseData?.radicado) {
-      toast({
-        title: "Sin radicado",
-        description: "No se puede abrir el historial sin radicado.",
-        variant: "destructive",
-      });
-      return;
-    }
-    // Navegar usando el radicado
-    navigate(`/casos/${encodeURIComponent(caseData.radicado)}`);
+  const goToEvents = (c: CaseByRadicadoResponse) => {
+    // Abrir detalle por ID para mayor precisión
+    window.open(`/casos/id/${c.id}`, "_blank");
   };
 
   return (
@@ -128,15 +120,29 @@ export default function ConsultarPage() {
         </CardContent>
       </Card>
 
-      {/* Result */}
-      {caseData && (
-        <div className="animate-fade-in space-y-4">
-          <CaseCard caseData={caseData as any} />
-
-          <Button onClick={goToEvents} className="w-full sm:w-auto">
-            Ver Historial de Eventos
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+      {/* Result list */}
+      {cases && (
+        <div className="animate-fade-in space-y-6">
+          {cases.length > 1 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4">
+              <p className="text-sm font-medium text-primary flex items-center gap-2">
+                <FileQuestion className="h-4 w-4" />
+                Se encontraron {cases.length} procesos para este radicado. Selecciona uno para ver el detalle:
+              </p>
+            </div>
+          )}
+          
+          <div className="grid gap-6">
+            {cases.map((c) => (
+              <div key={c.id} className="space-y-3">
+                <CaseCard caseData={c as any} />
+                <Button onClick={() => goToEvents(c)} className="w-full sm:w-auto">
+                  Ver Historial de Eventos
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

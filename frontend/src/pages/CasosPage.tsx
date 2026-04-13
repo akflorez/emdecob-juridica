@@ -16,6 +16,7 @@ import {
   List,
   Trash2,
   Clock,
+  Upload,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,6 +115,10 @@ export default function CasosPage() {
   const [appliedJuzgado, setAppliedJuzgado] = useState<string | undefined>(undefined);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [appliedMonth, setAppliedMonth] = useState<string | undefined>(undefined);
+  const [cedulaInput, setCedulaInput] = useState("");
+  const [abogadoInput, setAbogadoInput] = useState("");
+  const [appliedCedula, setAppliedCedula] = useState<string | undefined>(undefined);
+  const [appliedAbogado, setAppliedAbogado] = useState<string | undefined>(undefined);
 
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -123,6 +128,9 @@ export default function CasosPage() {
 
   const [caseToDelete, setCaseToDelete] = useState<CaseRow | null>(null);
   const [isDeletingCase, setIsDeletingCase] = useState(false);
+  
+  const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pageSize = 50;
   const { toast } = useToast();
@@ -164,6 +172,8 @@ export default function CasosPage() {
         solo_pendientes: activeTab === "pendientes",
         solo_no_leidos: activeTab === "no_leidos",
         solo_actualizados_hoy: activeTab === "hoy",
+        cedula: appliedCedula,
+        abogado: appliedAbogado,
         page,
         page_size: pageSize,
       });
@@ -270,7 +280,9 @@ export default function CasosPage() {
     setPage(1); setPageInput("1");
     setSelectedIds(new Set());
     setAppliedSearch(undefined); setAppliedJuzgado(undefined); setAppliedMonth(undefined);
+    setAppliedCedula(undefined); setAppliedAbogado(undefined);
     setSearchInput(""); setJuzgadoInput(""); setSelectedMonth("");
+    setCedulaInput(""); setAbogadoInput("");
   };
 
   const handleFilter = (e: React.FormEvent) => {
@@ -279,12 +291,16 @@ export default function CasosPage() {
     setSelectedIds(new Set());
     setAppliedSearch(searchInput.trim() || undefined);
     setAppliedJuzgado(juzgadoInput.trim() || undefined);
+    setAppliedCedula(cedulaInput.trim() || undefined);
+    setAppliedAbogado(abogadoInput.trim() || undefined);
     setAppliedMonth(selectedMonth || undefined);
   };
 
   const handleClearFilters = () => {
     setSearchInput(""); setJuzgadoInput(""); setSelectedMonth("");
+    setCedulaInput(""); setAbogadoInput("");
     setAppliedSearch(undefined); setAppliedJuzgado(undefined); setAppliedMonth(undefined);
+    setAppliedCedula(undefined); setAppliedAbogado(undefined);
     setPage(1); setPageInput("1");
   };
 
@@ -385,7 +401,8 @@ export default function CasosPage() {
         fetchStats();
       } catch {}
     }
-    navigate(`/casos/${encodeURIComponent(c.radicado)}`);
+    // Abrir detalle por ID para mayor precisión
+    window.open(`/casos/id/${c.id}`, "_blank");
   };
 
   const toggleSelect = (id: number) => {
@@ -414,6 +431,44 @@ export default function CasosPage() {
       toast({ title: "Error al descargar", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleUpdateMetadataClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleMetadataFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUpdatingMetadata(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const resp = await fetch(`${import.meta.env.VITE_API_BASE}/cases/bulk-update-metadata`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Error al actualizar metadatos");
+
+      toast({
+        title: "Actualización exitosa",
+        description: `Se actualizaron ${data.updated_count} casos correctamente.`,
+      });
+      await fetchCases();
+      await fetchStats();
+    } catch (error: any) {
+      toast({
+        title: "Error al actualizar",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingMetadata(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -557,8 +612,16 @@ export default function CasosPage() {
 
             {activeTab === "todos" && (
               <div className="flex flex-col sm:flex-row gap-3 items-end">
-                <div className="w-full sm:w-64">
-                  <label className="text-xs text-muted-foreground mb-1 block">Mes de última actuación</label>
+                <div className="w-full sm:w-48">
+                  <label className="text-xs text-muted-foreground mb-1 block">Cédula</label>
+                  <Input placeholder="Filtrar..." value={cedulaInput} onChange={(e) => setCedulaInput(e.target.value)} />
+                </div>
+                <div className="w-full sm:w-48">
+                  <label className="text-xs text-muted-foreground mb-1 block">Abogado</label>
+                  <Input placeholder="Filtrar..." value={abogadoInput} onChange={(e) => setAbogadoInput(e.target.value)} />
+                </div>
+                <div className="w-full sm:w-48">
+                  <label className="text-xs text-muted-foreground mb-1 block">Mes actuación</label>
                   <Select value={selectedMonth || "all"} onValueChange={handleMonthChange}>
                     <SelectTrigger><SelectValue placeholder="Todos los meses" /></SelectTrigger>
                     <SelectContent>
@@ -569,7 +632,7 @@ export default function CasosPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" disabled={isLoading}><Search className="mr-2 h-4 w-4" />Filtrar</Button>
-                  {(appliedSearch || appliedJuzgado || appliedMonth) && <Button type="button" variant="outline" onClick={handleClearFilters}>Limpiar</Button>}
+                  {(appliedSearch || appliedJuzgado || appliedMonth || appliedCedula || appliedAbogado) && <Button type="button" variant="outline" onClick={handleClearFilters}>Limpiar</Button>}
                 </div>
               </div>
             )}
@@ -600,6 +663,21 @@ export default function CasosPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              {activeTab === "todos" && (
+                <>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleMetadataFileChange}
+                  />
+                  <Button onClick={handleUpdateMetadataClick} disabled={isUpdatingMetadata} variant="outline" size="sm" className="border-primary/50 text-primary hover:bg-primary/10">
+                    {isUpdatingMetadata ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                    Cargar Abogados
+                  </Button>
+                </>
+              )}
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && unreadCount > 0 && (
                 <Button onClick={handleMarkAllRead} disabled={isMarkingAllRead} variant="outline" size="sm">
                   {isMarkingAllRead ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
@@ -734,6 +812,7 @@ export default function CasosPage() {
                     <TableHead className="min-w-[180px]">Radicado</TableHead>
                     <TableHead className="hidden md:table-cell">Demandante</TableHead>
                     <TableHead className="hidden lg:table-cell">Demandado</TableHead>
+                    <TableHead className="hidden xl:table-cell">Cédula</TableHead>
                     <TableHead className="hidden xl:table-cell">Juzgado</TableHead>
                     <TableHead className="w-24">Últ. Act.</TableHead>
                     <TableHead className="w-28 text-center">Acciones</TableHead>
@@ -753,6 +832,7 @@ export default function CasosPage() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
                       <TableCell>

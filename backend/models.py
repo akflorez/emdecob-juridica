@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.sql import func
 from .db import Base
 
@@ -17,12 +18,15 @@ class Case(Base):
     __tablename__ = "cases"
 
     id = Column(Integer, primary_key=True, index=True)
-    radicado = Column(String(60), unique=True, index=True, nullable=False)
+    radicado = Column(String(60), index=True, nullable=False)
+    id_proceso = Column(String(20), unique=True, index=True, nullable=True) # ID único de Rama Judicial
 
     demandante = Column(String(255), nullable=True)
     demandado = Column(String(255), nullable=True)
     juzgado = Column(String(255), nullable=True)
     alias = Column(String(200), nullable=True)
+    cedula = Column(String(50), nullable=True)
+    abogado = Column(String(200), nullable=True)
 
     last_hash = Column(String(64), nullable=True)
     current_hash = Column(String(64), nullable=True)
@@ -132,6 +136,48 @@ class User(Base):
     nombre = Column(String(255), nullable=True)       # nombre visible
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class CasePublication(Base):
+    """Publicaciones procesales (Estados/Edictos) del portal nuevo"""
+    __tablename__ = "case_publications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+
+    fecha_publicacion = Column(Date, nullable=True)
+    tipo_publicacion = Column(String(255), nullable=True)
+    descripcion = Column(Text, nullable=True)
+    documento_url = Column(Text, nullable=True)
+    source_url = Column(Text, nullable=True)     # URL original del portal
+    source_id = Column(String(255), unique=True, index=True, nullable=True) # ID único del portal
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class SearchJob(Base):
+    """Trabajos de búsqueda masiva (nombres o radicados)"""
+    __tablename__ = "search_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_type = Column(String(50), nullable=False) # 'name', 'radicado'
+    status = Column(String(50), default="pending") # 'pending', 'processing', 'completed', 'failed'
+    
+    total_items = Column(Integer, default=0)
+    processed_items = Column(Integer, default=0)
+    is_imported = Column(Boolean, default=False)
+    
+    # Almacena los resultados encontrados (radicados, etc) antes de importar
+    results_json = Column(LONGTEXT, nullable=True) 
+    error_message = Column(LONGTEXT, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
