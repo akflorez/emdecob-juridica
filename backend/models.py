@@ -9,7 +9,6 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.sql import func
 from .db import Base
 
@@ -176,8 +175,8 @@ class SearchJob(Base):
     is_imported = Column(Boolean, default=False)
     
     # Almacena los resultados encontrados (radicados, etc) antes de importar
-    results_json = Column(LONGTEXT, nullable=True) 
-    error_message = Column(LONGTEXT, nullable=True)
+    results_json = Column(Text, nullable=True) 
+    error_message = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
