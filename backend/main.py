@@ -2651,40 +2651,46 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
         skipped = 0
         count = 0
 
-        for _, row in df.iterrows():
-            count += 1
-            radicado = clean_str(row.get(rad_col))
-            if not radicado:
-                skipped += 1
-                continue
-            
-            cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
-            abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
-            
-            if cedula and (cedula.lower() == "nan" or cedula == ""): cedula = None
-            if abogado and (abogado.lower() == "nan" or abogado == ""): abogado = None
+        # Procesamos en lotes MUY pequeños (20) para evitar errores de tamaño de SQL
+        batch_size = 20
 
-            # Buscar TODOS los casos con este radicado (pueden ser múltiples procesos)
-            existing_cases = db.query(Case).filter(Case.radicado == radicado).all()
-            
-            if existing_cases:
-                for c in existing_cases:
-                    c.cedula = cedula or c.cedula
-                    c.abogado = abogado or c.abogado
-                updated += 1
-            else:
-                # Verificar si ya está en invalid
-                existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
-                if existing_invalid:
+        for _, row in df.iterrows():
+            try:
+                radicado = clean_str(row.get(rad_col))
+                if not radicado:
                     skipped += 1
                     continue
+                
+                cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
+                abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
+                
+                if cedula and (cedula.lower() == "nan" or cedula == ""): cedula = None
+                if abogado and (abogado.lower() == "nan" or abogado == ""): abogado = None
 
-                db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado))
-                created += 1
-            
-            # Commit por lotes cada 100 registros
-            if count % 100 == 0:
-                db.commit()
+                # Buscar TODOS los casos con este radicado
+                existing_cases = db.query(Case).filter(Case.radicado == radicado).all()
+                
+                if existing_cases:
+                    for c in existing_cases:
+                        c.cedula = cedula or c.cedula
+                        c.abogado = abogado or c.abogado
+                    updated += 1
+                else:
+                    existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                    if existing_invalid:
+                        skipped += 1
+                        continue
+
+                    db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado))
+                    created += 1
+                
+                count += 1
+                if count % batch_size == 0:
+                    db.commit()
+            except Exception as row_error:
+                print(f"⚠️ Error procesando fila: {row_error}")
+                db.rollback()
+                skipped += 1
 
         db.commit()
 
@@ -2698,12 +2704,12 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
             "skipped": skipped,
             "message": f"Procesados: {created} nuevos, {updated} actualizados."
         }
-    except HTTPException:
-        raise
     except Exception as e:
+        db.rollback()
         import traceback
         traceback.print_exc()
-        raise HTTPException(500, f"Error interno: {str(e)}")
+        msg = str(e).split('\n')[0] # Solo la primera línea para no saturar el UI
+        raise HTTPException(500, f"Error en importación: {msg}")
 
 
 @app.post("/cases/bulk-delete-excel")
@@ -2728,27 +2734,31 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 
         deleted_cases = 0
         count = 0
+        batch_size = 20
 
         for _, row in df.iterrows():
-            count += 1
-            radicado = clean_str(row.get(rad_col))
-            if not radicado:
-                continue
+            try:
+                radicado = clean_str(row.get(rad_col))
+                if not radicado:
+                    continue
 
-            # Buscar todos los casos con ese radicado
-            cases = db.query(Case).filter(Case.radicado == radicado).all()
-            for c in cases:
-                db.query(CaseEvent).filter(CaseEvent.case_id == c.id).delete()
-                db.query(CasePublication).filter(CasePublication.case_id == c.id).delete()
-                db.delete(c)
-                deleted_cases += 1
-            
-            # También limpiar de invalid si está ahí
-            db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
+                # Buscar todos los casos con ese radicado
+                cases = db.query(Case).filter(Case.radicado == radicado).all()
+                for c in cases:
+                    db.query(CaseEvent).filter(CaseEvent.case_id == c.id).delete()
+                    db.query(CasePublication).filter(CasePublication.case_id == c.id).delete()
+                    db.delete(c)
+                    deleted_cases += 1
+                
+                # También limpiar de invalid si está ahí
+                db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
 
-            # Commit por lotes cada 100 registros
-            if count % 100 == 0:
-                db.commit()
+                count += 1
+                if count % batch_size == 0:
+                    db.commit()
+            except Exception as row_error:
+                print(f"⚠️ Error eliminando fila: {row_error}")
+                db.rollback()
 
         db.commit()
 
@@ -2759,7 +2769,8 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Error en eliminación masiva: {str(e)}")
+        msg = str(e).split('\n')[0]
+        raise HTTPException(500, f"Error en eliminación masiva: {msg}")
 
 
 # =========================
