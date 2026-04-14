@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, and_, case
+from sqlalchemy import or_, desc, and_, case, func
 from pydantic import BaseModel
 from io import BytesIO
 import pandas as pd
@@ -46,7 +46,7 @@ from .service.rama import (
     RamaError,
 )
 from .apply_robust_migrations import run_migrations
-from .service.publicaciones import consultar_publicaciones, parse_fecha_pub
+from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, is_relevant_actuacion, consultar_publicaciones_rango
 from .service.bulk_orchestrator import run_name_search_job, log_job
 
 
@@ -184,7 +184,7 @@ async def do_auto_refresh() -> dict:
             row[0] for row in
             db.query(Case.id)
             .filter(Case.juzgado.isnot(None))
-            .order_by(Case.last_check_at.asc())
+            .order_by(desc(func.substr(Case.radicado, 13, 4)), desc(Case.last_check_at.asc()))
             .limit(BATCH_SIZE)
             .all()
         ]
@@ -525,7 +525,7 @@ def get_unread_cases_for_notification(db: Session) -> List[dict]:
             and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
         )
-    ).order_by(desc(Case.ultima_actuacion)).all()
+    ).order_by(desc(func.substr(Case.radicado, 13, 4)), desc(Case.ultima_actuacion)).all()
 
     return [
         {
@@ -1871,7 +1871,7 @@ def list_cases(
     )
 
     items = (
-        q.order_by(unread_order, desc(Case.ultima_actuacion), desc(Case.updated_at))
+        q.order_by(unread_order, desc(func.substr(Case.radicado, 13, 4)), desc(Case.ultima_actuacion), desc(Case.updated_at))
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -2250,6 +2250,34 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
         raise HTTPException(500, f"Error interno: {str(e)}")
 
 
+async def trigger_publications_sync(case: Case, item_act: dict, db_session: Session):
+    """Tarea en segundo plano para sincronizar con el portal de Publicaciones."""
+    try:
+        from .models import CasePublication
+        radicado = case.radicado
+        fecha_act = item_act.get("event_date") # "YYYY-MM-DD"
+        
+        pubs = await consultar_publicaciones_rango(radicado, fecha_act)
+        
+        if pubs:
+            for p in pubs:
+                f_pub = parse_fecha_pub(p.get("fecha"))
+                exists = db_session.query(CasePublication).filter(CasePublication.source_id == p.get("source_id")).first()
+                if not exists:
+                    db_session.add(CasePublication(
+                        case_id=case.id,
+                        fecha_publicacion=f_pub,
+                        tipo_publicacion=p.get("tipo"),
+                        descripcion=p.get("descripcion"),
+                        documento_url=p.get("url_documento"),
+                        source_url=p.get("source_url"),
+                        source_id=p.get("source_id")
+                    ))
+            db_session.commit()
+            print(f"✅ [sync-pub] {len(pubs)} publicaciones sincronizadas para {radicado}")
+    except Exception as e:
+        print(f"⚠️ [sync-pub] Error sincronizando publicaciones: {e}")
+
 @app.get("/cases/id/{case_id}/events")
 async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
     """
@@ -2341,6 +2369,11 @@ async def events_logic(c: Case, db: Session):
                 ))
                 if con_docs:
                     c.has_documents = True
+                
+                # --- NUEVO: Disparo automático a Publicaciones Procesales ---
+                if is_relevant_actuacion(it.get("title") or ""):
+                    print(f"📢 [events] Actuación relevante encontrada: {it.get('title')}. Disparando búsqueda a Publicaciones.")
+                    asyncio.create_task(trigger_publications_sync(c, it, db))
         
         db.commit()
         return {"items": result_items, "total": len(result_items)}

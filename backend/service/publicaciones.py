@@ -27,22 +27,40 @@ def normalize_text(text: str) -> str:
 def is_relevant_actuacion(descripcion: str) -> bool:
     """Valida si la actuación debe disparar una búsqueda en Publicaciones."""
     norm = normalize_text(descripcion)
+    # Según audio: "si hay una actuación que diga fijación de estado o que diga auto"
     return "fijacion estado" in norm or "auto" in norm
 
-async def consultar_publicaciones_rango(radicado: str, fecha_inicio: str = None, fecha_fin: str = None):
+async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = None):
     """
-    Busca publicaciones para un radicado en un rango de fechas.
-    fecha_inicio/fin en formato DD/MM/YYYY
+    Busca publicaciones para un radicado basándose en la fecha de la actuación.
+    Siguiendo las instrucciones del usuario:
+    - Despacho: primeros 12 dígitos.
+    - Rango: [Fecha Actuación, Fecha Actuación + 2 días].
+    - Filtro: "NOTIFICACIÓN DE ESTADO".
+    - Validar: últimos 9 dígitos en el nombre/detalle.
     """
     if not radicado or len(radicado) < 12:
         return []
 
+    id_depto = radicado[:2]
     id_despacho = radicado[:12]
     
-    # Si no se pasan fechas, el portal suele fallar o traer demasiado
-    today_str = datetime.now().strftime("%d/%m/%Y")
-    f_ini = fecha_inicio or today_str
-    f_fin = fecha_fin or today_str
+    # 1. Definir rango de fechas (T, T+2)
+    # La fecha_actuacion suele venir en formato YYYY-MM-DD del backend
+    try:
+        if isinstance(fecha_actuacion, str):
+            f_base = datetime.strptime(fecha_actuacion[:10], "%Y-%m-%d")
+        elif isinstance(fecha_actuacion, (date, datetime)):
+            f_base = datetime.combine(fecha_actuacion, datetime.min.time())
+        else:
+            f_base = datetime.now()
+    except:
+        f_base = datetime.now()
+
+    f_ini_str = f_base.strftime("%d/%m/%Y")
+    f_fin_str = (f_base + timedelta(days=2)).strftime("%d/%m/%Y")
+
+    print(f"🔍 [publicaciones.py] Buscando para radicado {radicado} en rango [{f_ini_str} - {f_fin_str}]")
 
     params = {
         "p_p_id": PORTLET_ID,
@@ -50,10 +68,10 @@ async def consultar_publicaciones_rango(radicado: str, fecha_inicio: str = None,
         "p_p_state": "normal",
         "p_p_mode": "view",
         f"_{PORTLET_ID}_action": "busqueda",
-        f"_{PORTLET_ID}_idDepto": "+",
+        f"_{PORTLET_ID}_idDepto": id_depto,
         f"_{PORTLET_ID}_idDespacho": id_despacho,
-        f"_{PORTLET_ID}_fechaInicio": f_ini,
-        f"_{PORTLET_ID}_fechaFin": f_fin,
+        f"_{PORTLET_ID}_fechaInicio": f_ini_str,
+        f"_{PORTLET_ID}_fechaFin": f_fin_str,
         f"_{PORTLET_ID}_verTotales": "true",
     }
 
@@ -71,27 +89,37 @@ async def consultar_publicaciones_rango(radicado: str, fecha_inicio: str = None,
         return []
 
 async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient) -> list:
-    """Parsea la lista inicial y entra en detalles si hay posibles matches."""
+    """Parsea la lista inicial filtrando por NOTIFICACIÓN DE ESTADO."""
     soup = BeautifulSoup(html, "html.parser")
     results = []
     
-    # En el nuevo portal, las publicaciones son bloques con clase que contiene la info
-    # Según el screenshot, hay botones 'VER DETALLE'
-    links_detalle = soup.find_all("a", string=re.compile("VER DETALLE", re.I))
+    # Buscamos todos los bloques de resultado. 
+    # Generalmente Liferay envuelve las filas en tablas o divs con clases específicas.
+    # El usuario menciona 'buscar notificación de estado'
     
-    for link in links_detalle:
-        detail_url = link.get("href")
-        if not detail_url: continue
-        
-        # Debemos entrar al detalle para validar radicado/nombres
-        match = await validate_detail_page(detail_url, radicado_completo, client)
-        if match:
-            results.append(match)
+    rows = soup.find_all("tr") # Intento genérico de filas de tabla
+    if not rows:
+        rows = soup.find_all("div", class_=re.compile(r"row|item|card", re.I))
+
+    for row in rows:
+        row_text = row.get_text()
+        # Filtro 1: "NOTIFICACIÓN DE ESTADO"
+        if "NOTIFICACION DE ESTADO" in normalize_text(row_text).upper().replace("Ó", "O"):
+            link_detalle = row.find("a", string=re.compile(r"VER DETALLE|ACCEDER", re.I))
+            if not link_detalle:
+                # Intentar buscar cualquier link en la fila
+                link_detalle = row.find("a")
+            
+            if link_detalle and link_detalle.get("href"):
+                detail_url = link_detalle.get("href")
+                match = await validate_detail_page(detail_url, radicado_completo, client)
+                if match:
+                    results.append(match)
             
     return results
 
 async def validate_detail_page(url: str, radicado_completo: str, client: httpx.AsyncClient):
-    """Entra a la página de detalle y valida si el proceso está ahí."""
+    """Valida los últimos 9 dígitos del radicado en el detalle."""
     try:
         if url.startswith("/"):
             url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
@@ -102,18 +130,20 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
         soup = BeautifulSoup(resp.text, "html.parser")
         page_text = soup.get_text()
         
-        # Validación 1: El radicado completo o los últimos 9 dígitos
+        # Validación 2: Los últimos 9 dígitos del radicado
         last_9 = radicado_completo[-9:]
-        if radicado_completo in page_text or last_9 in page_text:
+        
+        if last_9 in page_text:
+            print(f"✅ Match encontrado para suffix {last_9} en {url}")
             titulo = soup.find(["h1", "h2", "h3", "h4"])
-            titulo_text = titulo.get_text(strip=True) if titulo else "Notificación Procesal"
+            titulo_text = titulo.get_text(strip=True) if titulo else "Notificación de Estado"
             
             doc_link = soup.find("a", href=re.compile(r"\.pdf", re.I))
             doc_url = doc_link["href"] if doc_link else ""
             if doc_url and doc_url.startswith("/"):
                 doc_url = "https://publicacionesprocesales.ramajudicial.gov.co" + doc_url
 
-            fecha_str = datetime.now().strftime("%Y-%m-%d") # Fallback
+            fecha_str = datetime.now().strftime("%Y-%m-%d")
             fecha_match = re.search(r"(\d{4}-\d{2}-\d{2})", page_text)
             if fecha_match:
                 fecha_str = fecha_match.group(1)
@@ -121,7 +151,7 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
             return {
                 "fecha": fecha_str,
                 "tipo": titulo_text,
-                "descripcion": "Encontrado en Publicaciones Procesales por radicado.",
+                "descripcion": f"Fijación encontrada para radicado ...{last_9}",
                 "url_documento": doc_url or url,
                 "source_url": url,
                 "source_id": hashlib.md5(url.encode()).hexdigest()
@@ -142,6 +172,6 @@ def parse_fecha_pub(fecha_str: str) -> date | None:
         except:
             return None
 
-# Retrocompatibilidad con el nombre anterior
 async def consultar_publicaciones(radicado: str):
+    """Mantiene compatibilidad con el llamado básico."""
     return await consultar_publicaciones_rango(radicado)
