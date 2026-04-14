@@ -194,6 +194,7 @@ export async function downloadMultipleEventsExcel(radicados: string[]) {
 export type ImportExcelResponse = {
   ok: boolean;
   created: number;
+  updated: number;
   skipped: number;
   invalid_count: number;
   message?: string;
@@ -203,6 +204,15 @@ export function importExcel(file: File) {
   const fd = new FormData();
   fd.append("file", file);
   return apiFetch<ImportExcelResponse>("/cases/import-excel", { method: "POST", body: fd });
+}
+
+export function bulkDeleteExcel(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiFetch<{ ok: boolean; deleted_cases: number; message: string }>("/cases/bulk-delete-excel", {
+    method: "POST",
+    body: fd,
+  });
 }
 
 /** ---------------------------

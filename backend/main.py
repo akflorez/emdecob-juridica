@@ -2635,11 +2635,19 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
             df = pd.read_excel(BytesIO(content))
 
         df.columns = [str(c).strip() for c in df.columns]
-        rad_col = next((c for c in ["Radicado", "radicado", "RADICADO"] if c in df.columns), None)
+        
+        # Normalizar nombres de columnas para búsqueda insensible a mayúsculas
+        cols_lower = {c.lower(): c for c in df.columns}
+        
+        rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
+        ced_col = next((cols_lower[k] for k in ["cedula", "identificacion", "documento"] if k in cols_lower), None)
+        abo_col = next((cols_lower[k] for k in ["abogado", "apoderado"] if k in cols_lower), None)
+
         if not rad_col:
             raise HTTPException(400, "Falta la columna 'Radicado'")
 
         created = 0
+        updated = 0
         skipped = 0
 
         for _, row in df.iterrows():
@@ -2647,19 +2655,30 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
             if not radicado:
                 skipped += 1
                 continue
+            
+            cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
+            abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
+            
+            if cedula and (cedula.lower() == "nan" or cedula == ""): cedula = None
+            if abogado and (abogado.lower() == "nan" or abogado == ""): abogado = None
 
-            existing_case = db.query(Case).filter(Case.radicado == radicado).first()
-            if existing_case:
-                skipped += 1
-                continue
+            # Buscar TODOS los casos con este radicado (pueden ser múltiples procesos)
+            existing_cases = db.query(Case).filter(Case.radicado == radicado).all()
+            
+            if existing_cases:
+                for c in existing_cases:
+                    c.cedula = cedula or c.cedula
+                    c.abogado = abogado or c.abogado
+                updated += 1
+            else:
+                # Verificar si ya está en invalid
+                existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                if existing_invalid:
+                    skipped += 1
+                    continue
 
-            existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
-            if existing_invalid:
-                skipped += 1
-                continue
-
-            db.add(Case(radicado=radicado))
-            created += 1
+                db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado))
+                created += 1
 
         db.commit()
 
@@ -2669,14 +2688,67 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
         return {
             "ok": True,
             "created": created,
+            "updated": updated,
             "skipped": skipped,
-            "invalid_count": 0,
-            "message": f"Importados {created} radicados. Validación automática iniciada en segundo plano."
+            "message": f"Procesados: {created} nuevos, {updated} actualizados."
         }
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(500, f"Error interno: {str(e)}")
+
+
+@app.post("/cases/bulk-delete-excel")
+async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        name = (file.filename or "").lower()
+        if not name.endswith((".xlsx", ".xls", ".csv")):
+            raise HTTPException(400, "Sube un archivo .xlsx, .xls o .csv")
+
+        content = await file.read()
+        if name.endswith(".csv"):
+            df = pd.read_csv(BytesIO(content))
+        else:
+            df = pd.read_excel(BytesIO(content))
+
+        df.columns = [str(c).strip() for c in df.columns]
+        cols_lower = {c.lower(): c for c in df.columns}
+        rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
+
+        if not rad_col:
+            raise HTTPException(400, "Falta la columna 'Radicado'")
+
+        deleted_cases = 0
+        deleted_events = 0
+
+        for _, row in df.iterrows():
+            radicado = clean_str(row.get(rad_col))
+            if not radicado:
+                continue
+
+            # Buscar todos los casos con ese radicado
+            cases = db.query(Case).filter(Case.radicado == radicado).all()
+            for c in cases:
+                db.query(CaseEvent).filter(CaseEvent.case_id == c.id).delete()
+                db.query(CasePublication).filter(CasePublication.case_id == c.id).delete()
+                db.delete(c)
+                deleted_cases += 1
+            
+            # También limpiar de invalid si está ahí
+            db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
+
+        db.commit()
+
+        return {
+            "ok": True,
+            "deleted_cases": deleted_cases,
+            "message": f"Se eliminaron {deleted_cases} procesos correctamente."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error en eliminación masiva: {str(e)}")
 
 
 # =========================

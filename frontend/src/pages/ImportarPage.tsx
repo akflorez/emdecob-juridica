@@ -1,15 +1,18 @@
 import { useState, useRef } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Download, XCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Download, XCircle, Trash2, Info } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { importExcel, downloadInvalidReport, type ImportExcelResponse } from '@/services/api';
+import { importExcel, bulkDeleteExcel, downloadInvalidReport, type ImportExcelResponse } from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ImportarPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [result, setResult] = useState<ImportExcelResponse | null>(null);
+  const [importResult, setImportResult] = useState<ImportExcelResponse | null>(null);
+  const [deleteResult, setDeleteResult] = useState<{ ok: boolean, deleted_cases: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deleteInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -20,22 +23,6 @@ export default function ImportarPage() {
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      await uploadFile(files[0]);
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      await uploadFile(files[0]);
-    }
   };
 
   const uploadFile = async (file: File) => {
@@ -52,27 +39,23 @@ export default function ImportarPage() {
     }
 
     setIsUploading(true);
-    setResult(null);
+    setImportResult(null);
+    setDeleteResult(null);
     
     try {
       const response = await importExcel(file);
-      setResult(response);
+      setImportResult(response);
       
-      if (response.created > 0) {
+      const totalChanges = response.created + response.updated;
+      if (totalChanges > 0) {
         toast({
-          title: 'Importación exitosa',
-          description: `Se crearon ${response.created} caso(s)`,
-        });
-      } else if (response.invalid_count > 0) {
-        toast({
-          title: 'Importación con advertencias',
-          description: `${response.invalid_count} radicado(s) no se encontraron en Rama Judicial`,
-          variant: 'destructive',
+          title: 'Procesamiento exitoso',
+          description: `Se crearon ${response.created} y se actualizaron ${response.updated} caso(s)`,
         });
       } else {
         toast({
           title: 'Sin cambios',
-          description: 'Todos los radicados ya existen en el sistema',
+          description: 'No se detectaron radicados nuevos o actualizaciones',
         });
       }
     } catch (error: any) {
@@ -83,192 +66,204 @@ export default function ImportarPage() {
       });
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleDownloadInvalid = async () => {
-    if (!result?.invalid_list || result.invalid_list.length === 0) return;
-    
+  const handleDeleteFile = async (file: File) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar masivamente estos radicados? Esta acción no se puede deshacer.")) {
+        return;
+    }
+
+    setIsUploading(true);
+    setImportResult(null);
+    setDeleteResult(null);
+
     try {
-      await downloadInvalidReport(result.invalid_list);
+      const response = await bulkDeleteExcel(file);
+      setDeleteResult(response);
       toast({
-        title: 'Descarga completada',
-        description: 'Se descargó el reporte de radicados no encontrados',
+        title: 'Eliminación masiva completada',
+        description: `Se eliminaron ${response.deleted_cases} procesos correctamente`,
       });
     } catch (error: any) {
       toast({
-        title: 'Error al descargar',
+        title: 'Error al eliminar',
         description: error?.message || 'Error desconocido',
         variant: 'destructive',
       });
+    } finally {
+      setIsUploading(false);
+      if (deleteInputRef.current) deleteInputRef.current.value = '';
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Importar Casos</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Gestión Masiva</h1>
         <p className="text-muted-foreground mt-2">
-          Sube un archivo Excel con los radicados de los casos a monitorear
+          Importa, actualiza o elimina casos de forma masiva mediante archivos Excel
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5 text-primary" />
-            Subir Archivo
-          </CardTitle>
-          <CardDescription>
-            El archivo debe tener una columna llamada "Radicado" con los números de radicado de 23 dígitos.
-            Solo se importarán casos que existan en la Rama Judicial.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div
-            className={`
-              border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer
-              ${isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}
-              ${isUploading ? 'pointer-events-none opacity-50' : ''}
-            `}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            
-            {isUploading ? (
-              <div className="space-y-4">
-                <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin" />
-                <p className="text-muted-foreground">Importando casos...</p>
-                <p className="text-xs text-muted-foreground">
-                  Validando cada radicado en la Rama Judicial, esto puede tomar unos minutos
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground" />
-                <div>
-                  <p className="font-medium">Arrastra un archivo aquí</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    o haz clic para seleccionar
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Formatos: .xlsx, .xls, .csv
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="importar" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsTrigger value="importar" className="flex items-center gap-2">
+            <Upload className="h-4 w-4" /> Importar / Actualizar
+          </TabsTrigger>
+          <TabsTrigger value="eliminar" className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4" /> Eliminación Masiva
+          </TabsTrigger>
+        </TabsList>
 
-      {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Resultado de la Importación</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10">
-                <CheckCircle2 className="h-8 w-8 text-green-500" />
-                <div>
-                  <p className="text-2xl font-bold text-green-500">{result.created}</p>
-                  <p className="text-sm text-muted-foreground">Casos creados</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10">
-                <AlertTriangle className="h-8 w-8 text-yellow-500" />
-                <div>
-                  <p className="text-2xl font-bold text-yellow-500">{result.skipped}</p>
-                  <p className="text-sm text-muted-foreground">Ya existían</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10">
-                <XCircle className="h-8 w-8 text-red-500" />
-                <div>
-                  <p className="text-2xl font-bold text-red-500">{result.invalid_count}</p>
-                  <p className="text-sm text-muted-foreground">No encontrados</p>
-                </div>
-              </div>
-            </div>
-
-            {result.invalid_count > 0 && result.invalid_list && (
-              <div className="mt-6 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-destructive">
-                      {result.invalid_count} radicado(s) no se encontraron en Rama Judicial
-                    </h4>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Estos radicados no fueron importados porque no existen en la página de la Rama
-                    </p>
-                  </div>
-                  <Button onClick={handleDownloadInvalid} variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Descargar lista
-                  </Button>
-                </div>
+        <TabsContent value="importar" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5 text-primary" />
+                Subir Archivo de Importación
+              </CardTitle>
+              <CardDescription>
+                Puedes subir nuevos radicados o actualizar la Cédula y Abogado de radicados existentes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
+                className={`
+                  border-2 border-dashed rounded-lg p-10 text-center transition-colors cursor-pointer
+                  ${isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}
+                  ${isUploading ? 'pointer-events-none opacity-50' : ''}
+                `}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+                  className="hidden"
+                />
                 
-                {result.invalid_list.length <= 10 && (
-                  <div className="mt-4 space-y-2">
-                    {result.invalid_list.map((item, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <XCircle className="h-4 w-4 text-destructive" />
-                        <span className="font-mono">{item.radicado}</span>
-                        <span className="text-muted-foreground">- {item.motivo}</span>
-                      </div>
-                    ))}
+                {isUploading ? (
+                  <div className="space-y-4">
+                    <Loader2 className="h-10 w-10 mx-auto text-primary animate-spin" />
+                    <p className="text-muted-foreground text-sm">Procesando archivo...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground" />
+                    <div>
+                      <p className="font-medium text-sm">Arrastra tu Excel aquí o haz clic</p>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Formato del Archivo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            El archivo debe contener al menos la columna "Radicado". Ejemplo:
-          </p>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border border-border rounded-lg">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-4 py-2 text-left border-b">Radicado</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="px-4 py-2 font-mono border-b">11001400302120250005200</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 font-mono border-b">11001400304020240144500</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 font-mono">05001400300120230001234</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              {importResult && (
+                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    <div>
+                      <p className="text-xl font-bold text-green-500">{importResult.created}</p>
+                      <p className="text-xs text-muted-foreground">Nuevos</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <Info className="h-6 w-6 text-blue-500" />
+                    <div>
+                      <p className="text-xl font-bold text-blue-500">{importResult.updated}</p>
+                      <p className="text-xs text-muted-foreground">Actualizados</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <AlertTriangle className="h-6 w-6 text-yellow-500" />
+                    <div>
+                      <p className="text-xl font-bold text-yellow-500">{importResult.skipped}</p>
+                      <p className="text-xs text-muted-foreground">Ignorados</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Formato Sugerido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border border-border rounded-lg">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-1 text-left border-b">Radicado</th>
+                      <th className="px-3 py-1 text-left border-b">Cédula</th>
+                      <th className="px-3 py-1 text-left border-b">Abogado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="px-3 py-1 font-mono border-b">11001400...</td>
+                      <td className="px-3 py-1 border-b">1032...</td>
+                      <td className="px-3 py-1 border-b">Juan Pérez</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="eliminar" className="space-y-6">
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                Eliminación Masiva
+              </CardTitle>
+              <CardDescription>
+                Sube un Excel con la columna "Radicado". Todos los procesos asociados a esos radicados serán **ELIMINADOS PERMANENTEMENTE**.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="border-2 border-dashed border-destructive/30 rounded-lg p-10 text-center hover:border-destructive/60 transition-colors cursor-pointer"
+                onClick={() => deleteInputRef.current?.click()}
+              >
+                <input
+                  ref={deleteInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => e.target.files?.[0] && handleDeleteFile(e.target.files[0])}
+                  className="hidden"
+                />
+                <div className="space-y-3">
+                  <XCircle className="h-10 w-10 mx-auto text-destructive/60" />
+                  <p className="text-sm font-medium text-destructive">Seleccionar archivo para eliminar</p>
+                </div>
+              </div>
+
+              {deleteResult && (
+                <div className="mt-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-center">
+                  <p className="text-lg font-bold text-destructive">
+                    {deleteResult.deleted_cases} procesos eliminados
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
