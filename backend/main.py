@@ -2966,17 +2966,22 @@ async def save_new_publications(case: Case, db: Session):
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
         actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
         
+        # 2. Filtrar actuaciones relevantes y ordenar por fecha (más reciente primero)
         relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
+        relevantes.sort(key=lambda x: x.get("fechaActuacion", ""), reverse=True)
         
         if not relevantes and actuaciones:
             # Si ninguna se llama "auto" o "estado", al menos buscamos en las más recientes
-            # para no dejar la sincronización manual sin ejecutar nada.
-            # Aseguramos ordenar por fecha para tomar la verdaderamente más reciente
-            acts_sorted = sorted(actuaciones, key=lambda a: a.get("fechaActuacion", ""))
-            relevantes = [acts_sorted[-1]] # La última (más reciente)
+            acts_sorted = sorted(actuaciones, key=lambda a: a.get("fechaActuacion", ""), reverse=True)
+            relevantes = [acts_sorted[0]] # La más reciente
             
         if not relevantes:
+            print(f"ℹ️ No hay actuaciones relevantes para buscar publicaciones en radicado {case.radicado}")
             return
+
+        # 3. Limitar a las 5 más recientes para evitar Timeouts (504)
+        relevantes = relevantes[:5]
+        print(f"🚀 Iniciando búsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
 
         # 3. Para cada actuación relevante, buscar en Publicaciones en su ventana de tiempo
         for act in relevantes:

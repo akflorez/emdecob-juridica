@@ -99,6 +99,9 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
     # Palabras clave flexibles según audio: "vayan filtrando si por el nombre notificación o por el nombre estado"
     KEYWORDS = ["notificacion", "estado"]
 
+    tasks = []
+    seen_urls = set()
+
     for row in rows:
         row_text = row.get_text()
         norm_row = normalize_text(row_text)
@@ -115,9 +118,16 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
             if link_detalle and link_detalle.get("href"):
                 detail_url = link_detalle.get("href").strip()
                 if detail_url and not detail_url.startswith("#") and not detail_url.lower().startswith("javascript"):
-                    match = await validate_detail_page(detail_url, radicado_completo, client, demandado)
-                    if match:
-                        results.append(match)
+                    # Evitar duplicados en la misma lista
+                    if detail_url not in seen_urls:
+                        seen_urls.add(detail_url)
+                        tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
+    
+    # Ejecutar todas las validaciones en paralelo (máximo tiempo = el más lento de uno solo)
+    # Limitamos a un número razonable para no saturar
+    if tasks:
+        all_matches = await asyncio.gather(*tasks[:15]) # Máximo 15 validaciones por actuación
+        results = [m for m in all_matches if m]
             
     return results
 
