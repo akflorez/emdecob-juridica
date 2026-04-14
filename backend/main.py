@@ -2966,9 +2966,13 @@ async def save_new_publications(case: Case, db: Session):
         import json
         actuaciones = json.loads(actuaciones_json)
         
-        # 2. Filtrar actuaciones relevantes
         relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
         
+        if not relevantes and actuaciones:
+            # Si ninguna se llama "auto" o "estado", al menos buscamos en la más reciente
+            # para no dejar la sincronización manual sin ejecutar nada.
+            relevantes = [actuaciones[0]]
+            
         if not relevantes:
             return
 

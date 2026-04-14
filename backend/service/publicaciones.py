@@ -150,9 +150,16 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
         if pattern_suffix in page_text or formatted_pattern in page_text:
             print(f"✅ Match por radicado: {formatted_pattern} en {url}")
             has_match = True
-        elif demandado and normalize_text(demandado) in norm_page:
-            print(f"✅ Match por demandado: {demandado} en {url}")
-            has_match = True
+        elif demandado:
+            dem_norm = normalize_text(demandado)
+            if dem_norm in norm_page:
+                print(f"✅ Match por demandado completo: {demandado} en {url}")
+                has_match = True
+            else:
+                parts = dem_norm.split()
+                if len(parts) >= 2 and parts[0] in norm_page and (parts[-1] in norm_page or parts[-2] in norm_page):
+                    print(f"✅ Match por demandado parcial: {parts[0]} y apellido en {url}")
+                    has_match = True
             
         if has_match:
             titulo = soup.find(["h1", "h2", "h3", "h4"])
