@@ -617,24 +617,25 @@ export default function CasosPage() {
             </div>
 
             {activeTab === "todos" && (
-              <div className="flex flex-col sm:flex-row gap-3 items-end">
-                <div className="w-full sm:w-48">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="w-full sm:w-44">
                   <label className="text-xs text-muted-foreground mb-1 block">Cédula</label>
-                  <Input placeholder="Filtrar..." value={cedulaInput} onChange={(e) => setCedulaInput(e.target.value)} />
+                  <Input placeholder="Filtrar por cédula..." value={cedulaInput} onChange={(e) => setCedulaInput(e.target.value)} />
                 </div>
-                <div className="w-full sm:w-48">
+                <div className="w-full sm:flex-1 sm:min-w-[220px]">
                   <label className="text-xs text-muted-foreground mb-1 block">Abogado</label>
                   <Input 
-                    placeholder="Filtrar..." 
+                    placeholder="Escribir o seleccionar abogado..." 
                     value={abogadoInput} 
                     onChange={(e) => setAbogadoInput(e.target.value)} 
                     list="abogados-list"
+                    className="w-full"
                   />
                   <datalist id="abogados-list">
                     {abogadosList.map(a => <option key={a} value={a} />)}
                   </datalist>
                 </div>
-                <div className="w-full sm:w-48">
+                <div className="w-full sm:w-52">
                   <label className="text-xs text-muted-foreground mb-1 block">Mes actuación</label>
                   <Select value={selectedMonth || "all"} onValueChange={handleMonthChange}>
                     <SelectTrigger><SelectValue placeholder="Todos los meses" /></SelectTrigger>
