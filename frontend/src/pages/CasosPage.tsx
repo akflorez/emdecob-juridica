@@ -817,8 +817,8 @@ export default function CasosPage() {
               <p className="text-muted-foreground">No se encontraron casos</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-x-auto w-full">
+              <Table className="w-full min-w-[900px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 px-2">
