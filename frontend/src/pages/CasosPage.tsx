@@ -826,7 +826,7 @@ export default function CasosPage() {
                     <TableHead className="min-w-[180px]">Radicado</TableHead>
                     <TableHead className="hidden md:table-cell">Demandante</TableHead>
                     <TableHead className="hidden lg:table-cell">Demandado</TableHead>
-                    <TableHead className="hidden xl:table-cell">Abogado</TableHead>
+                    <TableHead>Abogado</TableHead>
                     <TableHead className="hidden xl:table-cell">Juzgado</TableHead>
                     <TableHead className="w-24">Últ. Act.</TableHead>
                     <TableHead className="w-28 text-center">Acciones</TableHead>
@@ -846,10 +846,8 @@ export default function CasosPage() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
-                      <TableCell className="hidden xl:table-cell">
-                        <Badge variant="secondary" className="font-normal border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800">
-                          {c.abogado || "—"}
-                        </Badge>
+                      <TableCell className="text-sm">
+                        <span className="text-muted-foreground">{c.abogado || "—"}</span>
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
