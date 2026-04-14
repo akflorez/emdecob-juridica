@@ -153,6 +153,20 @@ export default function CasosPage() {
     return d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
+  const getAbogadoColor = (name: string) => {
+    if (!name) return "";
+    const firstWord = name.trim().split(" ")[0].toLowerCase();
+    // Excepciones comunes de nombres femeninos que no terminan en A
+    const femaleExceptions = ["carmen", "luz", "marisol", "maribel", "beatriz", "ines", "flor", "rut", "miriam", "judith", "ivonne"];
+    // Nombres masculinos que terminan en A
+    const maleExceptions = ["jose", "andrea"]; // Andrea en italiano es hombre pero en latam mujer (lo omitiremos)
+    const isFemale = firstWord.endsWith("a") && firstWord !== "jose" || femaleExceptions.includes(firstWord);
+    
+    return isFemale 
+      ? "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300 dark:border-pink-800" 
+      : "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800";
+  };
+
   const fetchStats = useCallback(async () => {
     try {
       const [statsData, abogadosData] = await Promise.all([
@@ -202,7 +216,7 @@ export default function CasosPage() {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, page, pageSize, toast]);
+  }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, appliedCedula, appliedAbogado, page, pageSize, toast]);
 
   const fetchInvalidRadicados = useCallback(async (silent = false) => {
     if (activeTab !== "no_encontrados") return;
@@ -259,6 +273,8 @@ export default function CasosPage() {
             solo_pendientes: activeTab === "pendientes",
             solo_no_leidos: activeTab === "no_leidos",
             solo_actualizados_hoy: activeTab === "hoy",
+            cedula: appliedCedula,
+            abogado: appliedAbogado,
             page,
             page_size: pageSize,
           });
@@ -275,7 +291,7 @@ export default function CasosPage() {
 
     const interval = setInterval(runPoll, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, page, pageSize]);
+  }, [activeTab, appliedSearch, appliedJuzgado, appliedMonth, appliedCedula, appliedAbogado, page, pageSize]);
 
   useEffect(() => {
     setPageInput(String(page));
@@ -849,7 +865,11 @@ export default function CasosPage() {
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
                       <TableCell className="text-sm">
-                        <span>{c.abogado || "—"}</span>
+                        {c.abogado ? (
+                          <Badge variant="outline" className={`font-normal ${getAbogadoColor(c.abogado)}`}>
+                            {c.abogado}
+                          </Badge>
+                        ) : "—"}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
