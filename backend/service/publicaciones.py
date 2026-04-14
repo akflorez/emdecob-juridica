@@ -45,8 +45,8 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
     id_depto = radicado[:2]
     id_despacho = radicado[:12]
     
-    # 1. Definir rango de fechas (T, T+2)
-    # La fecha_actuacion suele venir en formato YYYY-MM-DD del backend
+    # 1. Definir rango de fechas (T, T+7)
+    # Ampliamos a 7 días porque a veces la publicación ocurre días después del auto/fijación
     try:
         if isinstance(fecha_actuacion, str):
             f_base = datetime.strptime(fecha_actuacion[:10], "%Y-%m-%d")
@@ -58,7 +58,7 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
         f_base = datetime.now()
 
     f_ini_str = f_base.strftime("%d/%m/%Y")
-    f_fin_str = (f_base + timedelta(days=2)).strftime("%d/%m/%Y")
+    f_fin_str = (f_base + timedelta(days=7)).strftime("%d/%m/%Y")
 
     print(f"🔍 [publicaciones.py] Buscando para radicado {radicado} en rango [{f_ini_str} - {f_fin_str}]")
 
@@ -73,6 +73,7 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
         f"_{PORTLET_ID}_fechaInicio": f_ini_str,
         f"_{PORTLET_ID}_fechaFin": f_fin_str,
         f"_{PORTLET_ID}_verTotales": "true",
+        # Quitamos el filtro específico de tipo para traer todo y filtrar en Python
     }
 
     try:
@@ -89,26 +90,29 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
         return []
 
 async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient) -> list:
-    """Parsea la lista inicial filtrando por NOTIFICACIÓN DE ESTADO."""
+    """Parsea la lista inicial filtrando por palabras clave."""
     soup = BeautifulSoup(html, "html.parser")
     results = []
     
-    # Buscamos todos los bloques de resultado. 
-    # Generalmente Liferay envuelve las filas en tablas o divs con clases específicas.
-    # El usuario menciona 'buscar notificación de estado'
-    
-    rows = soup.find_all("tr") # Intento genérico de filas de tabla
+    rows = soup.find_all("tr")
     if not rows:
         rows = soup.find_all("div", class_=re.compile(r"row|item|card", re.I))
 
+    # Palabras clave para considerar una publicación válida
+    KEYWORDS = ["notificacion", "estado", "fijacion", "auto", "edicto"]
+
     for row in rows:
         row_text = row.get_text()
-        # Filtro 1: "NOTIFICACIÓN DE ESTADO"
-        if "NOTIFICACION DE ESTADO" in normalize_text(row_text).upper().replace("Ó", "O"):
-            link_detalle = row.find("a", string=re.compile(r"VER DETALLE|ACCEDER", re.I))
+        norm_row = normalize_text(row_text)
+        
+        # Filtro: Contiene alguna palabra clave
+        is_relevant = any(k in norm_row for k in KEYWORDS)
+        
+        if is_relevant:
+            # Encontrar el enlace de detalle
+            link_detalle = row.find("a", string=re.compile(r"VER DETALLE|ACCEDER|VER", re.I))
             if not link_detalle:
-                # Intentar buscar cualquier link en la fila
-                link_detalle = row.find("a")
+                link_detalle = row.find("a", href=True)
             
             if link_detalle and link_detalle.get("href"):
                 detail_url = link_detalle.get("href")

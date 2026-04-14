@@ -2649,8 +2649,10 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
         created = 0
         updated = 0
         skipped = 0
+        count = 0
 
         for _, row in df.iterrows():
+            count += 1
             radicado = clean_str(row.get(rad_col))
             if not radicado:
                 skipped += 1
@@ -2679,6 +2681,10 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
                 db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado))
                 created += 1
+            
+            # Commit por lotes cada 100 registros
+            if count % 100 == 0:
+                db.commit()
 
         db.commit()
 
@@ -2721,9 +2727,10 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
             raise HTTPException(400, "Falta la columna 'Radicado'")
 
         deleted_cases = 0
-        deleted_events = 0
+        count = 0
 
         for _, row in df.iterrows():
+            count += 1
             radicado = clean_str(row.get(rad_col))
             if not radicado:
                 continue
@@ -2738,6 +2745,10 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
             
             # También limpiar de invalid si está ahí
             db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
+
+            # Commit por lotes cada 100 registros
+            if count % 100 == 0:
+                db.commit()
 
         db.commit()
 
