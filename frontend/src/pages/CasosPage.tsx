@@ -593,12 +593,17 @@ export default function CasosPage() {
             </div>
           )}
 
-          <Button onClick={() => setShowStats(!showStats)} variant="ghost" size="sm" className="text-muted-foreground">
-            {showStats ? <ChevronDown className="h-4 w-4 mr-1 rotate-180 transition-transform" /> : <ChevronDown className="h-4 w-4 mr-1 transition-transform" />}
-            {showStats ? "Ocultar Resumen" : "Mostrar Resumen"}
+          <Button 
+            onClick={() => setShowStats(!showStats)} 
+            variant="outline" 
+            size="sm" 
+            className={`transition-all duration-300 ${showStats ? "border-primary/50 text-primary bg-primary/5" : "border-muted-foreground text-muted-foreground"}`}
+          >
+            {showStats ? <ChevronDown className="h-4 w-4 mr-2 rotate-180 transition-transform" /> : <ChevronDown className="h-4 w-4 mr-2 transition-transform" />}
+            {showStats ? "Contraer Indicadores" : "Expandir Indicadores"}
           </Button>
 
-          <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="outline" size="sm">
+          <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="default" size="sm">
             {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Actualizar todo
           </Button>
