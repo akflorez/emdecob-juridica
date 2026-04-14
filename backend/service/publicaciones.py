@@ -113,18 +113,23 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
                 link_detalle = row.find("a", href=True)
             
             if link_detalle and link_detalle.get("href"):
-                detail_url = link_detalle.get("href")
-                match = await validate_detail_page(detail_url, radicado_completo, client, demandado)
-                if match:
-                    results.append(match)
+                detail_url = link_detalle.get("href").strip()
+                if detail_url and not detail_url.startswith("#") and not detail_url.lower().startswith("javascript"):
+                    match = await validate_detail_page(detail_url, radicado_completo, client, demandado)
+                    if match:
+                        results.append(match)
             
     return results
 
 async def validate_detail_page(url: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
     """Valida el patrón Año-Consecutivo (13-21) y el nombre del demandado."""
     try:
-        if url.startswith("/"):
-            url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
+        url = url.strip()
+        if not url.startswith("http"):
+            if url.startswith("/"):
+                url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
+            else:
+                return None
             
         resp = await client.get(url)
         if resp.status_code != 200: return None

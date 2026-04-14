@@ -292,36 +292,6 @@ export default function BulkSearchPage() {
           </CardContent>
         </Card>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-        <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 space-y-2">
-          <div className="flex items-center gap-2 font-semibold text-primary">
-            <CheckCircle2 className="h-4 w-4" />
-            Búsqueda Inteligente
-          </div>
-          <p className="text-muted-foreground leading-relaxed italic">
-            "Si no cargan resultados con el primer nombre, intentamos automáticamente con el segundo."
-          </p>
-        </div>
-        <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 space-y-2">
-          <div className="flex items-center gap-2 font-semibold text-primary">
-            <History className="h-4 w-4" />
-            Selección Automática
-          </div>
-          <p className="text-muted-foreground leading-relaxed italic">
-            "Identificamos el radicado más reciente basándonos en la fecha técnica de la Rama Judicial."
-          </p>
-        </div>
-        <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 space-y-2">
-          <div className="flex items-center gap-2 font-semibold text-primary">
-            <Badge className="px-1 py-0 h-4">ID</Badge>
-            Data Enriquecida
-          </div>
-          <p className="text-muted-foreground leading-relaxed italic">
-            "Se guarda automáticamente la cédula y el abogado asociado desde tu archivo Excel."
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
