@@ -59,7 +59,7 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
     f_ini_str = f_base.strftime("%d/%m/%Y")
     f_fin_str = (f_base + timedelta(days=20)).strftime("%d/%m/%Y") # 20 días naturales para cubrir rezagos
 
-    print(f"🔍 [publicaciones.py] Buscando para radicado {radicado} en rango [{f_ini_str} - {f_fin_str}]")
+    print(f"[publicaciones.py] Buscando para radicado {radicado} en rango [{f_ini_str} - {f_fin_str}]")
 
     params = {
         "p_p_id": PORTLET_ID,
@@ -76,15 +76,40 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
 
     try:
         async with httpx.AsyncClient(headers=HEADERS, timeout=30, follow_redirects=True, verify=False) as client:
+            # 1. Intento inicial: Búsqueda específica por Despacho (basado en radicado)
             response = await client.get(BASE_URL, params=params)
-            if response.status_code != 200:
-                print(f"⚠️ Error en portal publicaciones: {response.status_code}")
-                return []
+            results = []
+            if response.status_code == 200:
+                results = await parse_results_list(response.text, radicado, client, demandado)
             
-            return await parse_results_list(response.text, radicado, client, demandado)
+            # 2. SEGURO DE BÚSQUEDA (Broad Search): Si no hay resultados y tenemos nombre, buscamos en el Departamento
+            if not results and demandado:
+                print(f"(!) Sin resultados en despacho {id_despacho}. Iniciando busqueda amplia por nombre: {demandado}")
+                
+                # Para la búsqueda amplia usamos el endpoint de /search que es más flexible
+                search_url = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search"
+                broad_params = {
+                    "p_p_id": PORTLET_ID,
+                    "p_p_lifecycle": "0",
+                    "p_p_state": "normal",
+                    "p_p_mode": "view",
+                    f"_{PORTLET_ID}_action": "busqueda",
+                    f"_{PORTLET_ID}_idDepto": id_depto,
+                    f"_{PORTLET_ID}_verTotales": "true",
+                    "q": demandado  # 'q' es el parámetro que usa el buscador general del portal
+                }
+                
+                resp_broad = await client.get(search_url, params=broad_params)
+                print(f"[Broad Search] Codigo de respuesta: {resp_broad.status_code}")
+                if resp_broad.status_code == 200:
+                    results = await parse_results_list(resp_broad.text, radicado, client, demandado)
+                else:
+                    print(f"[Error] Fallo busqueda amplia: Status {resp_broad.status_code}")
+            
+            return results
 
     except Exception as e:
-        print(f"💥 Error consultando publicaciones: {e}")
+        print(f"[Error] Error consultando publicaciones: {e}")
         return []
 
 async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = "") -> list:
@@ -92,13 +117,20 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
     soup = BeautifulSoup(html, "html.parser")
     results = []
     
-    rows = soup.find_all("tr")
+    # Buscamos en todos los contenedores posibles donde Liferay pone resultados
+    rows = soup.find_all(["tr", "li", "h4", "h5"])
+    
+    # Si no hay contenedores claros, tomamos todos los divs que parezcan items
+    if len(rows) < 2:
+        rows = soup.find_all("div", class_=re.compile(r"row|item|card|publication|search-result", re.I))
+        
+    # Último recurso: analizar todos los enlaces del documento
     if not rows:
-        rows = soup.find_all("div", class_=re.compile(r"row|item|card", re.I))
-
-    # Palabras clave flexibles según audio: "vayan filtrando si por el nombre notificación o por el nombre estado"
-    KEYWORDS = ["notificacion", "estado"]
-
+        rows = soup.find_all("a", href=True)
+            
+    # Palabras clave flexibles
+    KEYWORDS = ["notificacion", "estado", "auto", "traslado", "edicto", "fijacion", "requiere", "termino", "resolucion"]
+    
     tasks = []
     seen_urls = set()
 
@@ -118,16 +150,35 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
             if link_detalle and link_detalle.get("href"):
                 detail_url = link_detalle.get("href").strip()
                 if detail_url and not detail_url.startswith("#") and not detail_url.lower().startswith("javascript"):
-                    # Evitar duplicados en la misma lista
+                    # Evitar duplicados
                     if detail_url not in seen_urls:
                         seen_urls.add(detail_url)
-                        tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
+                        
+                        # OPTIMIZACIÓN: Si el link ya es un PDF y el texto tiene el radicado, es un match directo
+                        rad_suffix = radicado_completo[12:21]
+                        formatted_rad = f"{rad_suffix[:4]}-{rad_suffix[4:]}"
+                        link_text = link_detalle.get_text()
+                        
+                        if ".pdf" in detail_url.lower() or ".pdf" in link_text.lower():
+                            if rad_suffix in link_text or formatted_rad in link_text:
+                                results.append({
+                                    "fecha": datetime.now().strftime("%Y-%m-%d"), # Fecha aprox o extraer
+                                    "tipo": "Publicación Directa",
+                                    "descripcion": link_text.strip(),
+                                    "documento_url": detail_url,
+                                    "source_url": detail_url,
+                                    "source_id": hashlib.md5(detail_url.encode()).hexdigest()
+                                })
+                            else:
+                                tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
+                        else:
+                            tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
     
     # Ejecutar todas las validaciones en paralelo (máximo tiempo = el más lento de uno solo)
     # Limitamos a un número razonable para no saturar
     if tasks:
         all_matches = await asyncio.gather(*tasks[:15]) # Máximo 15 validaciones por actuación
-        results = [m for m in all_matches if m]
+        results.extend([m for m in all_matches if m])
             
     return results
 
@@ -175,14 +226,29 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
             titulo = soup.find(["h1", "h2", "h3", "h4"])
             titulo_text = titulo.get_text(strip=True) if titulo else "Notificación de Estado"
             
-            # Buscar el link del PDF
-            doc_link = soup.find("a", href=re.compile(r"\.pdf", re.I))
-            doc_url = doc_link["href"] if doc_link else ""
+            # NUEVO: Buscar el PDF ESPECÍFICO que coincide con el radicado (dígitos 13-21)
+            doc_url = ""
+            all_pdfs = soup.find_all("a", href=re.compile(r"\.pdf", re.I))
+            
+            # Primero buscamos en los enlaces de la página
+            for pdf in all_pdfs:
+                pdf_text = pdf.get_text()
+                pdf_href = pdf["href"]
+                if pattern_suffix in pdf_text or formatted_pattern in pdf_text or \
+                   pattern_suffix in pdf_href or formatted_pattern in pdf_href:
+                    doc_url = pdf_href
+                    print(f"✅ PDF específico encontrado: {pdf_text[:50]}")
+                    break
+            
+            # Si no hay match específico, tomamos el primer PDF que encontremos (fallback)
+            if not doc_url and all_pdfs:
+                doc_url = all_pdfs[0]["href"]
+                
             if doc_url and doc_url.startswith("/"):
                 doc_url = "https://publicacionesprocesales.ramajudicial.gov.co" + doc_url
 
             fecha_str = datetime.now().strftime("%Y-%m-%d")
-            # Buscar fecha
+            # Buscar fecha en la página
             fecha_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}/\d{2}/\d{4})", page_text)
             if fecha_match:
                 fecha_raw = fecha_match.group(0)
@@ -196,8 +262,8 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
             return {
                 "fecha": fecha_str,
                 "tipo": titulo_text,
-                "descripcion": f"Fijación encontrada para radicado ...{pattern_suffix}",
-                "url_documento": doc_url or url,
+                "descripcion": f"Fijación para radicado {formatted_pattern}",
+                "documento_url": doc_url or url,
                 "source_url": url,
                 "source_id": hashlib.md5(url.encode()).hexdigest()
             }

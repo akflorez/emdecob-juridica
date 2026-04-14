@@ -163,8 +163,8 @@ export default function CasosPage() {
     const isFemale = firstWord.endsWith("a") && firstWord !== "jose" || femaleExceptions.includes(firstWord);
     
     return isFemale 
-      ? "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300 dark:border-pink-800" 
-      : "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800";
+      ? "bg-pink-100 text-pink-800 border-pink-200 dark:bg-pink-900/40 dark:text-pink-200 dark:border-pink-800" 
+      : "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-800";
   };
 
   const fetchStats = useCallback(async () => {
@@ -358,7 +358,15 @@ export default function CasosPage() {
     if (!confirm(`¿Marcar todos los casos ${activeTab === "no_leidos" ? "sin leer" : "visibles"} como leídos?`)) return;
     setIsMarkingAllRead(true);
     try {
-      const result = await markReadAll({ search: appliedSearch, juzgado: appliedJuzgado, solo_no_leidos: activeTab === "no_leidos", solo_actualizados_hoy: activeTab === "hoy" });
+      const result = await markReadAll({ 
+        search: appliedSearch, 
+        juzgado: appliedJuzgado, 
+        abogado: appliedAbogado,
+        cedula: appliedCedula,
+        mes_actuacion: appliedMonth,
+        solo_no_leidos: activeTab === "no_leidos", 
+        solo_actualizados_hoy: activeTab === "hoy" 
+      });
       toast({ title: "Marcados como leídos", description: `Se marcaron ${result.updated} caso(s) como leídos` });
       await fetchCases();
       await fetchStats();
@@ -496,7 +504,15 @@ export default function CasosPage() {
 
   const handleDownloadExcel = () => {
     if (activeTab === "no_encontrados" || activeTab === "pendientes") return;
-    downloadCasesExcel({ search: appliedSearch, juzgado: appliedJuzgado, solo_no_leidos: activeTab === "no_leidos", solo_actualizados_hoy: activeTab === "hoy" });
+    downloadCasesExcel({ 
+      search: appliedSearch, 
+      juzgado: appliedJuzgado, 
+      abogado: appliedAbogado,
+      cedula: appliedCedula,
+      mes_actuacion: appliedMonth,
+      solo_no_leidos: activeTab === "no_leidos", 
+      solo_actualizados_hoy: activeTab === "hoy" 
+    });
     toast({ title: "Descargando...", description: "El archivo Excel se descargará en unos segundos" });
   };
 
@@ -844,7 +860,7 @@ export default function CasosPage() {
                     <TableHead className="hidden md:table-cell">Demandante</TableHead>
                     <TableHead className="hidden lg:table-cell">Demandado</TableHead>
                     <TableHead>Abogado</TableHead>
-                    <TableHead className="hidden lg:table-cell">Cédula</TableHead>
+                    <TableHead>Cédula</TableHead>
                     <TableHead className="hidden xl:table-cell">Juzgado</TableHead>
                     <TableHead className="w-24">Últ. Act.</TableHead>
                     <TableHead className="w-28 text-center">Acciones</TableHead>
@@ -871,7 +887,7 @@ export default function CasosPage() {
                           </Badge>
                         ) : "—"}
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
                       <TableCell>

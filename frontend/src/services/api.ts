@@ -310,6 +310,9 @@ export function getAbogados() {
 export function downloadCasesExcel(params: {
   search?: string;
   juzgado?: string;
+  abogado?: string;
+  cedula?: string;
+  mes_actuacion?: string;
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
 }) {
@@ -317,6 +320,9 @@ export function downloadCasesExcel(params: {
   const qs = new URLSearchParams();
   if (params.search) qs.set("search", params.search);
   if (params.juzgado) qs.set("juzgado", params.juzgado);
+  if (params.abogado) qs.set("abogado", params.abogado);
+  if (params.cedula) qs.set("cedula", params.cedula);
+  if (params.mes_actuacion) qs.set("mes_actuacion", params.mes_actuacion);
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
   const q = qs.toString();
@@ -357,6 +363,9 @@ export function markReadBulk(caseIds: number[]) {
 export function markReadAll(params: {
   search?: string;
   juzgado?: string;
+  abogado?: string;
+  cedula?: string;
+  mes_actuacion?: string;
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
 }) {

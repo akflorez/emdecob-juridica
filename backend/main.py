@@ -1933,6 +1933,7 @@ def download_cases_excel(
     juzgado: Optional[str] = Query(default=None),
     cedula: Optional[str] = Query(default=None),
     abogado: Optional[str] = Query(default=None),
+    mes_actuacion: Optional[str] = Query(default=None),
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
 ):
@@ -1956,6 +1957,14 @@ def download_cases_excel(
 
     if abogado:
         q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
+
+    if mes_actuacion:
+        try:
+            year, month = mes_actuacion.split("-")
+            from sqlalchemy import extract
+            q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
+        except:
+            pass
 
     cases = q.order_by(desc(Case.ultima_actuacion)).all()
 
