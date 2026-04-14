@@ -2961,17 +2961,19 @@ async def save_new_publications(case: Case, db: Session):
     try:
         from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango
         
+        from backend.models import CaseEvent
         # 1. Obtener actuaciones del caso
-        actuaciones_json = case.actuaciones_json or "[]"
-        import json
-        actuaciones = json.loads(actuaciones_json)
+        eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
+        actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
         
         relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
         
         if not relevantes and actuaciones:
-            # Si ninguna se llama "auto" o "estado", al menos buscamos en la más reciente
+            # Si ninguna se llama "auto" o "estado", al menos buscamos en las más recientes
             # para no dejar la sincronización manual sin ejecutar nada.
-            relevantes = [actuaciones[0]]
+            # Aseguramos ordenar por fecha para tomar la verdaderamente más reciente
+            acts_sorted = sorted(actuaciones, key=lambda a: a.get("fechaActuacion", ""))
+            relevantes = [acts_sorted[-1]] # La última (más reciente)
             
         if not relevantes:
             return
@@ -2981,22 +2983,7 @@ async def save_new_publications(case: Case, db: Session):
             fecha_act_str = act.get("fechaActuacion") or ""
             if not fecha_act_str: continue
             
-            # Queremos buscar desde el día de la actuación hasta 2 días hábiles después
             try:
-                dt_act = datetime.strptime(fecha_act_str[:10], "%Y-%m-%d")
-                
-                # Calcular ventana (mismo día + 2 días hábiles)
-                # Lógica simple de días hábiles (Sáb=5, Dom=6)
-                window = []
-                curr = dt_act
-                while len(window) < 3: # Hoy + 2 hábiles
-                    if curr.weekday() < 5: # 0-4 es L-V
-                        window.append(curr)
-                    curr += timedelta(days=1)
-                
-                f_ini = window[0].strftime("%d/%m/%Y")
-                f_fin = window[-1].strftime("%d/%m/%Y")
-                
                 results = await consultar_publicaciones_rango(case.radicado, fecha_act_str, case.demandado or "")
                 
                 for p in results:

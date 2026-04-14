@@ -57,7 +57,7 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
         f_base = datetime.now()
 
     f_ini_str = f_base.strftime("%d/%m/%Y")
-    f_fin_str = (f_base + timedelta(days=7)).strftime("%d/%m/%Y")
+    f_fin_str = (f_base + timedelta(days=20)).strftime("%d/%m/%Y") # 20 días naturales para cubrir rezagos
 
     print(f"🔍 [publicaciones.py] Buscando para radicado {radicado} en rango [{f_ini_str} - {f_fin_str}]")
 
