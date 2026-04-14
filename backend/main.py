@@ -3012,12 +3012,12 @@ async def save_new_publications(case: Case, db: Session):
                             fecha_publicacion=parse_fecha_pub(p["fecha"]),
                             tipo_publicacion=p["tipo"],
                             descripcion=p["descripcion"],
-                            documento_url=p["url_documento"],
+                            documento_url=p["documento_url"],
                             source_url=p.get("source_url"),
                             source_id=p["source_id"]
                         ))
                     else:
-                        exists.documento_url = p["url_documento"]
+                        exists.documento_url = p["documento_url"]
             except Exception as e:
                 print(f"⚠️ Error procesando ventana de publicación para {case.radicado}: {e}")
                 

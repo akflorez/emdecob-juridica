@@ -600,29 +600,44 @@ export default function CasosPage() {
 
       {/* Tabs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Button variant={activeTab === "todos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("todos")}>
-          <List className="h-6 w-6" />
-          <div className="text-center"><div className="font-semibold">Validados</div><div className="text-xs opacity-80">{stats?.total_validos || 0}</div></div>
+        <Button variant={activeTab === "todos" ? "default" : "outline"} className="h-auto py-6 flex flex-col items-center gap-2" onClick={() => handleTabChange("todos")}>
+          <List className="h-8 w-8" />
+          <div className="text-center">
+            <div className="font-bold text-lg">Validados</div>
+            <div className="text-xl font-bold opacity-90">{stats?.total_validos || 0}</div>
+          </div>
         </Button>
 
-        <Button variant={activeTab === "pendientes" ? "secondary" : "outline"} className={`h-auto py-4 flex flex-col items-center gap-2 ${activeTab === "pendientes" ? "bg-yellow-500/20 border-yellow-500 text-yellow-700 dark:text-yellow-300" : ""}`} onClick={() => handleTabChange("pendientes")}>
-          <Clock className="h-6 w-6" />
-          <div className="text-center"><div className="font-semibold">Pendientes</div><div className="text-xs opacity-80">{stats?.total_pendientes || 0}</div></div>
+        <Button variant={activeTab === "pendientes" ? "secondary" : "outline"} className={`h-auto py-6 flex flex-col items-center gap-2 ${activeTab === "pendientes" ? "bg-yellow-500/20 border-yellow-500 text-yellow-700 dark:text-yellow-300" : ""}`} onClick={() => handleTabChange("pendientes")}>
+          <Clock className="h-8 w-8" />
+          <div className="text-center">
+            <div className="font-bold text-lg">Pendientes</div>
+            <div className="text-xl font-bold opacity-90">{stats?.total_pendientes || 0}</div>
+          </div>
         </Button>
 
-        <Button variant={activeTab === "no_leidos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_leidos")}>
-          <Bell className="h-6 w-6" />
-          <div className="text-center"><div className="font-semibold">Sin Leer</div><div className="text-xs opacity-80">{stats?.total_no_leidos || 0}</div></div>
+        <Button variant={activeTab === "no_leidos" ? "default" : "outline"} className="h-auto py-6 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_leidos")}>
+          <Bell className="h-8 w-8" />
+          <div className="text-center">
+            <div className="font-bold text-lg">Sin Leer</div>
+            <div className="text-xl font-bold opacity-90">{stats?.total_no_leidos || 0}</div>
+          </div>
         </Button>
 
-        <Button variant={activeTab === "hoy" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("hoy")}>
-          <Calendar className="h-6 w-6" />
-          <div className="text-center"><div className="font-semibold">Hoy</div><div className="text-xs opacity-80">{stats?.total_actualizados_hoy || 0}</div></div>
+        <Button variant={activeTab === "hoy" ? "default" : "outline"} className="h-auto py-6 flex flex-col items-center gap-2" onClick={() => handleTabChange("hoy")}>
+          <Calendar className="h-8 w-8" />
+          <div className="text-center">
+            <div className="font-bold text-lg">Hoy</div>
+            <div className="text-xl font-bold opacity-90">{stats?.total_actualizados_hoy || 0}</div>
+          </div>
         </Button>
 
-        <Button variant={activeTab === "no_encontrados" ? "destructive" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_encontrados")}>
-          <AlertTriangle className="h-6 w-6" />
-          <div className="text-center"><div className="font-semibold">No Encontrados</div><div className="text-xs opacity-80">{stats?.total_invalidos || 0}</div></div>
+        <Button variant={activeTab === "no_encontrados" ? "destructive" : "outline"} className="h-auto py-6 flex flex-col items-center gap-2" onClick={() => handleTabChange("no_encontrados")}>
+          <AlertTriangle className="h-8 w-8" />
+          <div className="text-center">
+            <div className="font-bold text-lg">No Encontrados</div>
+            <div className="text-xl font-bold opacity-90">{stats?.total_invalidos || 0}</div>
+          </div>
         </Button>
       </div>
 
@@ -872,10 +887,10 @@ export default function CasosPage() {
                       <TableCell className="px-2">
                         <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} />
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <div className="flex items-center gap-1">
-                          {c.unread && <Badge variant="default" className="animate-pulse text-[10px] px-1 py-0">N</Badge>}
-                          <span className={c.unread ? "text-primary font-bold" : ""}>{c.radicado.length > 23 ? `${c.radicado.substring(0, 23)}...` : c.radicado}</span>
+                      <TableCell className="font-mono py-4">
+                        <div className="flex items-center gap-2">
+                          {c.unread && <Badge variant="default" className="animate-pulse text-[11px] px-1.5 py-0.5">NUEVO</Badge>}
+                          <span className={`${c.unread ? "text-primary font-bold" : "font-semibold"} text-base tracking-tight`}>{c.radicado}</span>
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
