@@ -45,6 +45,7 @@ from .service.rama import (
     consulta_por_nombre,
     RamaError,
 )
+from .apply_robust_migrations import run_migrations
 from .service.publicaciones import consultar_publicaciones, parse_fecha_pub
 from .service.bulk_orchestrator import run_name_search_job, log_job
 
@@ -601,6 +602,7 @@ async def lifespan(app: FastAPI):
     global auto_refresh_task, auto_refresh_running, auto_refresh_stats
 
     print("[START] Iniciando EMDECOB Consultas...")
+    run_migrations()
     Base.metadata.create_all(bind=engine)
     _ensure_default_user()
     asyncio.create_task(notification_flush_loop())
