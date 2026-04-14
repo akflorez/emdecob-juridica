@@ -30,14 +30,14 @@ def is_relevant_actuacion(descripcion: str) -> bool:
     # Según audio: "si hay una actuación que diga fijación de estado o que diga auto"
     return "fijacion estado" in norm or "auto" in norm
 
-async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = None):
+async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = None, demandado: str = ""):
     """
     Busca publicaciones para un radicado basándose en la fecha de la actuación.
     Siguiendo las instrucciones del usuario:
     - Despacho: primeros 12 dígitos.
-    - Rango: [Fecha Actuación, Fecha Actuación + 2 días].
-    - Filtro: "NOTIFICACIÓN DE ESTADO".
-    - Validar: últimos 9 dígitos en el nombre/detalle.
+    - Rango: [Fecha Actuación, Fecha Actuación + 7 días].
+    - Filtro: Palabras clave "Notificación" o "Estado".
+    - Validar: Patrón Año-Consecutivo (dígitos 13-21) en el PDF o contenido.
     """
     if not radicado or len(radicado) < 12:
         return []
@@ -45,8 +45,7 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
     id_depto = radicado[:2]
     id_despacho = radicado[:12]
     
-    # 1. Definir rango de fechas (T, T+7)
-    # Ampliamos a 7 días porque a veces la publicación ocurre días después del auto/fijación
+    # Rango de 7 días porque a veces la publicación ocurre días después
     try:
         if isinstance(fecha_actuacion, str):
             f_base = datetime.strptime(fecha_actuacion[:10], "%Y-%m-%d")
@@ -73,24 +72,23 @@ async def consultar_publicaciones_rango(radicado: str, fecha_actuacion: str = No
         f"_{PORTLET_ID}_fechaInicio": f_ini_str,
         f"_{PORTLET_ID}_fechaFin": f_fin_str,
         f"_{PORTLET_ID}_verTotales": "true",
-        # Quitamos el filtro específico de tipo para traer todo y filtrar en Python
     }
 
     try:
-        async with httpx.AsyncClient(headers=HEADERS, timeout=30, follow_redirects=True) as client:
+        async with httpx.AsyncClient(headers=HEADERS, timeout=30, follow_redirects=True, verify=False) as client:
             response = await client.get(BASE_URL, params=params)
             if response.status_code != 200:
                 print(f"⚠️ Error en portal publicaciones: {response.status_code}")
                 return []
             
-            return await parse_results_list(response.text, radicado, client)
+            return await parse_results_list(response.text, radicado, client, demandado)
 
     except Exception as e:
         print(f"💥 Error consultando publicaciones: {e}")
         return []
 
-async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient) -> list:
-    """Parsea la lista inicial filtrando por palabras clave."""
+async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = "") -> list:
+    """Parsea la lista inicial filtrando por palabras clave y validando el detalle."""
     soup = BeautifulSoup(html, "html.parser")
     results = []
     
@@ -98,8 +96,8 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
     if not rows:
         rows = soup.find_all("div", class_=re.compile(r"row|item|card", re.I))
 
-    # Palabras clave para considerar una publicación válida
-    KEYWORDS = ["notificacion", "estado", "fijacion", "auto", "edicto"]
+    # Palabras clave flexibles según audio: "vayan filtrando si por el nombre notificación o por el nombre estado"
+    KEYWORDS = ["notificacion", "estado"]
 
     for row in rows:
         row_text = row.get_text()
@@ -116,14 +114,14 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
             
             if link_detalle and link_detalle.get("href"):
                 detail_url = link_detalle.get("href")
-                match = await validate_detail_page(detail_url, radicado_completo, client)
+                match = await validate_detail_page(detail_url, radicado_completo, client, demandado)
                 if match:
                     results.append(match)
             
     return results
 
-async def validate_detail_page(url: str, radicado_completo: str, client: httpx.AsyncClient):
-    """Valida los últimos 9 dígitos del radicado en el detalle."""
+async def validate_detail_page(url: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
+    """Valida el patrón Año-Consecutivo (13-21) y el nombre del demandado."""
     try:
         if url.startswith("/"):
             url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
@@ -133,29 +131,50 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
         
         soup = BeautifulSoup(resp.text, "html.parser")
         page_text = soup.get_text()
+        norm_page = normalize_text(page_text)
         
-        # Validación 2: Los últimos 9 dígitos del radicado
-        last_9 = radicado_completo[-9:]
+        # Patrón Año-Consecutivo: dígitos 13 al 21 (9 dígitos en total)
+        # Ejemplo: 11001418902720250010600 -> Año 2025, Consecutivo 00106
+        # index 12 to 21
+        pattern_suffix = radicado_completo[12:21] 
+        year = pattern_suffix[:4]
+        consecutive = pattern_suffix[4:]
+        formatted_pattern = f"{year}-{consecutive}"
         
-        if last_9 in page_text:
-            print(f"✅ Match encontrado para suffix {last_9} en {url}")
+        has_match = False
+        if pattern_suffix in page_text or formatted_pattern in page_text:
+            print(f"✅ Match por radicado: {formatted_pattern} en {url}")
+            has_match = True
+        elif demandado and normalize_text(demandado) in norm_page:
+            print(f"✅ Match por demandado: {demandado} en {url}")
+            has_match = True
+            
+        if has_match:
             titulo = soup.find(["h1", "h2", "h3", "h4"])
             titulo_text = titulo.get_text(strip=True) if titulo else "Notificación de Estado"
             
+            # Buscar el link del PDF
             doc_link = soup.find("a", href=re.compile(r"\.pdf", re.I))
             doc_url = doc_link["href"] if doc_link else ""
             if doc_url and doc_url.startswith("/"):
                 doc_url = "https://publicacionesprocesales.ramajudicial.gov.co" + doc_url
 
             fecha_str = datetime.now().strftime("%Y-%m-%d")
-            fecha_match = re.search(r"(\d{4}-\d{2}-\d{2})", page_text)
+            # Buscar fecha
+            fecha_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}/\d{2}/\d{4})", page_text)
             if fecha_match:
-                fecha_str = fecha_match.group(1)
+                fecha_raw = fecha_match.group(0)
+                if "/" in fecha_raw:
+                    try:
+                        fecha_str = datetime.strptime(fecha_raw, "%d/%m/%Y").strftime("%Y-%m-%d")
+                    except: pass
+                else:
+                    fecha_str = fecha_raw
 
             return {
                 "fecha": fecha_str,
                 "tipo": titulo_text,
-                "descripcion": f"Fijación encontrada para radicado ...{last_9}",
+                "descripcion": f"Fijación encontrada para radicado ...{pattern_suffix}",
                 "url_documento": doc_url or url,
                 "source_url": url,
                 "source_id": hashlib.md5(url.encode()).hexdigest()

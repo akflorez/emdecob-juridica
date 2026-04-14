@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, and_, case, func
+from sqlalchemy import or_, desc, and_, case as sql_case, func
 from pydantic import BaseModel
 from io import BytesIO
 import pandas as pd
@@ -54,6 +54,9 @@ from .service.bulk_orchestrator import run_name_search_job, log_job
 # ZONA HORARIA COLOMBIA
 # =========================
 TIMEZONE_CO = pytz.timezone("America/Bogota")
+
+# Global Lock to prevent multiple background syncs at once
+REFRESH_LOCK = asyncio.Lock()
 
 RAMA_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1785,6 +1788,17 @@ def delete_all_invalid_radicados(db: Session = Depends(get_db)):
 
 
 # =========================
+# ABOGADOS LIST
+# =========================
+@app.get("/cases/abogados")
+def list_abogados(db: Session = Depends(get_db)):
+    """Retorna una lista única de nombres de abogados para sugerencias en el filtro."""
+    results = db.query(Case.abogado).filter(Case.abogado.isnot(None), Case.abogado != "").distinct().all()
+    # extraemos el primer elemento de cada tupla y filtramos vacíos
+    names = sorted([r[0] for r in results if r[0]])
+    return names
+
+# =========================
 # CASES LIST
 # =========================
 @app.get("/cases")
@@ -1801,7 +1815,7 @@ def list_cases(
     solo_actualizados_hoy: bool = Query(default=False),
     con_documentos: Optional[bool] = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=2000),
+    page_size: int = Query(default=20, ge=1, le=2000),
 ):
     q = db.query(Case)
 
@@ -1864,14 +1878,18 @@ def list_cases(
         )
     ).count()
 
-    unread_order = case(
+    unread_order = sql_case(
         (and_(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash), 0),
         (and_(Case.current_hash.isnot(None), Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count), 0),
         else_=1
     )
 
     items = (
-        q.order_by(unread_order, desc(func.substr(Case.radicado, 13, 4)), desc(Case.ultima_actuacion), desc(Case.updated_at))
+        q.order_by(
+            unread_order,
+            desc(Case.ultima_actuacion),
+            desc(Case.updated_at)
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -2257,7 +2275,7 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
         radicado = case.radicado
         fecha_act = item_act.get("event_date") # "YYYY-MM-DD"
         
-        pubs = await consultar_publicaciones_rango(radicado, fecha_act)
+        pubs = await consultar_publicaciones_rango(radicado, fecha_act, case.demandado or "")
         
         if pubs:
             for p in pubs:
@@ -2304,6 +2322,7 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
         db.flush()
 
     return await events_logic(c, db)
+
 
 async def events_logic(c: Case, db: Session):
     try:
@@ -2777,12 +2796,20 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 # REFRESH ALL (MANUAL)
 # =========================
 @app.post("/cases/refresh-all")
-async def refresh_all_cases():
-    try:
-        result = await do_auto_refresh()
-        return result
-    except Exception as e:
-        raise HTTPException(500, f"Error interno: {str(e)}")
+async def refresh_all_cases(db: Session = Depends(get_db)):
+    """Dispara una tarea en segundo plano para recorrer todos los casos válidos."""
+    if REFRESH_LOCK.locked():
+        return {"ok": False, "message": "Ya existe una actualización masiva en curso. Por favor, espere a que termine."}
+    
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(do_auto_refresh_with_lock, db)
+    return {"ok": True, "message": "Sincronización masiva iniciada en segundo plano."}
+
+async def do_auto_refresh_with_lock(db: Session):
+    if REFRESH_LOCK.locked():
+        return
+    async with REFRESH_LOCK:
+        await do_auto_refresh()
 
 
 # =========================
@@ -2966,7 +2993,7 @@ async def save_new_publications(case: Case, db: Session):
                 f_ini = window[0].strftime("%d/%m/%Y")
                 f_fin = window[-1].strftime("%d/%m/%Y")
                 
-                results = await consultar_publicaciones_rango(case.radicado, f_ini, f_fin)
+                results = await consultar_publicaciones_rango(case.radicado, fecha_act_str, case.demandado or "")
                 
                 for p in results:
                     exists = db.query(CasePublication).filter(

@@ -64,6 +64,7 @@ import {
   retryBatchInvalidRadicados,
   deleteAllInvalidRadicados,
   getStats,
+  getAbogados,
   validateBatch,
   deleteCase,
   type CaseRow,
@@ -130,9 +131,10 @@ export default function CasosPage() {
   const [isDeletingCase, setIsDeletingCase] = useState(false);
   
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
+  const [abogadosList, setAbogadosList] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const pageSize = 50;
+  const pageSize = 20;
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -153,10 +155,14 @@ export default function CasosPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const data = await getStats();
-      setStats(data);
+      const [statsData, abogadosData] = await Promise.all([
+        getStats(),
+        getAbogados()
+      ]);
+      setStats(statsData);
+      setAbogadosList(abogadosData || []);
     } catch (error) {
-      console.error("Error cargando stats:", error);
+      console.error("Error cargando stats/abogados:", error);
     }
   }, []);
 
@@ -618,7 +624,15 @@ export default function CasosPage() {
                 </div>
                 <div className="w-full sm:w-48">
                   <label className="text-xs text-muted-foreground mb-1 block">Abogado</label>
-                  <Input placeholder="Filtrar..." value={abogadoInput} onChange={(e) => setAbogadoInput(e.target.value)} />
+                  <Input 
+                    placeholder="Filtrar..." 
+                    value={abogadoInput} 
+                    onChange={(e) => setAbogadoInput(e.target.value)} 
+                    list="abogados-list"
+                  />
+                  <datalist id="abogados-list">
+                    {abogadosList.map(a => <option key={a} value={a} />)}
+                  </datalist>
                 </div>
                 <div className="w-full sm:w-48">
                   <label className="text-xs text-muted-foreground mb-1 block">Mes actuación</label>
@@ -812,7 +826,7 @@ export default function CasosPage() {
                     <TableHead className="min-w-[180px]">Radicado</TableHead>
                     <TableHead className="hidden md:table-cell">Demandante</TableHead>
                     <TableHead className="hidden lg:table-cell">Demandado</TableHead>
-                    <TableHead className="hidden xl:table-cell">Cédula</TableHead>
+                    <TableHead className="hidden xl:table-cell">Abogado</TableHead>
                     <TableHead className="hidden xl:table-cell">Juzgado</TableHead>
                     <TableHead className="w-24">Últ. Act.</TableHead>
                     <TableHead className="w-28 text-center">Acciones</TableHead>
@@ -832,7 +846,11 @@ export default function CasosPage() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
-                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        <Badge variant="secondary" className="font-normal border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800">
+                          {c.abogado || "—"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
                       <TableCell>

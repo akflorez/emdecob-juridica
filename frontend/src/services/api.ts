@@ -298,6 +298,13 @@ export function getCases(params: GetCasesParams) {
 }
 
 /** ---------------------------
+ * LISTAR ABOGADOS (SUGERENCIAS)
+ * -------------------------- */
+export function getAbogados() {
+  return apiFetch<string[]>("/cases/abogados");
+}
+
+/** ---------------------------
  * DESCARGAR CASOS EXCEL
  * -------------------------- */
 export function downloadCasesExcel(params: {
