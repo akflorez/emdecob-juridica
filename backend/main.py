@@ -2296,14 +2296,14 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
                         fecha_publicacion=f_pub,
                         tipo_publicacion=p.get("tipo"),
                         descripcion=p.get("descripcion"),
-                        documento_url=p.get("url_documento"),
+                        documento_url=p.get("documento_url"),
                         source_url=p.get("source_url"),
                         source_id=p.get("source_id")
                     ))
             db_session.commit()
-            print(f"✅ [sync-pub] {len(pubs)} publicaciones sincronizadas para {radicado}")
+            print(f"[sync-pub] {len(pubs)} publicaciones sincronizadas para {radicado}")
     except Exception as e:
-        print(f"⚠️ [sync-pub] Error sincronizando publicaciones: {e}")
+        print(f"[sync-pub] Error sincronizando publicaciones: {e}")
 
 @app.get("/cases/id/{case_id}/events")
 async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
@@ -2400,7 +2400,7 @@ async def events_logic(c: Case, db: Session):
                 
                 # --- NUEVO: Disparo automático a Publicaciones Procesales ---
                 if is_relevant_actuacion(it.get("title") or ""):
-                    print(f"📢 [events] Actuación relevante encontrada: {it.get('title')}. Disparando búsqueda a Publicaciones.")
+                    print(f"[events] Actuación relevante encontrada: {it.get('title')}. Disparando búsqueda a Publicaciones.")
                     asyncio.create_task(trigger_publications_sync(c, it, db))
         
         db.commit()
@@ -2990,7 +2990,7 @@ async def save_new_publications(case: Case, db: Session):
 
         # 3. Limitar a las 5 más recientes para evitar Timeouts (504)
         relevantes = relevantes[:5]
-        print(f"🚀 Iniciando búsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
+        print(f"[refresh] Iniciando búsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
 
         # 3. Para cada actuación relevante, buscar en Publicaciones en su ventana de tiempo
         for act in relevantes:

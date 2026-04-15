@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 
 # Configuración
 BASE_URL = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales"
-PORTLET_ID = "p_p_id_visualizacion_publicaciones_WAR_publicacionesprocesalesportlet"
+SEARCH_URL = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -48,47 +48,35 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     f_ini_str = f_base.strftime("%d/%m/%Y")
     f_fin_str = (f_base + timedelta(days=20)).strftime("%d/%m/%Y")
 
-    print(f"🔍 [publicaciones.py] Buscando para radicado {rad_clean} en rango [{f_ini_str} - {f_fin_str}]")
+    print(f"[search] [publicaciones.py] Buscando para radicado {rad_clean} en rango [{f_ini_str} - {f_fin_str}]")
 
-    search_url = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search"
+    # Extraer fragmento Año-Consecutivo (Dígitos 13-21)
+    # Ejemplo: 110014189027 2024 01322 00 -> 2024-01322
+    pattern_suffix = rad_clean[12:21]
+    year = pattern_suffix[:4]
+    consecutive = pattern_suffix[4:]
+    search_query = f"{year}-{consecutive}"
 
-    common_params = {
-        "p_p_id": PORTLET_ID,
-        "p_p_lifecycle": "2",
-        "p_p_state": "normal",
-        "p_p_mode": "view",
-        "p_p_resource_id": "consultarPublicaciones",
-        "p_p_cacheability": "cacheLevelPage",
-        "p_p_col_id": "column-1",
-        "p_p_col_count": "1",
-        "fechaInicial": f_ini_str,
-        "fechaFinal": f_fin_str,
-    }
-
-    # Búsqueda 1: Por radicado exacto
-    params1 = common_params.copy()
-    params1["radicado"] = rad_clean
-
-    # Búsqueda 2: General 'q' con radicado
-    params2 = common_params.copy()
-    params2["q"] = rad_clean
-
-    # Búsqueda 3: General 'q' con nombre (si existe)
+    # Búsqueda 1: Por el fragmento Año-Consecutivo
+    params1 = {"q": search_query}
+    # Búsqueda 2: Por el radicado completo
+    params2 = {"q": rad_clean}
+    # Búsqueda 3: Por nombre (si existe)
     search_tasks = [params1, params2]
     if demandado:
-        params3 = common_params.copy()
-        params3["q"] = demandado
-        search_tasks.append(params3)
+        search_tasks.append({"q": demandado})
 
     try:
         async with httpx.AsyncClient(headers=HEADERS, timeout=30, follow_redirects=True, verify=False) as client:
-            http_tasks = [client.get(search_url, params=p) for p in search_tasks]
+            http_tasks = [client.get(SEARCH_URL, params=p) for p in search_tasks]
             responses = await asyncio.gather(*http_tasks, return_exceptions=True)
             
             for resp in responses:
                 if isinstance(resp, httpx.Response) and resp.status_code == 200:
                     found = await parse_results_list(resp.text, rad_clean, client, demandado)
                     results.extend(found)
+    except Exception as e:
+        print(f"💥 Error en el proceso de scraping: {e}")
                     
     except Exception as e:
         print(f"💥 Error en el proceso de scraping: {e}")
@@ -106,10 +94,13 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
 async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
     """Extrae enlaces de interés de la página de resultados."""
     soup = BeautifulSoup(html, "html.parser")
-    rows = soup.find_all("tr")
-    if not rows:
-        rows = soup.find_all("li", class_="list-group-item") or soup.find_all("div", class_="row")
+    # Buscar diferentes contenedores posibles (Tablas, Listas, Cards)
+    rows = soup.find_all(["tr", "li", "article"])
     
+    if not rows:
+        # Buscar divs que parezcan items de lista o cards
+        rows = soup.find_all("div", class_=re.compile(r"(list-group-item|card|row|entry)"))
+            
     if not rows:
         # Fallback agresivo: buscar cualquier link que parezca una publicación
         rows = soup.find_all("a", href=True)
@@ -128,7 +119,9 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
             link = row.find("a", href=True) if hasattr(row, 'find') else row
             if not link or not link.has_attr('href'): continue
             
-            detail_url = link["href"]
+            detail_url = link["href"].strip()
+            if not detail_url or detail_url.startswith("javascript:") or detail_url == "#":
+                continue
             if detail_url in seen_urls: continue
             seen_urls.add(detail_url)
             
@@ -143,13 +136,20 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
     """Valida si en la página de detalle está el PDF del radicado (Dígitos 13-21)."""
     try:
         url = url.strip()
+        if not url or url == "#" or url.startswith("javascript:"):
+            return None
+            
         if not url.startswith("http"):
             if url.startswith("/"):
                 url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
             else:
                 return None
             
-        resp = await client.get(url)
+        try:
+            resp = await client.get(url, timeout=15)
+        except Exception as e:
+            print(f"[validate] Exception calling {url}: {e}")
+            return None
         if resp.status_code != 200: return None
         
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -176,8 +176,14 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
                     has_match = True
             
         if has_match:
-            titulo = soup.find(["h1", "h2", "h3", "h4"])
+            # Intentar encontrar un título más descriptivo
+            titulo = soup.find(class_=re.compile(r"(title|entry-title|header)", re.I))
+            if not titulo:
+                titulo = soup.find(["h1", "h2", "h3", "h4"])
+            
             titulo_text = titulo.get_text(strip=True) if titulo else "Notificación de Estado"
+            if titulo_text.lower() in ["navegacion", "home", "search", "inicio"]:
+                titulo_text = "Fijación/Estado Procesal"
             
             # Buscar el PDF ESPECÍFICO (Año-Consecutivo)
             doc_url = ""
