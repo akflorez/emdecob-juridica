@@ -3003,7 +3003,12 @@ async def save_new_publications(case: Case, db: Session):
             if not fecha_act_str: continue
             
             try:
-                results = await consultar_publicaciones_rango(case.radicado, fecha_act_str, case.demandado or "")
+                results = await consultar_publicaciones_rango(
+                    case.radicado, 
+                    fecha_act_str, 
+                    demandante=case.demandante or "",
+                    demandado=case.demandado or ""
+                )
                 
                 for p in results:
                     exists = db.query(CasePublication).filter(
