@@ -110,12 +110,12 @@ async def notification_flush_loop():
                 and _already_flushed_today != hoy
                 and _notification_accumulator
             ):
-                print(f"📧 [flush-loop] Son las {NOTIFICATION_FLUSH_HOUR}:00 — enviando {len(_notification_accumulator)} casos acumulados")
+                print(f"[flush-loop] Son las {NOTIFICATION_FLUSH_HOUR}:00 — enviando {len(_notification_accumulator)} casos acumulados")
                 send_grouped_notification(list(_notification_accumulator))
                 _notification_accumulator.clear()
                 _already_flushed_today = hoy
         except Exception as e:
-            print(f"⚠️ [flush-loop] Error: {e}")
+            print(f"[flush-loop] Error: {e}")
 
 
 # =========================
@@ -139,7 +139,7 @@ async def auto_refresh_loop():
             result = await do_auto_refresh()
 
             auto_refresh_stats["last_result"] = result
-            print(f"✅ Ciclo completo: {result.get('checked', 0)} revisados, {result.get('updated_cases', 0)} con cambios")
+            print(f"[*] Ciclo completo: {result.get('checked', 0)} revisados, {result.get('updated_cases', 0)} con cambios")
 
             hora = now_colombia().hour
             if hora >= NOTIFICATION_FLUSH_HOUR and _notification_accumulator:
@@ -183,11 +183,13 @@ async def do_auto_refresh() -> dict:
     try:
         db = get_fresh_db()
 
+        BATCH_SIZE = 50
+
         case_ids = [
             row[0] for row in
             db.query(Case.id)
             .filter(Case.juzgado.isnot(None))
-            .order_by(desc(func.substr(Case.radicado, 13, 4)), desc(Case.last_check_at.asc()))
+            .order_by(Case.last_check_at.asc())
             .limit(BATCH_SIZE)
             .all()
         ]
@@ -198,7 +200,7 @@ async def do_auto_refresh() -> dict:
         if not case_ids:
             return {"ok": True, "checked": 0, "updated_cases": 0, "message": "No hay casos para verificar"}
 
-        print(f"📊 Verificando {len(case_ids)} de {total_cases} casos...")
+        print(f"[stats] Verificando {len(case_ids)} de {total_cases} casos...")
 
         for i, case_id in enumerate(case_ids):
             try:
@@ -3019,10 +3021,10 @@ async def save_new_publications(case: Case, db: Session):
                     else:
                         exists.documento_url = p["documento_url"]
             except Exception as e:
-                print(f"⚠️ Error procesando ventana de publicación para {case.radicado}: {e}")
+                print(f"[refresh] Error procesando ventana de publicación para {case.radicado}: {e}")
                 
     except Exception as e:
-        print(f"💥 Error guardando publicaciones: {e}")
+        print(f"[refresh] Error guardando publicaciones: {e}")
 
 @app.post("/admin/backfill-publicaciones")
 async def backfill_publicaciones(db: Session = Depends(get_db)):

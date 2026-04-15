@@ -5,10 +5,11 @@ import re
 from datetime import datetime, date, timedelta
 import hashlib
 from typing import List, Dict, Optional
+import random
 
 # Configuración
 BASE_URL = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales"
-SEARCH_URL = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search"
+SEARCH_URL = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/inicio"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -24,62 +25,66 @@ def normalize_text(text: str) -> str:
 
 def is_relevant_actuacion(text: str) -> bool:
     text = normalize_text(text)
-    keywords = ["auto", "notificacion", "estado", "traslado", "termino", "requiere", "despacho"]
+    keywords = ["auto", "notificacion", "estado", "traslado", "termino", "requiere", "despacho", "edicto", "fijacion"]
     return any(k in text for k in keywords)
 
 async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: str, demandado: str = ""):
     """
-    Busca publicaciones en el portal de la Rama Judicial en una ventana de tiempo.
-    Utiliza 3 estrategias paralelas: Radicado exacto, Búsqueda 'q' con radicado y Búsqueda amplia por nombre.
+    Busca publicaciones siguiendo el 'paso a paso' del usuario:
+    1. Filtra por Despacho (primeros 12 dígitos).
+    2. Filtra por rango de fecha (Mes de la actuación).
+    3. Busca el radicado (Año-Consecutivo) en los resultados.
     """
     results = []
-    if not radicado_completo or len(radicado_completo.strip()) < 12:
+    if not radicado_completo or len(radicado_completo.strip()) < 21:
         return []
 
-    # Limpiar radicado (quitar espacios)
     rad_clean = radicado_completo.strip().replace(" ", "")
+    id_despacho = rad_clean[:12]
     
-    # Rango de fechas: Desde la fecha de actuación hasta 20 días después
+    # Rango de fechas: Desde la fecha de actuación hasta 30 días después
     try:
-        f_base = datetime.strptime(fecha_act_str, "%Y-%m-%d")
+        f_base = datetime.strptime(fecha_act_str[:10], "%Y-%m-%d")
     except:
         f_base = datetime.now() - timedelta(days=5)
 
     f_ini_str = f_base.strftime("%d/%m/%Y")
-    f_fin_str = (f_base + timedelta(days=20)).strftime("%d/%m/%Y")
+    f_fin_str = (f_base + timedelta(days=30)).strftime("%d/%m/%Y")
 
-    print(f"[search] [publicaciones.py] Buscando para radicado {rad_clean} en rango [{f_ini_str} - {f_fin_str}]")
+    print(f"[search] [publicaciones.py] Buscando en Despacho {id_despacho} rango [{f_ini_str} - {f_fin_str}]")
 
-    # Extraer fragmento Año-Consecutivo (Dígitos 13-21)
-    # Ejemplo: 110014189027 2024 01322 00 -> 2024-01322
-    pattern_suffix = rad_clean[12:21]
-    year = pattern_suffix[:4]
-    consecutive = pattern_suffix[4:]
-    search_query = f"{year}-{consecutive}"
-
-    # Búsqueda 1: Por el fragmento Año-Consecutivo
-    params1 = {"q": search_query}
-    # Búsqueda 2: Por el radicado completo
-    params2 = {"q": rad_clean}
-    # Búsqueda 3: Por nombre (si existe)
-    search_tasks = [params1, params2]
-    if demandado:
-        search_tasks.append({"q": demandado})
+    # Parámetros para la búsqueda avanzada del portal
+    params = {
+        "idDespacho": id_despacho,
+        "fechaInicio": f_ini_str,
+        "fechaFinal": f_fin_str,
+        "action": "busqueda"
+    }
 
     try:
         async with httpx.AsyncClient(headers=HEADERS, timeout=30, follow_redirects=True, verify=False) as client:
-            http_tasks = [client.get(SEARCH_URL, params=p) for p in search_tasks]
-            responses = await asyncio.gather(*http_tasks, return_exceptions=True)
+            resp = await client.get(SEARCH_URL, params=params)
             
-            for resp in responses:
-                if isinstance(resp, httpx.Response) and resp.status_code == 200:
-                    found = await parse_results_list(resp.text, rad_clean, client, demandado)
-                    results.extend(found)
-    except Exception as e:
-        print(f"💥 Error en el proceso de scraping: {e}")
+            if resp.status_code == 200:
+                found = await parse_results_table(resp.text, rad_clean, client, demandado)
+                results.extend(found)
+                
+                # Fallback: Si no hay nada por despacho, intentar búsqueda global por si acaso
+                if not results:
+                    global_search_url = "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search"
+                    pattern_suffix = rad_clean[12:21]
+                    year = pattern_suffix[:4]
+                    consecutive = pattern_suffix[4:]
+                    search_query = f"{year}-{consecutive}"
                     
+                    print(f"[search] Fallback a búsqueda global para {search_query}")
+                    resp_global = await client.get(global_search_url, params={"q": search_query})
+                    if resp_global.status_code == 200:
+                        found_global = await parse_results_table(resp_global.text, rad_clean, client, demandado)
+                        results.extend(found_global)
+
     except Exception as e:
-        print(f"💥 Error en el proceso de scraping: {e}")
+        print(f"[publicaciones.py] Error en el proceso de scraping: {e}")
 
     # Eliminar duplicados por source_id
     unique_results = []
@@ -91,41 +96,38 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
 
     return unique_results
 
-async def parse_results_list(html: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
-    """Extrae enlaces de interés de la página de resultados."""
+async def parse_results_table(html: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
+    """Extrae enlaces de la tabla de resultados del portal."""
     soup = BeautifulSoup(html, "html.parser")
-    # Buscar diferentes contenedores posibles (Tablas, Listas, Cards)
-    rows = soup.find_all(["tr", "li", "article"])
-    
+    # Buscar filas de tabla u otros contenedores de items
+    rows = soup.find_all(["tr", "li", "article", "div"], class_=re.compile(r"(row|item|card|entry)"))
     if not rows:
-        # Buscar divs que parezcan items de lista o cards
-        rows = soup.find_all("div", class_=re.compile(r"(list-group-item|card|row|entry)"))
-            
-    if not rows:
-        # Fallback agresivo: buscar cualquier link que parezca una publicación
-        rows = soup.find_all("a", href=True)
-            
-    KEYWORDS = ["notificacion", "estado", "auto", "traslado", "edicto", "fijacion", "requiere", "termino", "resolucion"]
-    
+        rows = soup.find_all("a", href=True) # Fallback extremo
+
     tasks = []
     seen_urls = set()
+    
+    # Patrones de búsqueda
+    pattern_suffix = radicado_completo[12:21]
+    formatted_pattern = f"{pattern_suffix[:4]}-{pattern_suffix[4:]}"
 
     for row in rows:
         row_text = row.get_text()
-        norm_text = normalize_text(row_text)
         
-        # Debe tener alguna palabra clave
-        if any(k in norm_text for k in KEYWORDS):
-            link = row.find("a", href=True) if hasattr(row, 'find') else row
-            if not link or not link.has_attr('href'): continue
+        # Debe mencionar el año del radicado o el patrón para ser prometedor
+        if pattern_suffix[:4] in row_text or pattern_suffix in row_text or formatted_pattern in row_text or \
+           (demandado and normalize_text(demandado) in normalize_text(row_text)):
             
-            detail_url = link["href"].strip()
-            if not detail_url or detail_url.startswith("javascript:") or detail_url == "#":
-                continue
-            if detail_url in seen_urls: continue
-            seen_urls.add(detail_url)
-            
-            tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
+            links = row.find_all("a", href=True) if hasattr(row, 'find_all') else [row]
+            for link in links:
+                detail_url = link["href"].strip()
+                if not detail_url or detail_url == "#" or detail_url.startswith("javascript:"):
+                    continue
+                
+                if detail_url in seen_urls: continue
+                seen_urls.add(detail_url)
+                
+                tasks.append(validate_detail_page(detail_url, radicado_completo, client, demandado))
 
     if not tasks: return []
     
@@ -133,61 +135,47 @@ async def parse_results_list(html: str, radicado_completo: str, client: httpx.As
     return [r for r in results if r]
 
 async def validate_detail_page(url: str, radicado_completo: str, client: httpx.AsyncClient, demandado: str = ""):
-    """Valida si en la página de detalle está el PDF del radicado (Dígitos 13-21)."""
+    """Navega al detalle para validar radicado y extraer PDF."""
     try:
-        url = url.strip()
-        if not url or url == "#" or url.startswith("javascript:"):
-            return None
-            
         if not url.startswith("http"):
-            if url.startswith("/"):
-                url = "https://publicacionesprocesales.ramajudicial.gov.co" + url
-            else:
-                return None
+            url = "https://publicacionesprocesales.ramajudicial.gov.co" + (url if url.startswith("/") else "/" + url)
             
         try:
             resp = await client.get(url, timeout=15)
-        except Exception as e:
-            print(f"[validate] Exception calling {url}: {e}")
+        except Exception:
             return None
+            
         if resp.status_code != 200: return None
         
         soup = BeautifulSoup(resp.text, "html.parser")
         page_text = soup.get_text()
         norm_page = normalize_text(page_text)
         
-        # Patrón Año-Consecutivo: dígitos 13 al 21
-        # Ejemplo: 110014189027 2024 01322 00 -> 2024-01322
         pattern_suffix = radicado_completo[12:21] 
-        year = pattern_suffix[:4]
-        consecutive = pattern_suffix[4:]
-        formatted_pattern = f"{year}-{consecutive}"
+        formatted_pattern = f"{pattern_suffix[:4]}-{pattern_suffix[4:]}"
         
         has_match = False
-        if pattern_suffix in page_text or formatted_pattern in page_text:
+        if pattern_suffix in page_text or formatted_pattern in page_text or radicado_completo in page_text:
             has_match = True
         elif demandado:
             dem_norm = normalize_text(demandado)
             if dem_norm in norm_page:
                 has_match = True
-            else:
-                parts = dem_norm.split()
-                if len(parts) >= 2 and parts[0] in norm_page and (parts[-1] in norm_page or parts[-2] in norm_page):
-                    has_match = True
             
         if has_match:
-            # Intentar encontrar un título más descriptivo
-            titulo = soup.find(class_=re.compile(r"(title|entry-title|header)", re.I))
+            # Extraer título descriptivo
+            titulo = soup.find(class_=re.compile(r"(title|header|entry-title)", re.I))
             if not titulo:
-                titulo = soup.find(["h1", "h2", "h3", "h4"])
+                titulo = soup.find(["h1", "h2", "h3"])
             
-            titulo_text = titulo.get_text(strip=True) if titulo else "Notificación de Estado"
-            if titulo_text.lower() in ["navegacion", "home", "search", "inicio"]:
+            titulo_text = titulo.get_text(strip=True) if titulo else "Notificación Procesal"
+            if len(titulo_text) > 200: titulo_text = titulo_text[:197] + "..."
+            if titulo_text.lower() in ["navegacion", "home", "search", "inicio", "enenglishesspanish"]:
                 titulo_text = "Fijación/Estado Procesal"
-            
-            # Buscar el PDF ESPECÍFICO (Año-Consecutivo)
+
+            # Buscar el PDF
             doc_url = ""
-            all_pdfs = soup.find_all("a", href=re.compile(r"\.pdf", re.I))
+            all_pdfs = soup.find_all("a", href=re.compile(r"(\.pdf|find_file_entry)", re.I))
             
             for pdf in all_pdfs:
                 pdf_text = pdf.get_text()
@@ -200,9 +188,10 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
             if not doc_url and all_pdfs:
                 doc_url = all_pdfs[0]["href"]
                 
-            if doc_url and doc_url.startswith("/"):
-                doc_url = "https://publicacionesprocesales.ramajudicial.gov.co" + doc_url
+            if doc_url and not doc_url.startswith("http"):
+                doc_url = "https://publicacionesprocesales.ramajudicial.gov.co" + (doc_url if doc_url.startswith("/") else "/" + doc_url)
 
+            # Extraer fecha
             fecha_str = datetime.now().strftime("%Y-%m-%d")
             fecha_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}/\d{2}/\d{4})", page_text)
             if fecha_match:
@@ -224,7 +213,7 @@ async def validate_detail_page(url: str, radicado_completo: str, client: httpx.A
             }
             
     except Exception as e:
-        print(f"⚠️ Error validando detalle: {e}")
+        print(f"[validate] Error: {e}")
         
     return None
 
