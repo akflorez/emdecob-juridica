@@ -28,11 +28,16 @@ export function PublicacionesPanel({ radicado, caseId, publications, onRefresh, 
         ? await refreshCasePublicationsById(caseId)
         : await refreshCasePublications(radicado);
         
-      if (result.ok || (result as any).items) {
+      if (result.ok && result.items) {
         onRefresh(result.items);
         toast({
           title: 'Sincronización completa',
           description: `Se encontraron ${result.items.length} publicaciones.`,
+        });
+      } else if (result.ok) {
+        toast({
+          title: 'Sincronización iniciada',
+          description: result.message || 'La búsqueda de publicaciones se está ejecutando en segundo plano.',
         });
       }
     } catch (error: any) {

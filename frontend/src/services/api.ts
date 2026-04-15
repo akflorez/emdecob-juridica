@@ -710,13 +710,14 @@ export function getCasePublicationsById(id: number) {
 
 export function refreshCasePublications(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<{ ok: boolean; items: CasePublication[] }>(`/cases/${r}/refresh-publicaciones`, {
+  return apiFetch<{ ok: boolean; message?: string; items?: CasePublication[] }>(`/cases/${r}/refresh-publicaciones`, {
     method: "POST",
   });
 }
 
 export function refreshCasePublicationsById(id: number) {
-  return apiFetch<{ ok: boolean; items: CasePublication[] }>(`/cases/id/${id}/refresh-publicaciones`, {
+  const r = id;
+  return apiFetch<{ ok: boolean; message?: string; items?: CasePublication[] }>(`/cases/id/${r}/refresh-publicaciones`, {
     method: "POST",
   });
 }

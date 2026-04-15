@@ -2989,17 +2989,8 @@ async def save_new_publications(case: Case, db: Session):
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
         actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
         
-        # 2. Filtrar actuaciones relevantes y ordenar por fecha (más reciente primero)
-        relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
-        relevantes.sort(key=lambda x: x.get("fechaActuacion", ""), reverse=True)
-        
-        if not relevantes and actuaciones:
-            # Si ninguna se llama "auto" o "estado", al menos buscamos en las más recientes
-            acts_sorted = sorted(actuaciones, key=lambda a: a.get("fechaActuacion", ""), reverse=True)
-            relevantes = [acts_sorted[0]] # La más reciente
-            
         if not relevantes:
-            print(f"ℹ️ No hay actuaciones relevantes para buscar publicaciones en radicado {case.radicado}")
+            print(f"ℹ️ No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
 
         # 3. Limitar a las 5 más recientes para evitar Timeouts (504)
@@ -3039,17 +3030,31 @@ async def save_new_publications(case: Case, db: Session):
         print(f"[refresh] Error guardando publicaciones: {e}")
 
 @app.post("/admin/backfill-publicaciones")
-async def backfill_publicaciones(db: Session = Depends(get_db)):
-    """Escanea todos los casos existentes y busca publicaciones para actuaciones relevantes."""
-    cases = db.query(Case).all()
-    count = 0
-    for case in cases:
-        await save_new_publications(case, db)
-        count += 1
-        if count % 10 == 0:
-            db.commit()
-    db.commit()
-    return {"status": "ok", "processed": count}
+async def backfill_publicaciones(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Escanea todos los casos existentes y busca publicaciones para actuaciones relevantes (en segundo plano)."""
+    background_tasks.add_task(run_backfill_publicaciones_task)
+    return {"status": "ok", "message": "Puesta al día masiva de publicaciones iniciada en segundo plano."}
+
+async def run_backfill_publicaciones_task():
+    """Ejecuta el backfill de publicaciones de forma segura en segundo plano."""
+    db = SessionLocal()
+    try:
+        cases = db.query(Case).all()
+        count = 0
+        print(f"[backfill] Iniciando puesta al día masiva para {len(cases)} casos...")
+        for case in cases:
+            # save_new_publications ya maneja el filtro estricto de keywords
+            await save_new_publications(case, db)
+            count += 1
+            if count % 10 == 0:
+                print(f"[backfill] Procesados {count}/{len(cases)} casos...")
+                db.commit()
+        db.commit()
+        print(f"[backfill] Finalizado. Procesados {count} casos.")
+    except Exception as e:
+        print(f"[backfill] Error en proceso masivo: {e}")
+    finally:
+        db.close()
 
 # =========================
 # BÚSQUEDA MASIVA (NAMES / RADICADOS)

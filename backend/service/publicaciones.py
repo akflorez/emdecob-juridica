@@ -25,7 +25,8 @@ def normalize_text(text: str) -> str:
 
 def is_relevant_actuacion(text: str) -> bool:
     text = normalize_text(text)
-    keywords = ["auto", "notificacion", "estado", "traslado", "termino", "requiere", "despacho", "edicto", "fijacion"]
+    # Según instrucción del usuario: fijacion, estado o auto
+    keywords = ["auto", "estado", "fijacion"]
     return any(k in text for k in keywords)
 
 async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: str, demandado: str = ""):
