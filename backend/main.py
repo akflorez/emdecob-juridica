@@ -2950,23 +2950,35 @@ async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db
     return await get_case_publications(case.radicado, db)
 
 @app.post("/cases/{radicado}/refresh-publicaciones")
-async def refresh_publications(radicado: str, db: Session = Depends(get_db)):
+async def refresh_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.radicado == radicado).first()
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
-        
-    await save_new_publications(case, db)
-    db.commit()
-    
-    return await get_case_publications(case.radicado, db)
+
+    background_tasks.add_task(save_new_publications_task, case.id)
+    return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
 @app.post("/cases/id/{case_id}/refresh-publicaciones")
-async def refresh_publications_by_id(case_id: int, db: Session = Depends(get_db)):
+async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
-    
-    return await refresh_publications(case.radicado, db)
+
+    background_tasks.add_task(save_new_publications_task, case.id)
+    return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
+
+async def save_new_publications_task(case_id: int):
+    """Wrapper para ejecutar save_new_publications con su propia sesión de DB."""
+    db = SessionLocal()
+    try:
+        case = db.query(Case).filter(Case.id == case_id).first()
+        if case:
+            await save_new_publications(case, db)
+            db.commit()
+    except Exception as e:
+        print(f"[back-sync] Error en tarea de fondo: {e}")
+    finally:
+        db.close()
 
 async def save_new_publications(case: Case, db: Session):
     try:
