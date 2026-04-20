@@ -10,6 +10,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from .db import Base
 
 
@@ -207,6 +208,8 @@ class Workspace(Base):
     # PRIVATE o TEAM_COLLABORATION
     visibility = Column(String(50), default="TEAM_COLLABORATION")
     
+    folders = relationship("Folder", back_populates="workspace", cascade="all, delete-orphan")
+    
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -235,6 +238,9 @@ class Folder(Base):
     name = Column(String(255), nullable=False)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     
+    workspace = relationship("Workspace", back_populates="folders")
+    lists = relationship("ProjectList", back_populates="folder", cascade="all, delete-orphan")
+    
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -246,6 +252,9 @@ class ProjectList(Base):
     name = Column(String(255), nullable=False)
     folder_id = Column(Integer, ForeignKey("folders.id", ondelete="CASCADE"), nullable=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    folder = relationship("Folder", back_populates="lists")
+    tasks = relationship("Task", back_populates="project_list", cascade="all, delete-orphan")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
@@ -273,6 +282,8 @@ class Task(Base):
     
     # Referencia a ClickUp para evitar duplicados en importación
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
+    
+    project_list = relationship("ProjectList", back_populates="tasks")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

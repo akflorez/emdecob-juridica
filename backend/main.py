@@ -3503,7 +3503,7 @@ class TaskCreate(BaseModel):
     assignee_id: Optional[int] = None
     priority: Optional[str] = None
     status: str = "open"
-    due_date: Optional[str] = None
+    due_date: Optional[datetime] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -3511,7 +3511,7 @@ class TaskUpdate(BaseModel):
     assignee_id: Optional[int] = None
     status: Optional[str] = None
     priority: Optional[str] = None
-    due_date: Optional[str] = None
+    due_date: Optional[datetime] = None
 
 class CommentCreate(BaseModel):
     task_id: int
@@ -3523,9 +3523,27 @@ async def get_workspaces(
     current_user: User = Depends(get_current_user)
 ):
     """Retorna la jerarquía completa de espacios para el usuario."""
-    # Para esta fase, los admins ven todo, los abogados ven donde son miembros
     if current_user.is_admin:
         workspaces = db.query(Workspace).all()
+        
+        # Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
+        if not workspaces:
+            print("[PROJECTS] Creando estructura básica de proyectos local...")
+            ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
+            db.add(ws)
+            db.commit()
+            db.refresh(ws)
+            
+            f = Folder(name="Proyectos y Casos", workspace_id=ws.id)
+            db.add(f)
+            db.commit()
+            db.refresh(f)
+            
+            l = ProjectList(name="Tareas Pendientes", folder_id=f.id, workspace_id=ws.id)
+            db.add(l)
+            db.commit()
+            
+            workspaces = [ws]
     else:
         workspaces = db.query(Workspace).join(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()
     
