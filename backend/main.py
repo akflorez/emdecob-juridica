@@ -806,12 +806,6 @@ def get_current_user(
 
     print(f"[AUTH-DEBUG] Token valido. UserID: {user_id}")
 
-    # Hardcoded fallback matches
-    if user_id == 9999:
-        return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
-    if user_id == 9998:
-        return User(id=9998, username="fna_juridica", nombre="FNA Juridica", is_admin=False, is_active=True)
-
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     if not user:
         print(f"[AUTH-DEBUG] Usuario ID {user_id} no encontrado en BD")
@@ -1315,27 +1309,7 @@ def login(data: LoginRequest):
                     "is_admin": user.is_admin,
                 }
             }
-    except Exception as e:
-        print(f" [login] Error consultando BD: {e}  usando fallback")
-    finally:
-        db.close()
-
-    #  Fallback hardcodeado (funciona aunque la BD falle) 
-    hc = HARDCODED_USERS.get(data.username)
-    if hc and data.password == hc["password"]:
-        token = create_access_token(hc["id"])
-        return {
-            "token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": hc["id"],
-                "username": data.username,
-                "nombre": hc["nombre"],
-                "is_admin": hc["is_admin"],
-            }
-        }
-
-    raise HTTPException(status_code=401, detail="Usuario o contrasea incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contrasena incorrectos")
 
 
 @app.post("/auth/logout")
