@@ -40,6 +40,10 @@ def run_migrations():
                 conn.execute(text("CREATE UNIQUE INDEX ix_cases_id_proceso ON cases (id_proceso)"))
             except:
                 pass
+                
+        if 'telefono' not in columns_cases:
+            print("➕ [MIGRATION] cases: agregando 'telefono'...")
+            conn.execute(text("ALTER TABLE cases ADD COLUMN telefono VARCHAR(50)"))
         
         if 'user_id' not in columns_cases:
             print("[MIGRATION] cases: agregando 'user_id'...")
@@ -67,6 +71,14 @@ def run_migrations():
                 conn.execute(text("ALTER TABLE invalid_radicados ADD CONSTRAINT fk_invalid_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"))
             except:
                 pass
+
+    # --- Tabla 'users' ---
+    columns_users = [c['name'] for c in inspector.get_columns('users')]
+    if columns_users: # Solo si la tabla ya existe
+        with engine.begin() as conn:
+            if 'telefono' not in columns_users:
+                print("➕ [MIGRATION] users: agregando 'telefono'...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN telefono VARCHAR(50)"))
 
     print("[MIGRATION] Sincronizacion finalizada satisfactoriamente.")
 
