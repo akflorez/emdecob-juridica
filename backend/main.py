@@ -740,7 +740,7 @@ def verify_access_token(token: str) -> Optional[int]:
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def _hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
