@@ -9,6 +9,7 @@ from fastapi import (
     Body,
     Security,
     Request,
+    Header,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -27,6 +28,7 @@ import asyncio
 import random
 import pytz
 import httpx
+import os
 from passlib.context import CryptContext
 import secrets
 from email.mime.text import MIMEText
@@ -39,7 +41,7 @@ from .db import SessionLocal, engine, Base
 from .models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
-    ProjectList, Task, TaskComment, TaskAttachment
+    ProjectList, Task, TaskComment, TaskAttachment, IntegrationConfig
 )
 from .service.rama import (
     consulta_por_radicado,
@@ -1325,74 +1327,64 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
 @app.post("/auth/login")
 def login(data: LoginRequest):
-    """Autentica un usuario y retorna un token de sesin."""
+    """Autentica un usuario y retorna un token de sesión."""
 
-    #  Primero intentar contra la base de datos 
-    db = SessionLocal()
+    # 1. Intentar identificación por Hardcoded Users primero para rapidez y resiliencia
+    hc = HARDCODED_USERS.get(data.username)
+    
+    # 2. Intentar contra la base de datos
+    db = None
+    user_db = None
     try:
-        user = db.query(User).filter(
+        db = SessionLocal()
+        user_db = db.query(User).filter(
             User.username == data.username,
             User.is_active == True
         ).first()
-
-        if user and _verify_password(data.password, user.hashed_password):
-            token = create_access_token(user.id)
+        
+        if user_db and _verify_password(data.password, user_db.hashed_password):
+            token = create_access_token(user_db.id)
             return {
                 "token": token,
                 "token_type": "bearer",
                 "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "nombre": user.nombre,
-                    "is_admin": user.is_admin,
+                    "id": user_db.id,
+                    "username": user_db.username,
+                    "nombre": user_db.nombre,
+                    "is_admin": user_db.is_admin,
                 }
             }
+    except Exception as e:
+        print(f"⚠️ [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
+    
+    # 3. Fallback Hardcoded si la DB falló o no encontró al usuario
+    if hc and data.password == hc["password"]:
+        # Si el usuario existe en DB, intentamos actualizar su hash (silenciosamente)
+        user_id = hc["id"]
+        if user_db and db:
+            try:
+                user_db.hashed_password = _hash_password(data.password)
+                db.commit()
+                user_id = user_db.id
+            except:
+                pass
         
-        # If DB hash is stale, try hardcoded fallback and update hash in DB
-        hc = HARDCODED_USERS.get(data.username)
-        if hc and data.password == hc["password"]:
-            # Update the hash in DB so future logins work via DB
-            if user:
-                user.hashed_password = _hash_password(data.password)
-                db.commit()
-                token = create_access_token(user.id)
-                return {
-                    "token": token,
-                    "token_type": "bearer",
-                    "user": {
-                        "id": user.id,
-                        "username": user.username,
-                        "nombre": user.nombre or hc["nombre"],
-                        "is_admin": user.is_admin,
-                    }
-                }
-            else:
-                # User not in DB yet, create them
-                new_user = User(
-                    username=data.username,
-                    hashed_password=_hash_password(data.password),
-                    nombre=hc["nombre"],
-                    is_admin=hc["is_admin"],
-                    is_active=True,
-                )
-                db.add(new_user)
-                db.commit()
-                db.refresh(new_user)
-                token = create_access_token(new_user.id)
-                return {
-                    "token": token,
-                    "token_type": "bearer",
-                    "user": {
-                        "id": new_user.id,
-                        "username": new_user.username,
-                        "nombre": new_user.nombre,
-                        "is_admin": new_user.is_admin,
-                    }
-                }
-    finally:
+        token = create_access_token(user_id)
+        return {
+            "token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": user_id,
+                "username": data.username,
+                "nombre": hc["nombre"],
+                "is_admin": hc["is_admin"],
+            }
+        }
+
+    if db:
         db.close()
     
-    raise HTTPException(status_code=401, detail="Usuario o contrasena incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
 
 @app.post("/auth/logout")
@@ -3676,3 +3668,70 @@ async def import_clickup(
 3669:     cs.abogado = data.abogado
 3670:     db.commit()
 3671:     return {"ok": True, "abogado": cs.abogado}
+
+# =========================
+# INTEGRACIONES EXTERNAS (CALLY, ETC)
+# =========================
+
+def verify_cally_key(api_key: str):
+    """Dependency to verify Cally API Key"""
+    db = SessionLocal()
+    try:
+        config = db.query(IntegrationConfig).filter(
+            IntegrationConfig.service_name == 'cally',
+            IntegrationConfig.api_key == api_key,
+            IntegrationConfig.is_active == True
+        ).first()
+        if not config:
+            raise HTTPException(status_code=401, detail="Clave de API de Cally inválida")
+        return config
+    finally:
+        db.close()
+
+@app.get("/api/config/integrations")
+async def get_integrations_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """(Admin) Obtiene las claves de integración externas."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    config = db.query(IntegrationConfig).filter(IntegrationConfig.service_name == 'cally').first()
+    if not config:
+        # Inicializar si no existe
+        import secrets
+        new_key = f"cally_{secrets.token_urlsafe(32)}"
+        config = IntegrationConfig(service_name='cally', api_key=new_key)
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        
+    return {
+        "service_name": "cally",
+        "api_key": config.api_key,
+        "is_active": config.is_active,
+        "report_url": "/api/external/reporting/tasks"
+    }
+
+@app.post("/api/config/integrations/regenerate")
+async def regenerate_cally_key(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """(Admin) Regenera la clave de Cally."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    import secrets
+    config = db.query(IntegrationConfig).filter(IntegrationConfig.service_name == 'cally').first()
+    new_key = f"cally_{secrets.token_urlsafe(32)}"
+    
+    if not config:
+        config = IntegrationConfig(service_name='cally', api_key=new_key)
+        db.add(config)
+    else:
+        config.api_key = new_key
+    
+    db.commit()
+    return {"api_key": new_key}

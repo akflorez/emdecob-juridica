@@ -26,6 +26,7 @@ class Case(Base):
     alias = Column(String(200), nullable=True)
     cedula = Column(String(50), nullable=True)
     abogado = Column(String(200), nullable=True)
+    telefono = Column(String(50), nullable=True) # Para mensajería Cally
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
     last_hash = Column(String(64), nullable=True)
@@ -135,6 +136,7 @@ class User(Base):
     username = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     nombre = Column(String(255), nullable=True)       # nombre visible
+    telefono = Column(String(50), nullable=True)     # contacto para reportes
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
 
@@ -299,3 +301,17 @@ class TaskAttachment(Base):
     file_type = Column(String(100), nullable=True)
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class IntegrationConfig(Base):
+    """Configuración de integraciones externas (Cally, etc)"""
+    __tablename__ = "integration_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_name = Column(String(100), unique=True, index=True, nullable=False)
+    api_key = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    settings = Column(Text, nullable=True) # JSON flexible
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

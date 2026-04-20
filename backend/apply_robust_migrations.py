@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.db import engine, Base
-from backend.models import Case, CaseEvent, InvalidRadicado, User, CasePublication, SearchJob
+from backend.models import (
+    Case, CaseEvent, InvalidRadicado, User, CasePublication, SearchJob,
+    IntegrationConfig
+)
 
 def run_migrations():
     print("[MIGRATION] Iniciando sincronizacion de esquema robusto...")
