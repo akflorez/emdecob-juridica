@@ -772,61 +772,63 @@ HARDCODED_USERS = {
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
-    db: Session = Depends(lambda: next(iter([SessionLocal()]))),
-) -> "User":
+    db: Session = Depends(get_db),
+) -> User:
     if not credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
+    
     token = credentials.credentials
     user_id = verify_access_token(token)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Token invlido o expirado")
+        raise HTTPException(status_code=401, detail="Token invalido o expirado")
 
-    # Fake users para hardcoded fallback
+    # Hardcoded fallback matches (using IDs from HARDCODED_USERS)
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
     if user_id == 9998:
-        return User(id=9998, username="fna_juridica", nombre="FNA Jurdica", is_admin=False, is_active=True)
+        return User(id=9998, username="fna_juridica", nombre="FNA Juridica", is_admin=False, is_active=True)
 
-    db_local = SessionLocal()
-    try:
-        user = db_local.query(User).filter(User.id == user_id, User.is_active == True).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
-        return user
-    finally:
-        db_local.close()
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    
+    return user
 
 
 def _ensure_default_user():
     db = SessionLocal()
     try:
-        exists = db.query(User).filter(User.username == "fna_juridica").first()
-        if not exists:
+        u1 = db.query(User).filter(User.username == "fna_juridica").first()
+        if not u1:
             db.add(User(
                 username="fna_juridica",
                 hashed_password=_hash_password("juridicaEmdecob2026$"),
-                nombre="FNA Jurdica",
+                nombre="FNA Juridica",
                 is_active=True,
                 is_admin=False,
             ))
-            db.commit()
-            print(" Usuario fna_juridica creado automticamente")
         else:
-            print(" Usuario fna_juridica ya existe")
+            # Force update password to current hashing scheme
+            u1.hashed_password = _hash_password("juridicaEmdecob2026$")
+            u1.nombre = "FNA Juridica"
+        
+        db.commit()
 
-        exists2 = db.query(User).filter(User.username == "jurico_emdecob").first()
-        if not exists2:
+        u2 = db.query(User).filter(User.username == "jurico_emdecob").first()
+        if not u2:
             db.add(User(
                 username="jurico_emdecob",
                 hashed_password=_hash_password("emdecob2027$"),
-                nombre="Jurdico Emdecob",
+                nombre="Juridico Emdecob",
                 is_active=True,
                 is_admin=False,
             ))
-            db.commit()
-            print(" Usuario jurico_emdecob creado automticamente")
         else:
-            print(" Usuario jurico_emdecob ya existe")
+            # Force update password to current hashing scheme
+            u2.hashed_password = _hash_password("emdecob2027$")
+            u2.nombre = "Juridico Emdecob"
+        
+        db.commit()
     except Exception as e:
         print(f" Error creando usuario por defecto: {e}")
     finally:
