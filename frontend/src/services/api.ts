@@ -784,3 +784,89 @@ export async function downloadSearchResultsExcel(jobId: number) {
   window.URL.revokeObjectURL(url);
   a.remove();
 }
+
+/** ---------------------------
+ * PROYECTOS Y TAREAS (CLICKUP CLONE / GESTIÓN INTERNA)
+ * -------------------------- */
+
+export type WorkspaceFolder = {
+  id: number;
+  name: string;
+  lists: { id: number; name: string }[];
+};
+
+export type Workspace = {
+  id: number;
+  name: string;
+  visibility: string;
+  folders: WorkspaceFolder[];
+};
+
+export type Task = {
+  id: number;
+  title: string;
+  description?: string;
+  status: string;
+  priority?: string;
+  assignee_id?: number;
+  list_id: number;
+  due_date?: string;
+  created_at: string;
+  clickup_id?: string;
+};
+
+export function getWorkspaces() {
+  return apiFetch<Workspace[]>("/projects/workspaces");
+}
+
+export function getTasks(params: { list_id?: number; status?: string; assignee_id?: number; radicado?: string }) {
+  const qs = new URLSearchParams();
+  if (params.list_id) qs.set("list_id", String(params.list_id));
+  if (params.status) qs.set("status", params.status);
+  if (params.assignee_id) qs.set("assignee_id", String(params.assignee_id));
+  if (params.radicado) qs.set("radicado", params.radicado);
+  return apiFetch<Task[]>(`/projects/tasks?${qs.toString()}`);
+}
+
+export function createTask(data: Partial<Task>) {
+  return apiFetch<Task>("/projects/tasks", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTask(taskId: number, data: Partial<Task>) {
+  return apiFetch<Task>(`/projects/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function importClickUp(token: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/projects/import-clickup", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+/** ---------------------------
+ * ESTADÍSTICAS AVANZADAS Y EDICIÓN RÁPIDA
+ * -------------------------- */
+
+export type DashboardStats = {
+  month_actions: number;
+  month_name: string;
+  unread_total: number;
+  lawyer_stats: { name: string; count: number }[];
+};
+
+export function getDashboardStats() {
+  return apiFetch<DashboardStats>("/cases/stats/dashboard");
+}
+
+export function updateCaseLawyer(caseId: number, lawyer: string) {
+  return apiFetch<{ ok: boolean; abogado: string }>(`/cases/${caseId}/lawyer`, {
+    method: "PATCH",
+    body: JSON.stringify({ abogado: lawyer }),
+  });
+}

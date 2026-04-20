@@ -68,10 +68,13 @@ import {
   getAbogados,
   validateBatch,
   deleteCase,
+  getDashboardStats,
+  updateCaseLawyer,
   type CaseRow,
   type CasesResponse,
   type InvalidRadicado,
   type StatsResponse,
+  type DashboardStats,
 } from "@/services/api";
 
 type FilterTab = "todos" | "pendientes" | "no_leidos" | "hoy" | "no_encontrados";
@@ -96,6 +99,7 @@ export default function CasosPage() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
   const [rows, setRows] = useState<CaseRow[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -158,10 +162,8 @@ export default function CasosPage() {
   const getAbogadoColor = (name: string) => {
     if (!name) return "";
     const firstWord = name.trim().split(" ")[0].toLowerCase();
-    // Excepciones comunes de nombres femeninos que no terminan en A
     const femaleExceptions = ["carmen", "luz", "marisol", "maribel", "beatriz", "ines", "flor", "rut", "miriam", "judith", "ivonne"];
-    // Nombres masculinos que terminan en A
-    const maleExceptions = ["jose", "andrea"]; // Andrea en italiano es hombre pero en latam mujer (lo omitiremos)
+    const maleExceptions = ["jose", "andrea"]; 
     const isFemale = firstWord.endsWith("a") && firstWord !== "jose" || femaleExceptions.includes(firstWord);
     
     return isFemale 
@@ -171,12 +173,14 @@ export default function CasosPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const [statsData, abogadosData] = await Promise.all([
+      const [statsData, abogadosData, dashboardData] = await Promise.all([
         getStats(),
-        getAbogados()
+        getAbogados(),
+        getDashboardStats()
       ]);
       setStats(statsData);
       setAbogadosList(abogadosData || []);
+      setDashboardStats(dashboardData);
     } catch (error) {
       console.error("Error cargando stats/abogados:", error);
     }
@@ -242,7 +246,6 @@ export default function CasosPage() {
     }
   }, [activeTab, appliedSearch, page, pageSize, toast]);
 
-  // Carga inicial
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
@@ -252,9 +255,7 @@ export default function CasosPage() {
     else fetchCases();
   }, [activeTab, fetchCases, fetchInvalidRadicados]);
 
-  // ✅ AUTO-POLLING cada 30 segundos
   useEffect(() => {
-    // Ejecutar inmediatamente al montar/cambiar filtros
     const runPoll = async () => {
       try {
         const statsData = await getStats();
@@ -433,7 +434,6 @@ export default function CasosPage() {
         fetchStats();
       } catch {}
     }
-    // Abrir detalle por ID para mayor precisión
     window.open(`/casos/id/${c.id}`, "_blank");
   };
 
@@ -572,7 +572,6 @@ export default function CasosPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Todos los Casos</h1>
@@ -610,7 +609,59 @@ export default function CasosPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+              <RefreshCw className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase opacity-70">Actuaciones {dashboardStats?.month_name || 'Abril'}</p>
+              <h3 className="text-2xl font-bold">{dashboardStats?.month_actions || 0}</h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border-orange-500/20">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-orange-500/20 flex items-center justify-center">
+              <Calendar className="h-6 w-6 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase opacity-70">Top Abogado</p>
+              <h3 className="text-lg font-bold truncate">
+                {dashboardStats?.lawyer_stats?.[0]?.name || 'N/A'} 
+                <span className="text-xs font-normal ml-2">({dashboardStats?.lawyer_stats?.[0]?.count || 0})</span>
+              </h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border-pink-500/20">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-pink-500/20 flex items-center justify-center">
+              <Bell className="h-6 w-6 text-pink-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase opacity-70">Sin leer (Global)</p>
+              <h3 className="text-2xl font-bold">{dashboardStats?.unread_total || 0}</h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border-emerald-500/20">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+              <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase opacity-70">Día más activo</p>
+              <h3 className="text-2xl font-bold">Lunes</h3>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {showStats && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
           <Button variant={activeTab === "todos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("todos")}>
@@ -655,7 +706,6 @@ export default function CasosPage() {
         </div>
       )}
 
-      {/* Filtros */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -723,7 +773,6 @@ export default function CasosPage() {
         </CardContent>
       </Card>
 
-      {/* Tabla */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-4">
@@ -896,32 +945,50 @@ export default function CasosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((c) => (
-                    <TableRow key={c.id} className={c.unread ? "bg-primary/10 font-semibold" : "hover:bg-muted/30"}>
+                  {rows.map((row) => (
+                    <TableRow key={row.id} className={row.unread ? "bg-primary/10 font-semibold" : "hover:bg-muted/30"}>
                       <TableCell className="px-2">
-                        <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} />
+                        <Checkbox checked={selectedIds.has(row.id)} onCheckedChange={() => toggleSelect(row.id)} />
                       </TableCell>
                       <TableCell className="font-mono py-4">
                         <div className="flex items-center gap-2">
-                          {c.unread && <Badge variant="default" className="animate-pulse text-[11px] px-1.5 py-0.5">NUEVO</Badge>}
-                          <span className={`${c.unread ? "text-primary font-bold" : "font-medium"} text-sm tracking-tight`}>{c.radicado}</span>
+                          {row.unread && <Badge variant="default" className="animate-pulse text-[11px] px-1.5 py-0.5">NUEVO</Badge>}
+                          <span className={`${row.unread ? "text-primary font-bold" : "font-medium"} text-sm tracking-tight`}>{row.radicado}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{c.demandante || "—"}</TableCell>
-                      <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{c.demandado || "—"}</TableCell>
-                      <TableCell className="text-sm">
-                        {c.abogado ? (
-                          <Badge variant="outline" className={`font-normal ${getAbogadoColor(c.abogado)}`}>
-                            {c.abogado}
-                          </Badge>
-                        ) : "—"}
+                      <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{row.demandante || "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{row.demandado || "—"}</TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <Select
+                          defaultValue={row.abogado || "sin_asignar"}
+                          onValueChange={async (val) => {
+                            try {
+                              await updateCaseLawyer(row.id, val);
+                              setRows(prev => prev.map(r => r.id === row.id ? { ...r, abogado: val } : r));
+                              toast({ title: "Abogado actualizado", description: "El cambio se guardó correctamente" });
+                              fetchStats();
+                            } catch (err: any) {
+                              toast({ title: "Error", description: err.message, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`h-8 text-xs font-medium ${getAbogadoColor(row.abogado || "")}`}>
+                            <SelectValue placeholder="Asignar..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sin_asignar">Sin asignar</SelectItem>
+                            {abogadosList.map(name => (
+                              <SelectItem key={name} value={name}>{name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{c.cedula || "—"}</TableCell>
-                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{c.juzgado || "—"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatDate(c.ultima_actuacion)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{row.cedula || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{row.juzgado || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{formatDate(row.ultima_actuacion)}</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          <Button variant={c.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(c)}>
+                          <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(c)}>

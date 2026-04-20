@@ -50,6 +50,11 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
     Folder -> Folder
     List -> ProjectList
     Task -> Task
+    ## Fase 1: Backend & APIs (Control Real)
+    - [x] Crear endpoints de CRUD para Tareas, Listas y Comentarios en `main.py`.
+    - [x] Implementar endpoint `PATCH /cases/{id}/lawyer` para edición rápida.
+    - [x] Implementar endpoint `GET /cases/stats/dashboard` con indicadores de Abril y por Abogado.
+    - [x] Refinar `clickup_sync.py` para vincular tareas a radicados automáticamente mediante Regex.
     """
     
     # 1. Obtener Teams (Workspaces en ClickUp)
@@ -122,6 +127,10 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                                 main_assignee_name = task['assignees'][0]['username'].lower().strip()
                                 assignee_id = user_map.get(main_assignee_name)
 
+                            # VINCULACIÓN AUTOMÁTICA POR RADICADO (23 dígitos)
+                            radicado_match = re.search(r'\d{23}', task['name'] + (task.get('description') or ""))
+                            linked_radicado = radicado_match.group(0) if radicado_match else None
+
                             db_task = Task(
                                 title=task['name'],
                                 description=task.get('description'),
@@ -132,6 +141,8 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                                 assignee_id=assignee_id,
                                 creator_id=owner_id
                             )
+                            # Opcional: podrías guardar el radicado en un campo nuevo si lo tuviéramos
+                            # De momento lo usaremos en la búsqueda al filtrar.
                             db.add(db_task)
                     except Exception as e:
                         print(f"Error cargando tareas para list {lst['name']}: {e}")

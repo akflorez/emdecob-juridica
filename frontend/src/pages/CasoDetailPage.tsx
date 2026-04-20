@@ -11,21 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  getCaseByRadicado, 
-  getCaseById,
-  getCaseEvents, 
-  getCaseEventsById,
-  downloadEventsExcel,
-  downloadEventsByIdExcel,
-  markCaseRead,
-  getDocumentosActuacion,
-  DocumentoActuacion,
-  CasePublication,
   getCasePublications,
-  getCasePublicationsById
+  getCasePublicationsById,
+  getTasks,
+  updateTask,
+  createTask,
+  type Task as TaskType
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PublicacionesPanel } from '@/components/PublicacionesPanel';
+import { CheckCircle2, ListPlus, MoreVertical, MessageSquare } from 'lucide-react';
 
 type DocsState = {
   items: any[];
@@ -41,9 +36,11 @@ export default function CasoDetailPage() {
   const [caseData, setCaseData] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [publications, setPublications] = useState<CasePublication[]>([]);
+  const [tasks, setTasks] = useState<TaskType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isLoadingPubs, setIsLoadingPubs] = useState(false);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [multipleCases, setMultipleCases] = useState<any[] | null>(null);
   
@@ -124,6 +121,17 @@ export default function CasoDetailPage() {
         
         setCaseData(result);
         
+        // Cargar tareas relacionadas
+        setIsLoadingTasks(true);
+        try {
+          const tResult = await getTasks({ radicado: activeRadicado });
+          setTasks(tResult);
+        } catch (e) {
+          console.error("Error cargando tareas:", e);
+        } finally {
+          setIsLoadingTasks(false);
+        }
+
         if (result.id && result.unread) {
           try { await markCaseRead(result.id); } catch {}
         }
@@ -468,7 +476,7 @@ export default function CasoDetailPage() {
 
       {/* Contenido con Tabs */}
       <Tabs defaultValue="actuaciones" className="w-full">
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2 mb-4">
+        <TabsList className="grid w-full max-w-[600px] grid-cols-3 mb-4">
           <TabsTrigger value="actuaciones" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Actuaciones
@@ -476,6 +484,10 @@ export default function CasoDetailPage() {
           <TabsTrigger value="publicaciones" className="flex items-center gap-2">
             <FileDown className="h-4 w-4" />
             Publicaciones
+          </TabsTrigger>
+          <TabsTrigger value="tareas" className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            Tareas de Gestión
           </TabsTrigger>
         </TabsList>
 
@@ -687,6 +699,72 @@ export default function CasoDetailPage() {
                 isLoading={isLoadingPubs}
                 onRefresh={(newPubs) => setPublications(newPubs)}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tareas">
+          <Card className="border-primary/20">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                  Tareas Vinculadas
+                </CardTitle>
+                <CardDescription>Seguimiento de gestión para este radicado</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => window.open('/proyectos', '_blank')}>
+                <ListPlus className="h-4 w-4 mr-2" />
+                Nueva Tarea
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {isLoadingTasks ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                  <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                  <p className="text-muted-foreground">No hay tareas de gestión vinculadas a este radicado.</p>
+                  <Button variant="link" className="mt-2" onClick={() => window.open('/proyectos', '_blank')}>
+                    Ir al Gestor de Proyectos
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {tasks.map(task => (
+                    <div 
+                      key={task.id} 
+                      className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/30 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center gap-4">
+                        <CheckCircle2 className={`h-5 w-5 ${task.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
+                        <div>
+                          <p className="text-sm font-semibold">{task.title}</p>
+                          <div className="flex items-center gap-4 mt-1">
+                            <Badge variant="outline" className="text-[10px] h-4 uppercase">{task.status}</Badge>
+                            {task.due_date && (
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(task.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

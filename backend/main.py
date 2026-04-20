@@ -36,7 +36,11 @@ from typing import List, Optional, Tuple
 from contextlib import asynccontextmanager
 
 from .db import SessionLocal, engine, Base
-from .models import Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, User, CasePublication, SearchJob
+from .models import (
+    Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
+    User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
+    ProjectList, Task, TaskComment, TaskAttachment
+)
 from .service.rama import (
     consulta_por_radicado,
     detalle_proceso,
@@ -3495,3 +3499,180 @@ async def import_clickup(
         "ok": True,
         "message": "La importación ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
     }
+
+# =========================
+3497: # PROJECT MANAGEMENT API
+3498: # =========================
+3499: 
+3500: class TaskCreate(BaseModel):
+3501:     title: str
+3502:     description: Optional[str] = None
+3503:     list_id: int
+3504:     assignee_id: Optional[int] = None
+3505:     priority: Optional[str] = None
+3506:     status: str = "open"
+3507:     due_date: Optional[str] = None
+3508: 
+3509: class TaskUpdate(BaseModel):
+3510:     title: Optional[str] = None
+3511:     description: Optional[str] = None
+3512:     assignee_id: Optional[int] = None
+3513:     status: Optional[str] = None
+3514:     priority: Optional[str] = None
+3515:     due_date: Optional[str] = None
+3516: 
+3517: class CommentCreate(BaseModel):
+3518:     task_id: int
+3519:     content: str
+3520: 
+3521: @app.get("/projects/workspaces")
+3522: async def get_workspaces(
+3523:     db: Session = Depends(get_db),
+3524:     current_user: User = Depends(get_current_user)
+3525: ):
+3526:     """Retorna la jerarquía completa de espacios para el usuario."""
+3527:     # Para esta fase, los admins ven todo, los abogados ven donde son miembros
+3528:     if current_user.is_admin:
+3529:         workspaces = db.query(Workspace).all()
+3530:     else:
+3531:         workspaces = db.query(Workspace).join(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()
+3532:     
+3533:     results = []
+3534:     for ws in workspaces:
+3535:         folders = []
+3536:         for f in ws.folders:
+3537:             lists = [{"id": l.id, "name": l.name} for l in f.lists]
+3538:             folders.append({"id": f.id, "name": f.name, "lists": lists})
+3539:         
+3540:         results.append({
+3541:             "id": ws.id,
+3542:             "name": ws.name,
+3543:             "visibility": ws.visibility,
+3544:             "folders": folders
+3545:         })
+3546:     
+3547:     return results
+3548: 
+3549: @app.get("/projects/tasks")
+3550: async def get_tasks(
+3551:     list_id: Optional[int] = None,
+3552:     status: Optional[str] = None,
+3553:     assignee_id: Optional[int] = None,
+3554:     radicado: Optional[str] = None,
+3555:     db: Session = Depends(get_db),
+3556:     current_user: User = Depends(get_current_user)
+3557: ):
+3558:     query = db.query(Task)
+3559:     if list_id:
+3560:         query = query.filter(Task.list_id == list_id)
+3561:     if status:
+3562:         query = query.filter(Task.status == status)
+3563:     if assignee_id:
+3564:         query = query.filter(Task.assignee_id == assignee_id)
+3565:     
+3566:     # Filtrar por radicado si se proporciona (búsqueda parcial en título/desc o link directo)
+3567:     if radicado:
+3568:         query = query.filter(or_(Task.title.contains(radicado), Task.description.contains(radicado)))
+3569:         
+3570:     tasks = query.order_by(desc(Task.created_at)).all()
+3571:     
+3572:     return [{
+3573:         "id": t.id,
+3574:         "title": t.title,
+3575:         "status": t.status,
+3576:         "priority": t.priority,
+3577:         "assignee_id": t.assignee_id,
+3578:         "list_id": t.list_id,
+3579:         "due_date": t.due_date,
+3580:         "created_at": t.created_at,
+3581:         "clickup_id": t.clickup_id
+3582:     } for t in tasks]
+3583: 
+3584: @app.post("/projects/tasks")
+3585: async def create_task(
+3586:     t_data: TaskCreate,
+3587:     db: Session = Depends(get_db),
+3588:     current_user: User = Depends(get_current_user)
+3589: ):
+3590:     task = Task(
+3591:         title=t_data.title,
+3592:         description=t_data.description,
+3593:         list_id=t_data.list_id,
+3594:         assignee_id=t_data.assignee_id,
+3595:         priority=t_data.priority,
+3596:         status=t_data.status,
+3597:         due_date=t_data.due_date,
+3598:         creator_id=current_user.id
+3599:     )
+3600:     db.add(task)
+3601:     db.commit()
+3602:     db.refresh(task)
+3603:     return task
+3604: 
+3605: @app.patch("/projects/tasks/{task_id}")
+3606: async def update_task(
+3607:     task_id: int,
+3608:     t_data: TaskUpdate,
+3609:     db: Session = Depends(get_db),
+3610:     current_user: User = Depends(get_current_user)
+3611: ):
+3612:     task = db.query(Task).filter(Task.id == task_id).first()
+3613:     if not task:
+3614:         raise HTTPException(status_code=404, detail="Tarea no encontrada")
+3615:     
+3616:     if t_data.title is not None: task.title = t_data.title
+3617:     if t_data.description is not None: task.description = t_data.description
+3618:     if t_data.status is not None: task.status = t_data.status
+3619:     if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
+3620:     if t_data.priority is not None: task.priority = t_data.priority
+3621:     if t_data.due_date is not None: task.due_date = t_data.due_date
+3622:     
+3623:     db.commit()
+3624:     return task
+3625: 
+3626: # =========================
+3627: # ADVANCED DASHBOARD & INLINE EDIT
+3628: # =========================
+3629: 
+3630: @app.get("/cases/stats/dashboard")
+3631: async def get_advanced_dashboard_stats(db: Session = Depends(get_db)):
+3632:     """Obtiene estadísticas de negocio para las etiquetas superiores."""
+3633:     now = datetime.now(pytz.utc).astimezone(TIMEZONE_CO)
+3634:     first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+3635:     
+3636:     # 1. Conteo de actuaciones en el mes actual (Abril o el que sea)
+3637:     # Buscamos eventos cuya fecha sea mayor o igual al inicio de mes
+3638:     month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month).count()
+3639:     
+3640:     # 2. Conteo de casos por Abogado (desglose)
+3641:     lawyer_counts = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado != None).group_by(Case.abogado).all()
+3642:     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
+3643:     
+3644:     # 3. Alertas (ej. tareas vencidas hoy o casos sin leer)
+3645:     unread_total = db.query(Case).filter(Case.unread == True).count()
+3646:     
+3647:     return {
+3648:         "month_actions": month_actions,
+3649:         "month_name": now.strftime("%B"),
+3650:         "lawyer_stats": lawyer_stats,
+3651:         "unread_total": unread_total
+3652:     }
+3653: 
+3654: class LawyerUpdate(BaseModel):
+3655:     abogado: str
+3656: 
+3657: @app.patch("/cases/{case_id}/lawyer")
+3658: async def update_case_lawyer(
+3659:     case_id: int,
+3660:     data: LawyerUpdate,
+3661:     db: Session = Depends(get_db),
+3662:     current_user: User = Depends(get_current_user)
+3663: ):
+3664:     """Actualización ultra-rápida del abogado para edición en línea."""
+3665:     cs = db.query(Case).filter(Case.id == case_id).first()
+3666:     if not cs:
+3667:         raise HTTPException(status_code=404, detail="Caso no encontrado")
+3668:     
+3669:     cs.abogado = data.abogado
+3670:     db.commit()
+3671:     return {"ok": True, "abogado": cs.abogado}
