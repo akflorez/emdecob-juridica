@@ -187,3 +187,115 @@ class SearchJob(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+# =========================
+# GESTOR DE PROYECTOS (ESTILO CLICKUP)
+# =========================
+
+class Workspace(Base):
+    """Ambientes principales de trabajo (Ej: Civil, Laboral, FNA)"""
+    __tablename__ = "workspaces"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # PRIVATE o TEAM_COLLABORATION
+    visibility = Column(String(50), default="TEAM_COLLABORATION")
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class WorkspaceMember(Base):
+    """Miembros de un ambiente y sus permisos"""
+    __tablename__ = "workspace_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
+    # ADMIN, EDITOR, VIEWER
+    role = Column(String(50), default="VIEWER")
+    
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_user"),
+    )
+
+
+class Folder(Base):
+    """Carpetas dentro de un Ambiente"""
+    __tablename__ = "folders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ProjectList(Base):
+    """Listas de tareas (Ej: Pendientes, Revisión, Finalizados)"""
+    __tablename__ = "project_lists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    folder_id = Column(Integer, ForeignKey("folders.id", ondelete="CASCADE"), nullable=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Task(Base):
+    """Tareas individuales con jerarquía (soporta subtareas)"""
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # To do, In Progress, Done, etc.
+    status = Column(String(50), default="To Do")
+    priority = Column(String(50), nullable=True) # Low, Normal, High, Urgent
+    
+    due_date = Column(DateTime, nullable=True)
+    
+    list_id = Column(Integer, ForeignKey("project_lists.id", ondelete="CASCADE"), nullable=False)
+    assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # Soporte para subtareas (recursivo)
+    parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    
+    # Referencia a ClickUp para evitar duplicados en importación
+    clickup_id = Column(String(100), unique=True, index=True, nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class TaskComment(Base):
+    """Comentarios en las tareas"""
+    __tablename__ = "task_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    content = Column(Text, nullable=False)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class TaskAttachment(Base):
+    """Archivos o imágenes adjuntas a una tarea"""
+    __tablename__ = "task_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(100), nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

@@ -3460,3 +3460,38 @@ async def bulk_update_metadata(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error procesando Excel: {str(e)}")
+
+
+# =========================
+# CLICKUP INTEGRATION
+# =========================
+
+class ClickUpImportRequest(BaseModel):
+    token: str
+
+@app.post("/projects/import-clickup")
+async def import_clickup(
+    data: ClickUpImportRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lanza la migración desde ClickUp en segundo plano."""
+    from .clickup_sync import migrate_clickup_to_emdecob
+    
+    # Check admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importación masiva")
+
+    async def _do_import():
+        try:
+            await migrate_clickup_to_emdecob(data.token, db, current_user.id)
+        except Exception as e:
+            print(f"[CLICKUP-IMPORT] Fallo: {e}")
+
+    background_tasks.add_task(_do_import)
+    
+    return {
+        "ok": True,
+        "message": "La importación ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
+    }
