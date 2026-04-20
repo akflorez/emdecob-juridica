@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, Menu, LayoutDashboard, Calendar } from "lucide-react";
 import { SidebarNavLink } from "./SidebarNavLink";
 import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
@@ -69,6 +69,20 @@ export function AppSidebar() {
 
         <SidebarNavLink to="/no-encontrados" icon={AlertTriangle} collapsed={collapsed} title="No Encontrados">
           {!collapsed && "No Encontrados"}
+        </SidebarNavLink>
+
+        {!collapsed && (
+          <p className="px-4 py-2 mt-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Gestión (ClickUp)
+          </p>
+        )}
+
+        <SidebarNavLink to="/proyectos" icon={LayoutDashboard} collapsed={collapsed} title="Mis Proyectos">
+          {!collapsed && "Mis Proyectos"}
+        </SidebarNavLink>
+
+        <SidebarNavLink to="/agenda" icon={Calendar} collapsed={collapsed} title="Agenda / Calendario">
+          {!collapsed && "Agenda / Calendario"}
         </SidebarNavLink>
 
         {isAdmin && (

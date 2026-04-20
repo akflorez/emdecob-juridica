@@ -16,6 +16,8 @@ import CasosPage from "./pages/CasosPage";
 import CasoDetailPage from "./pages/CasoDetailPage";
 import ConfiguracionPage from "./pages/ConfiguracionPage";
 import NoEncontradosPage from "./pages/NoEncontradosPage";
+import ProjectDashboardPage from "./pages/ProjectDashboardPage";
+import AgendaView from "./pages/AgendaView";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +48,8 @@ const App = () => (
                 <Route path="/casos" element={<CasosPage />} />
                 <Route path="/casos/:radicado" element={<CasoDetailPage />} />
                 <Route path="/casos/id/:id" element={<CasoDetailPage />} />
+                <Route path="/proyectos" element={<ProjectDashboardPage />} />
+                <Route path="/agenda" element={<AgendaView />} />
                 <Route path="/no-encontrados" element={<NoEncontradosPage />} />
                 <Route path="/configuracion" element={
                   <ProtectedRoute requiredPermission="importar">
