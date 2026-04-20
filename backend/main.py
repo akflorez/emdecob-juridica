@@ -46,7 +46,7 @@ from .service.rama import (
     RamaError,
 )
 from .apply_robust_migrations import run_migrations
-from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, is_relevant_actuacion, consultar_publicaciones_rango
+from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
 from .service.bulk_orchestrator import run_name_search_job, log_job
 
 
@@ -110,7 +110,7 @@ async def notification_flush_loop():
                 and _already_flushed_today != hoy
                 and _notification_accumulator
             ):
-                print(f"[flush-loop] Son las {NOTIFICATION_FLUSH_HOUR}:00 — enviando {len(_notification_accumulator)} casos acumulados")
+                print(f"[flush-loop] Son las {NOTIFICATION_FLUSH_HOUR}:00  enviando {len(_notification_accumulator)} casos acumulados")
                 send_grouped_notification(list(_notification_accumulator))
                 _notification_accumulator.clear()
                 _already_flushed_today = hoy
@@ -124,10 +124,10 @@ async def notification_flush_loop():
 async def auto_refresh_loop():
     global auto_refresh_running, auto_refresh_stats
 
-    print("⏳ Esperando 60 segundos antes del primer auto-refresh...")
+    print("Esperando 60 segundos antes del primer auto-refresh...")
     await asyncio.sleep(60)
 
-    print(f"⏰ Auto-refresh continuo iniciado — revisará TODOS los casos en cada ciclo")
+    print("Auto-refresh continuo iniciado - revisara TODOS los casos en cada ciclo")
 
     while auto_refresh_running:
         try:
@@ -215,7 +215,7 @@ async def do_auto_refresh() -> dict:
                         try: db.close()
                         except: pass
                     db = get_fresh_db()
-                    print(f"   🔗 Conexión renovada en caso {i+1}/{len(case_ids)}")
+                    print(f"   (Link) Conexion renovada en caso {i+1}/{len(case_ids)}")
 
                 c = db.query(Case).filter(Case.id == case_id).first()
                 if not c:
@@ -227,7 +227,7 @@ async def do_auto_refresh() -> dict:
                 except RamaError as e:
                     print(f"   [WARN] Error consultando {c.radicado}: {e}")
                     errors += 1
-                    if "bloqueó" in str(e).lower() or "rate" in str(e).lower():
+                    if "bloque" in str(e).lower() or "rate" in str(e).lower():
                         await asyncio.sleep(60)
                     continue
 
@@ -266,7 +266,7 @@ async def do_auto_refresh() -> dict:
                     d1, d2, abo  = parse_sujetos_procesales(sujetos)
                     c.demandante     = d1 or c.demandante
                     c.demandado      = d2 or c.demandado
-                    # c.abogado        = abo or c.abogado (Removido por petición del usuario)
+                    # c.abogado        = abo or c.abogado (Removido por peticin del usuario)
                     c.ultima_actuacion = nueva_fecha
                     new_hash = sha256_obj({"radicado": c.radicado, "ultima_actuacion": str(nueva_fecha), "ts": now_colombia().isoformat()})
                     c.current_hash   = new_hash
@@ -289,7 +289,7 @@ async def do_auto_refresh() -> dict:
                     d1f, d2f, abof = parse_sujetos_procesales(sujetos_raw)
                     if d1f: c.demandante = d1f
                     if d2f: c.demandado  = d2f
-                    # if abof: c.abogado   = abof (Removido por petición del usuario)
+                    # if abof: c.abogado   = abof (Removido por peticin del usuario)
 
                 c.last_check_at = now_colombia()
                 checked += 1
@@ -297,9 +297,9 @@ async def do_auto_refresh() -> dict:
                 if (i + 1) % MINI_BATCH == 0:
                     try:
                         db.commit()
-                        print(f"   💾 Commit parcial: {i+1}/{len(case_ids)} casos")
+                        print(f"   (OK) Commit parcial: {i+1}/{len(case_ids)} casos")
                     except Exception as e:
-                        print(f"   ⚠️ Error en commit parcial: {e} — reconectando...")
+                        print(f"   (Warn) Error en commit parcial: {e} - reconectando...")
                         try: db.rollback()
                         except: pass
                         try: db.close()
@@ -307,7 +307,7 @@ async def do_auto_refresh() -> dict:
                         db = get_fresh_db()
 
             except Exception as e:
-                print(f"   💥 Error procesando caso_id={case_id}: {e}")
+                print(f"   (Error) Error procesando caso_id={case_id}: {e}")
                 errors += 1
                 if "ssl" in str(e).lower() or "connection" in str(e).lower():
                     try:
@@ -318,9 +318,9 @@ async def do_auto_refresh() -> dict:
         if db:
             try:
                 db.commit()
-                print(f"   💾 Commit final")
+                print(f"    Commit final")
             except Exception as e:
-                print(f"   ⚠️ Error en commit final: {e}")
+                print(f"    Error en commit final: {e}")
                 try: db.rollback()
                 except: pass
 
@@ -337,7 +337,7 @@ async def do_auto_refresh() -> dict:
         }
 
     except Exception as e:
-        print(f"💥 Error en do_auto_refresh: {e}")
+        print(f" Error en do_auto_refresh: {e}")
         raise
     finally:
         if db:
@@ -387,7 +387,7 @@ async def save_new_actuaciones(case: Case, id_proceso: int, db: Session):
                 if con_docs:
                     case.has_documents = True
     except Exception as e:
-        print(f"   ⚠️ Error guardando actuaciones: {e}")
+        print(f"    Error guardando actuaciones: {e}")
 
 
 def _accumulate_and_notify(new_cases: List[dict]):
@@ -396,7 +396,7 @@ def _accumulate_and_notify(new_cases: List[dict]):
     hoy = today_colombia()
 
     if _notification_accumulator_date and _notification_accumulator_date < hoy:
-        print(f"📧 Acumulador de {_notification_accumulator_date} descartado — nuevo día")
+        print(f" Acumulador de {_notification_accumulator_date} descartado  nuevo da")
         _notification_accumulator = []
 
     _notification_accumulator_date = hoy
@@ -423,11 +423,11 @@ def _accumulate_and_notify(new_cases: List[dict]):
     )
 
     if should_send:
-        print(f"📧 Enviando correo con {total} casos acumulados...")
+        print(f"Enviando correo con {total} casos acumulados...")
         send_grouped_notification(_notification_accumulator)
         _notification_accumulator = []
     else:
-        print(f"📧 Acumulando... {total}/{NOTIFICATION_BATCH_SIZE} casos (envío a las {NOTIFICATION_FLUSH_HOUR}:00 si no se llega antes)")
+        print(f" Acumulando... {total}/{NOTIFICATION_BATCH_SIZE} casos (envo a las {NOTIFICATION_FLUSH_HOUR}:00 si no se llega antes)")
 
 
 def send_grouped_notification(updated_cases: List[dict]):
@@ -444,7 +444,7 @@ def send_grouped_notification(updated_cases: List[dict]):
             return
 
         count = len(updated_cases)
-        subject = f"🔔 {count} caso{'s' if count > 1 else ''} con nuevas actuaciones - EMDECOB"
+        subject = f" {count} caso{'s' if count > 1 else ''} con nuevas actuaciones - EMDECOB"
 
         log = NotificationLog(
             recipients=", ".join(emails),
@@ -458,18 +458,18 @@ def send_grouped_notification(updated_cases: List[dict]):
             for case in updated_cases:
                 rows_html += f"""
                 <tr>
-                  <td style="padding:8px;border:1px solid #ddd;font-family:monospace;font-size:12px;">{case.get('radicado', '—')}</td>
-                  <td style="padding:8px;border:1px solid #ddd;">{case.get('demandante', '—') or '—'}</td>
-                  <td style="padding:8px;border:1px solid #ddd;">{case.get('demandado', '—') or '—'}</td>
-                  <td style="padding:8px;border:1px solid #ddd;font-size:12px;">{case.get('juzgado', '—') or '—'}</td>
-                  <td style="padding:8px;border:1px solid #ddd;text-align:center;">{case.get('ultima_actuacion', '—') or '—'}</td>
+                  <td style="padding:8px;border:1px solid #ddd;font-family:monospace;font-size:12px;">{case.get('radicado', '')}</td>
+                  <td style="padding:8px;border:1px solid #ddd;">{case.get('demandante', '') or ''}</td>
+                  <td style="padding:8px;border:1px solid #ddd;">{case.get('demandado', '') or ''}</td>
+                  <td style="padding:8px;border:1px solid #ddd;font-size:12px;">{case.get('juzgado', '') or ''}</td>
+                  <td style="padding:8px;border:1px solid #ddd;text-align:center;">{case.get('ultima_actuacion', '') or ''}</td>
                 </tr>
                 """
 
             body = f"""
             <html>
             <body style="font-family:Arial,sans-serif;padding:20px;">
-              <h2 style="color:#0d9488;">🔔 Nuevas Actuaciones Detectadas</h2>
+              <h2 style="color:#0d9488;"> Nuevas Actuaciones Detectadas</h2>
               <p>Se han detectado <strong>{count}</strong> caso{'s' if count > 1 else ''} con nuevas actuaciones:</p>
 
               <table style="border-collapse:collapse;width:100%;margin-top:20px;">
@@ -479,7 +479,7 @@ def send_grouped_notification(updated_cases: List[dict]):
                     <th style="padding:10px;border:1px solid #ddd;text-align:left;">Demandante</th>
                     <th style="padding:10px;border:1px solid #ddd;text-align:left;">Demandado</th>
                     <th style="padding:10px;border:1px solid #ddd;text-align:left;">Juzgado</th>
-                    <th style="padding:10px;border:1px solid #ddd;text-align:center;">Últ. Actuación</th>
+                    <th style="padding:10px;border:1px solid #ddd;text-align:center;">lt. Actuacin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -488,7 +488,7 @@ def send_grouped_notification(updated_cases: List[dict]):
               </table>
               <hr style="margin-top:30px;">
               <p style="color:#888;font-size:12px;">
-                Mensaje automático EMDECOB Consultas<br>
+                Mensaje automtico EMDECOB Consultas<br>
                 Fecha: {now_colombia().strftime('%Y-%m-%d %H:%M:%S')}
               </p>
             </body>
@@ -549,7 +549,7 @@ async def _pending_validation_loop():
     DELAY_BETWEEN = 2.5
     CYCLE_WAIT = 300
 
-    print("🔄 [pending-loop] Loop de validación de pendientes activo")
+    print("[pending-loop] Loop de validacion de pendientes activo")
     await asyncio.sleep(15)
 
     while True:
@@ -559,7 +559,7 @@ async def _pending_validation_loop():
             total = db.query(Case).filter(Case.juzgado.is_(None)).count()
 
             if total > 0:
-                print(f"🔄 [pending-loop] {total} casos pendientes — validando lote de {min(BATCH, total)}...")
+                print(f" [pending-loop] {total} casos pendientes  validando lote de {min(BATCH, total)}...")
                 pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(BATCH).all()
 
                 for i, c in enumerate(pendientes):
@@ -571,7 +571,7 @@ async def _pending_validation_loop():
                             inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
                             if inv:
                                 db.delete(inv)
-                            print(f"   ✅ [pending-loop] Validado: {c.radicado}")
+                            print(f"    [pending-loop] Validado: {c.radicado}")
                         else:
                             inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
                             if inv:
@@ -579,19 +579,19 @@ async def _pending_validation_loop():
                                 inv.updated_at = now_colombia()
                             else:
                                 db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
-                            print(f"   ⚠️ [pending-loop] No encontrado (reintentará): {c.radicado}")
+                            print(f"    [pending-loop] No encontrado (reintentar): {c.radicado}")
                         db.flush()
                     except Exception as e:
-                        print(f"   💥 [pending-loop] Error en {c.radicado}: {e}")
+                        print(f"    [pending-loop] Error en {c.radicado}: {e}")
 
                 db.commit()
                 remaining = db.query(Case).filter(Case.juzgado.is_(None)).count()
-                print(f"🔄 [pending-loop] Ciclo completo. Restantes: {remaining}")
+                print(f" [pending-loop] Ciclo completo. Restantes: {remaining}")
             else:
-                print("🔄 [pending-loop] Sin pendientes. Próxima revisión en 5 min.")
+                print(" [pending-loop] Sin pendientes. Prxima revisin en 5 min.")
 
         except Exception as e:
-            print(f"💥 [pending-loop] Error en ciclo: {e}")
+            print(f" [pending-loop] Error en ciclo: {e}")
         finally:
             if db:
                 db.close()
@@ -619,11 +619,11 @@ async def lifespan(app: FastAPI):
     print(f"[RELOJ] Auto-refresh iniciado (cada {auto_refresh_stats['interval_minutes']} minutos)")
 
     asyncio.create_task(_pending_validation_loop())
-    print("[SYNC] Validación continua de pendientes iniciada")
+    print("[SYNC] Validacin continua de pendientes iniciada")
 
     yield
 
-    print("🛑 Deteniendo EMDECOB Consultas...")
+    print(" Deteniendo EMDECOB Consultas...")
     auto_refresh_running = False
     auto_refresh_stats["running"] = False
     if auto_refresh_task:
@@ -720,7 +720,7 @@ import base64
 import json
 
 # =========================
-# AUTH — Stateless Tokens
+# AUTH  Stateless Tokens
 # =========================
 SECRET_KEY_DEV = base64.urlsafe_b64encode(b'emdecob_secret_jwt_key_123456789')
 fernet = Fernet(SECRET_KEY_DEV)
@@ -739,7 +739,7 @@ def verify_access_token(token: str) -> Optional[int]:
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def _hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
@@ -764,7 +764,7 @@ HARDCODED_USERS = {
     "fna_juridica": {
         "password": "juridicaEmdecob2026$",
         "id": 9998,
-        "nombre": "FNA Jurídica",
+        "nombre": "FNA Jurdica",
         "is_admin": False,
     },
 }
@@ -779,13 +779,13 @@ def get_current_user(
     token = credentials.credentials
     user_id = verify_access_token(token)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        raise HTTPException(status_code=401, detail="Token invlido o expirado")
 
     # Fake users para hardcoded fallback
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
     if user_id == 9998:
-        return User(id=9998, username="fna_juridica", nombre="FNA Jurídica", is_admin=False, is_active=True)
+        return User(id=9998, username="fna_juridica", nombre="FNA Jurdica", is_admin=False, is_active=True)
 
     db_local = SessionLocal()
     try:
@@ -805,16 +805,30 @@ def _ensure_default_user():
             db.add(User(
                 username="fna_juridica",
                 hashed_password=_hash_password("juridicaEmdecob2026$"),
-                nombre="FNA Jurídica",
+                nombre="FNA Jurdica",
                 is_active=True,
                 is_admin=False,
             ))
             db.commit()
-            print("✅ Usuario fna_juridica creado automáticamente")
+            print(" Usuario fna_juridica creado automticamente")
         else:
-            print("👤 Usuario fna_juridica ya existe")
+            print(" Usuario fna_juridica ya existe")
+
+        exists2 = db.query(User).filter(User.username == "jurico_emdecob").first()
+        if not exists2:
+            db.add(User(
+                username="jurico_emdecob",
+                hashed_password=_hash_password("emdecob2027$"),
+                nombre="Jurdico Emdecob",
+                is_active=True,
+                is_admin=False,
+            ))
+            db.commit()
+            print(" Usuario jurico_emdecob creado automticamente")
+        else:
+            print(" Usuario jurico_emdecob ya existe")
     except Exception as e:
-        print(f"⚠️ Error creando usuario por defecto: {e}")
+        print(f" Error creando usuario por defecto: {e}")
     finally:
         db.close()
 
@@ -1061,11 +1075,11 @@ async def fetch_documentos_rama_directa(id_reg_actuacion: int, llave_proceso: st
     async with httpx.AsyncClient(timeout=30.0, verify=False, headers=RAMA_HEADERS) as client:
         for path in candidate_paths:
             url = f"{RAMA_BASE}{path}"
-            print(f"   🌐 [fallback] GET {url}")
+            print(f"    [fallback] GET {url}")
 
             try:
                 resp = await client.get(url)
-                print(f"   🌐 [fallback] status={resp.status_code} | body={resp.text[:400]}")
+                print(f"    [fallback] status={resp.status_code} | body={resp.text[:400]}")
 
                 if resp.status_code in (404, 403, 429):
                     continue
@@ -1075,16 +1089,16 @@ async def fetch_documentos_rama_directa(id_reg_actuacion: int, llave_proceso: st
                 try:
                     data = resp.json()
                 except Exception as e:
-                    print(f"   🌐 [fallback] Error JSON en {path}: {e}")
+                    print(f"    [fallback] Error JSON en {path}: {e}")
                     continue
 
                 docs = extract_documentos_from_response(data)
                 if docs:
-                    print(f"   🌐 [fallback] ✅ {len(docs)} docs en: {path}")
+                    print(f"    [fallback]  {len(docs)} docs en: {path}")
                     return docs
 
             except Exception as e:
-                print(f"   🌐 [fallback] Error en {path}: {e}")
+                print(f"    [fallback] Error en {path}: {e}")
 
     return []
 
@@ -1195,9 +1209,9 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
             if added_count > 0:
                 print(f"[main.py] OK: Se agregaron {added_count} actuaciones nuevas a {c.radicado}")
             else:
-                print(f"[main.py] INFO: No hubo actuaciones nuevas (o ya existían) para {c.radicado}")
+                print(f"[main.py] INFO: No hubo actuaciones nuevas (o ya existan) para {c.radicado}")
         except Exception as e:
-            print(f"   ⚠️ Error actuaciones: {e}")
+            print(f"    Error actuaciones: {e}")
 
     return {"found": True, "case": c}
 
@@ -1214,10 +1228,19 @@ def home():
 # STATS
 # =========================
 @app.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
-    total_validos = db.query(Case).filter(Case.juzgado.isnot(None)).count()
-    total_invalidos = db.query(InvalidRadicado).count()
-    total_pendientes = db.query(Case).filter(Case.juzgado.is_(None)).count()
+def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    q_validos = db.query(Case).filter(Case.juzgado.isnot(None))
+    q_invalidos = db.query(InvalidRadicado)
+    q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
+
+    if not current_user.is_admin:
+        q_validos = q_validos.filter(Case.user_id == current_user.id)
+        q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
+        q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+
+    total_validos = q_validos.count()
+    total_invalidos = q_invalidos.count()
+    total_pendientes = q_pendientes.count()
 
     hoy = today_colombia()
     ayer = hoy - timedelta(days=1)
@@ -1246,14 +1269,14 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 # =========================
-# AUTH — LOGIN / LOGOUT / USUARIOS
+# AUTH  LOGIN / LOGOUT / USUARIOS
 # =========================
 
 @app.post("/auth/login")
 def login(data: LoginRequest):
-    """Autentica un usuario y retorna un token de sesión."""
+    """Autentica un usuario y retorna un token de sesin."""
 
-    # ── Primero intentar contra la base de datos ──
+    #  Primero intentar contra la base de datos 
     db = SessionLocal()
     try:
         user = db.query(User).filter(
@@ -1274,11 +1297,11 @@ def login(data: LoginRequest):
                 }
             }
     except Exception as e:
-        print(f"⚠️ [login] Error consultando BD: {e} — usando fallback")
+        print(f" [login] Error consultando BD: {e}  usando fallback")
     finally:
         db.close()
 
-    # ── Fallback hardcodeado (funciona aunque la BD falle) ──
+    #  Fallback hardcodeado (funciona aunque la BD falle) 
     hc = HARDCODED_USERS.get(data.username)
     if hc and data.password == hc["password"]:
         token = create_access_token(hc["id"])
@@ -1293,12 +1316,12 @@ def login(data: LoginRequest):
             }
         }
 
-    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contrasea incorrectos")
 
 
 @app.post("/auth/logout")
 def logout():
-    return {"ok": True, "message": "Sesión cerrada"}
+    return {"ok": True, "message": "Sesin cerrada"}
 
 
 @app.get("/auth/me")
@@ -1397,9 +1420,9 @@ def get_auto_refresh_status():
 def set_auto_refresh_config(data: AutoRefreshConfigRequest):
     global auto_refresh_stats
     if data.interval_minutes < 5:
-        raise HTTPException(400, "El intervalo mínimo es 5 minutos")
+        raise HTTPException(400, "El intervalo mnimo es 5 minutos")
     if data.interval_minutes > 1440:
-        raise HTTPException(400, "El intervalo máximo es 1440 minutos (24 horas)")
+        raise HTTPException(400, "El intervalo mximo es 1440 minutos (24 horas)")
     auto_refresh_stats["interval_minutes"] = data.interval_minutes
     return {"ok": True, "interval_minutes": data.interval_minutes}
 
@@ -1434,11 +1457,11 @@ async def run_auto_refresh_now():
                         pending_result["not_found"] += 1
                     db.flush()
                 except Exception as e:
-                    print(f"⚠️ [cron-pending] Error en {c.radicado}: {e}")
+                    print(f" [cron-pending] Error en {c.radicado}: {e}")
             db.commit()
             db.close()
         except Exception as e:
-            print(f"⚠️ [cron-pending] Error general: {e}")
+            print(f" [cron-pending] Error general: {e}")
 
         # 3. Reintentar no encontrados
         invalid_result = {"found": 0, "still_not_found": 0}
@@ -1459,11 +1482,11 @@ async def run_auto_refresh_now():
                         invalid_result["still_not_found"] += 1
                     db.flush()
                 except Exception as e:
-                    print(f"⚠️ [cron-invalid] Error en {item.radicado}: {e}")
+                    print(f" [cron-invalid] Error en {item.radicado}: {e}")
             db.commit()
             db.close()
         except Exception as e:
-            print(f"⚠️ [cron-invalid] Error general: {e}")
+            print(f" [cron-invalid] Error general: {e}")
 
         return {
             **result,
@@ -1526,26 +1549,26 @@ def update_notification_config(data: NotificationConfigUpdate, db: Session = Dep
 
     config.updated_at = now_colombia()
     db.commit()
-    return {"ok": True, "message": "Configuración guardada"}
+    return {"ok": True, "message": "Configuracin guardada"}
 
 @app.post("/config/notifications/test")
 def test_notification_email(data: TestEmailRequest, db: Session = Depends(get_db)):
     config = db.query(NotificationConfig).first()
     if not config:
-        raise HTTPException(400, "No hay configuración guardada")
+        raise HTTPException(400, "No hay configuracin guardada")
     if not config.smtp_user or not config.smtp_pass:
-        raise HTTPException(400, "Falta configurar usuario y contraseña SMTP")
+        raise HTTPException(400, "Falta configurar usuario y contrasea SMTP")
 
     try:
         body = f"""
         <html><body style="font-family:Arial;padding:20px;">
-        <h2 style="color:#0d9488;">✅ Prueba de Notificación</h2>
-        <p>Si recibiste este correo, la configuración SMTP está correcta.</p>
+        <h2 style="color:#0d9488;"> Prueba de Notificacin</h2>
+        <p>Si recibiste este correo, la configuracin SMTP est correcta.</p>
         <p style="color:#888;font-size:12px;">Fecha: {now_colombia().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </body></html>
         """
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "✅ Prueba SMTP - EMDECOB Consultas"
+        msg["Subject"] = " Prueba SMTP - EMDECOB Consultas"
         msg["From"] = config.smtp_from or config.smtp_user
         msg["To"] = data.email
         msg.attach(MIMEText(body, "html"))
@@ -1598,7 +1621,7 @@ def send_manual_notification(db: Session = Depends(get_db)):
     try:
         unread_cases = get_unread_cases_for_notification(db)
         if not unread_cases:
-            return {"ok": True, "sent": False, "message": "No hay casos no leídos para enviar", "count": 0}
+            return {"ok": True, "sent": False, "message": "No hay casos no ledos para enviar", "count": 0}
 
         send_grouped_notification(unread_cases)
         return {"ok": True, "sent": True, "message": f"Correo enviado con {len(unread_cases)} casos", "count": len(unread_cases)}
@@ -1612,11 +1635,15 @@ def send_manual_notification(db: Session = Depends(get_db)):
 @app.get("/invalid-radicados")
 def list_invalid_radicados(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     search: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
 ):
     q = db.query(InvalidRadicado)
+    if not current_user.is_admin:
+        q = q.filter(InvalidRadicado.user_id == current_user.id)
+
     if search:
         s = f"%{search.strip()}%"
         q = q.filter(InvalidRadicado.radicado.like(s))
@@ -1665,7 +1692,7 @@ def download_invalid_radicados_excel(db: Session = Depends(get_db)):
             "Motivo": x.motivo,
             "Intentos": x.intentos,
             "Fecha Registro": x.created_at.strftime("%Y-%m-%d %H:%M") if x.created_at else "",
-            "Último Intento": x.updated_at.strftime("%Y-%m-%d %H:%M") if x.updated_at else "",
+            "ltimo Intento": x.updated_at.strftime("%Y-%m-%d %H:%M") if x.updated_at else "",
         }
         for x in items
     ]
@@ -1794,9 +1821,9 @@ def delete_all_invalid_radicados(db: Session = Depends(get_db)):
 # =========================
 @app.get("/cases/abogados")
 def list_abogados(db: Session = Depends(get_db)):
-    """Retorna una lista única de nombres de abogados para sugerencias en el filtro."""
+    """Retorna una lista nica de nombres de abogados para sugerencias en el filtro."""
     results = db.query(Case.abogado).filter(Case.abogado.isnot(None), Case.abogado != "").distinct().all()
-    # extraemos el primer elemento de cada tupla y filtramos vacíos
+    # extraemos el primer elemento de cada tupla y filtramos vacos
     names = sorted([r[0] for r in results if r[0]])
     return names
 
@@ -1806,6 +1833,7 @@ def list_abogados(db: Session = Depends(get_db)):
 @app.get("/cases")
 def list_cases(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     search: Optional[str] = Query(default=None),
     juzgado: Optional[str] = Query(default=None),
     mes_actuacion: Optional[str] = Query(default=None),
@@ -1820,6 +1848,10 @@ def list_cases(
     page_size: int = Query(default=20, ge=1, le=2000),
 ):
     q = db.query(Case)
+
+    # Multi-tenancy filter
+    if not current_user.is_admin:
+        q = q.filter(Case.user_id == current_user.id)
 
     if solo_pendientes:
         q = q.filter(Case.juzgado.is_(None))
@@ -1975,13 +2007,13 @@ def download_cases_excel(
             "Radicado": c.radicado,
             "Demandante": c.demandante or "",
             "Demandado": c.demandado or "",
-            "Cédula": c.cedula or "",
+            "Cdula": c.cedula or "",
             "Abogado": c.abogado or "",
             "Juzgado": c.juzgado or "",
-            "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
-            "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-            "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
-            "Estado": "No leído" if is_unread_case(c) else "Leído",
+            "Fecha Radicacin": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
+            "ltima Actuacin": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+            "ltima Verificacin": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
+            "Estado": "No ledo" if is_unread_case(c) else "Ledo",
         }
         for c in cases
     ]
@@ -2081,7 +2113,7 @@ async def validate_batch(db: Session = Depends(get_db), batch_size: int = Query(
     pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(batch_size).all()
 
     if not pendientes:
-        return {"ok": True, "processed": 0, "validated": 0, "not_found": 0, "remaining": 0, "message": "No hay más casos pendientes"}
+        return {"ok": True, "processed": 0, "validated": 0, "not_found": 0, "remaining": 0, "message": "No hay ms casos pendientes"}
 
     validated = 0
     not_found = 0
@@ -2213,15 +2245,15 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
                 except:
                     det = {}
 
-            # Buscar por id_proceso si existe, si no por radicado solo si es el único
+            # Buscar por id_proceso si existe, si no por radicado solo si es el nico
             c = None
             if id_proceso:
                 c = db.query(Case).filter(Case.id_proceso == id_proceso).first()
             
-            # Si no se encontró por ID único, buscamos por radicado pero siendo precavidos
+            # Si no se encontr por ID nico, buscamos por radicado pero siendo precavidos
             if not c:
                 # Si hay varios con el mismo radicado sin id_proceso, es ambiguo.
-                # Pero si es una base vieja, quizás solo hay uno.
+                # Pero si es una base vieja, quizs solo hay uno.
                 c = db.query(Case).filter(Case.radicado == r, Case.id_proceso == None).first()
 
             is_new_case = False
@@ -2231,7 +2263,7 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
                 db.flush()
                 is_new_case = True
             elif not c.id_proceso and id_proceso:
-                # Actualizar registro legacy con su ID único
+                # Actualizar registro legacy con su ID nico
                 c.id_proceso = id_proceso
 
             sujetos = p.get("sujetosProcesales") or ""
@@ -2239,7 +2271,7 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
 
             c.demandante = d1 or c.demandante
             c.demandado = d2 or c.demandado
-            # c.abogado = abo or c.abogado (Removido por petición del usuario)
+            # c.abogado = abo or c.abogado (Removido por peticin del usuario)
             c.juzgado = extract_juzgado(p, det) or c.juzgado
 
             fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
@@ -2310,8 +2342,8 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
 @app.get("/cases/id/{case_id}/events")
 async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
     """
-    Obtiene las actuaciones de un caso específico usando su ID de base de datos.
-    Esto asegura que traemos el id_proceso correcto si hay múltiples radicados iguales.
+    Obtiene las actuaciones de un caso especfico usando su ID de base de datos.
+    Esto asegura que traemos el id_proceso correcto si hay mltiples radicados iguales.
     """
     c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
@@ -2325,7 +2357,7 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
     if not r:
         raise HTTPException(400, "Radicado requerido")
 
-    # Si hay múltiples con este radicado, tomamos el más reciente.
+    # Si hay mltiples con este radicado, tomamos el ms reciente.
     c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
     if not c:
         c = Case(radicado=r)
@@ -2348,7 +2380,7 @@ async def events_logic(c: Case, db: Session):
                     c.id_proceso = str(id_proceso)
                     db.commit()
             except RamaError as e:
-                print(f"⚠️ [events] Error obteniendo id_proceso para {radicado}: {e}")
+                print(f" [events] Error obteniendo id_proceso para {radicado}: {e}")
                 return {"items": [], "total": 0}
 
         if not id_proceso:
@@ -2400,9 +2432,9 @@ async def events_logic(c: Case, db: Session):
                 if con_docs:
                     c.has_documents = True
                 
-                # --- NUEVO: Disparo automático a Publicaciones Procesales ---
+                # --- NUEVO: Disparo automtico a Publicaciones Procesales ---
                 if is_relevant_actuacion(it.get("title") or ""):
-                    print(f"[events] Actuación relevante encontrada: {it.get('title')}. Disparando búsqueda a Publicaciones.")
+                    print(f"[events] Actuacin relevante encontrada: {it.get('title')}. Disparando bsqueda a Publicaciones.")
                     asyncio.create_task(trigger_publications_sync(c, it, db))
         
         db.commit()
@@ -2431,7 +2463,7 @@ async def download_events_xlsx(radicado: str):
         raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
 
     if not id_proceso:
-        raise HTTPException(404, "No se encontró el proceso")
+        raise HTTPException(404, "No se encontr el proceso")
 
     try:
         acts_resp = await actuaciones_proceso(int(id_proceso))
@@ -2600,17 +2632,17 @@ async def _background_validate_pendientes():
     DELAY = 2.0
     MAX_CYCLES = 20
 
-    print("[BG-VALIDATE] Iniciando validación automática de pendientes...")
+    print("[BG-VALIDATE] Iniciando validacion automatica de pendientes...")
     for cycle in range(MAX_CYCLES):
         db = None
         try:
             db = SessionLocal()
             pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(BATCH).all()
             if not pendientes:
-                print("✅ [bg-validate] Sin pendientes. Fin.")
+                print(" [bg-validate] Sin pendientes. Fin.")
                 break
 
-            print(f"🔄 [bg-validate] Ciclo {cycle+1}: {len(pendientes)} casos...")
+            print(f" [bg-validate] Ciclo {cycle+1}: {len(pendientes)} casos...")
             for i, c in enumerate(pendientes):
                 try:
                     if i > 0:
@@ -2629,30 +2661,34 @@ async def _background_validate_pendientes():
                             db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
                     db.flush()
                 except Exception as e:
-                    print(f"   ⚠️ [bg-validate] Error en {c.radicado}: {e}")
+                    print(f"    [bg-validate] Error en {c.radicado}: {e}")
             db.commit()
 
             remaining = db.query(Case).filter(Case.juzgado.is_(None)).count()
-            print(f"🔄 [bg-validate] Restantes: {remaining}")
+            print(f" [bg-validate] Restantes: {remaining}")
             if remaining == 0:
                 break
 
             await asyncio.sleep(5)
 
         except Exception as e:
-            print(f"💥 [bg-validate] Error ciclo {cycle+1}: {e}")
+            print(f" [bg-validate] Error ciclo {cycle+1}: {e}")
         finally:
             if db:
                 db.close()
 
-    print("✅ [bg-validate] Validación automática finalizada.")
+    print(" [bg-validate] Validacin automtica finalizada.")
 
 
 # =========================
 # IMPORT EXCEL
 # =========================
 @app.post("/cases/import-excel")
-async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_excel(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     try:
         name = (file.filename or "").lower()
         if not name.endswith((".xlsx", ".xls", ".csv")):
@@ -2666,7 +2702,7 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
 
         df.columns = [str(c).strip() for c in df.columns]
         
-        # Normalizar nombres de columnas para búsqueda insensible a mayúsculas
+        # Normalizar nombres de columnas para bsqueda insensible a maysculas
         cols_lower = {c.lower(): c for c in df.columns}
         
         rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
@@ -2681,7 +2717,7 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
         skipped = 0
         count = 0
 
-        # Procesamos en lotes MUY pequeños (20) para evitar errores de tamaño de SQL
+        # Procesamos en lotes MUY pequeos (20) para evitar errores de tamao de SQL
         batch_size = 20
 
         for _, row in df.iterrows():
@@ -2711,14 +2747,14 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
                         skipped += 1
                         continue
 
-                    db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado))
+                    db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado, user_id=current_user.id))
                     created += 1
                 
                 count += 1
                 if count % batch_size == 0:
                     db.commit()
             except Exception as row_error:
-                print(f"⚠️ Error procesando fila: {row_error}")
+                print(f" Error procesando fila: {row_error}")
                 db.rollback()
                 skipped += 1
 
@@ -2738,8 +2774,8 @@ async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_d
         db.rollback()
         import traceback
         traceback.print_exc()
-        msg = str(e).split('\n')[0] # Solo la primera línea para no saturar el UI
-        raise HTTPException(500, f"Error en importación: {msg}")
+        msg = str(e).split('\n')[0] # Solo la primera lnea para no saturar el UI
+        raise HTTPException(500, f"Error en importacin: {msg}")
 
 
 @app.post("/cases/bulk-delete-excel")
@@ -2780,14 +2816,14 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
                     db.delete(c)
                     deleted_cases += 1
                 
-                # También limpiar de invalid si está ahí
+                # Tambin limpiar de invalid si est ah
                 db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
 
                 count += 1
                 if count % batch_size == 0:
                     db.commit()
             except Exception as row_error:
-                print(f"⚠️ Error eliminando fila: {row_error}")
+                print(f" Error eliminando fila: {row_error}")
                 db.rollback()
 
         db.commit()
@@ -2800,7 +2836,7 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
     except Exception as e:
         db.rollback()
         msg = str(e).split('\n')[0]
-        raise HTTPException(500, f"Error en eliminación masiva: {msg}")
+        raise HTTPException(500, f"Error en eliminacin masiva: {msg}")
 
 
 # =========================
@@ -2808,13 +2844,13 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 # =========================
 @app.post("/cases/refresh-all")
 async def refresh_all_cases(db: Session = Depends(get_db)):
-    """Dispara una tarea en segundo plano para recorrer todos los casos válidos."""
+    """Dispara una tarea en segundo plano para recorrer todos los casos vlidos."""
     if REFRESH_LOCK.locked():
-        return {"ok": False, "message": "Ya existe una actualización masiva en curso. Por favor, espere a que termine."}
+        return {"ok": False, "message": "Ya existe una actualizacin masiva en curso. Por favor, espere a que termine."}
     
     background_tasks = BackgroundTasks()
     background_tasks.add_task(do_auto_refresh_with_lock, db)
-    return {"ok": True, "message": "Sincronización masiva iniciada en segundo plano."}
+    return {"ok": True, "message": "Sincronizacin masiva iniciada en segundo plano."}
 
 async def do_auto_refresh_with_lock(db: Session):
     if REFRESH_LOCK.locked():
@@ -2824,38 +2860,38 @@ async def do_auto_refresh_with_lock(db: Session):
 
 
 # =========================
-# DOCUMENTOS DE ACTUACIÓN
+# DOCUMENTOS DE ACTUACIN
 # =========================
 @app.get("/cases/events/{id_reg_actuacion}/documents")
 async def get_event_documents(
     id_reg_actuacion: int,
-    llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 dígitos")
+    llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 dgitos")
 ):
-    print(f"\n📄 [DOCS] id_reg_actuacion={id_reg_actuacion} | llave_proceso={llave_proceso}")
+    print(f"\n [DOCS] id_reg_actuacion={id_reg_actuacion} | llave_proceso={llave_proceso}")
 
     items = []
 
     try:
         raw = await documentos_actuacion(id_reg_actuacion, llave_proceso)
-        print(f"📄 [DOCS] service/rama.documentos_actuacion() → tipo={type(raw).__name__} | valor={str(raw)[:300]}")
+        print(f" [DOCS] service/rama.documentos_actuacion()  tipo={type(raw).__name__} | valor={str(raw)[:300]}")
         items = extract_documentos_from_response(raw)
-        print(f"📄 [DOCS] items extraídos del servicio: {len(items)}")
+        print(f" [DOCS] items extrados del servicio: {len(items)}")
     except RamaError as e:
-        print(f"📄 [DOCS] RamaError en servicio: {e}")
+        print(f" [DOCS] RamaError en servicio: {e}")
     except Exception as e:
-        print(f"📄 [DOCS] Error en servicio: {e}")
+        print(f" [DOCS] Error en servicio: {e}")
         traceback.print_exc()
 
     if not items:
-        print(f"📄 [DOCS] Servicio retornó vacío. Intentando llamada directa a Rama Judicial...")
+        print(f" [DOCS] Servicio retorn vaco. Intentando llamada directa a Rama Judicial...")
         try:
             items = await fetch_documentos_rama_directa(id_reg_actuacion, llave_proceso)
-            print(f"📄 [DOCS] items desde llamada directa: {len(items)}")
+            print(f" [DOCS] items desde llamada directa: {len(items)}")
         except Exception as e:
-            print(f"📄 [DOCS] Error en llamada directa: {e}")
+            print(f" [DOCS] Error en llamada directa: {e}")
             traceback.print_exc()
 
-    print(f"📄 [DOCS] Resultado final → {len(items)} documentos")
+    print(f" [DOCS] Resultado final  {len(items)} documentos")
     return {"items": items, "total": len(items)}
 
 
@@ -2865,7 +2901,7 @@ async def get_event_documents(
 @app.get("/documentos/{id_documento}/descargar")
 async def descargar_documento_endpoint(id_documento: int):
     url_rama = f"{RAMA_BASE}/Descarga/Documento/{id_documento}"
-    print(f"📥 Descargando documento ID={id_documento} → {url_rama}")
+    print(f" Descargando documento ID={id_documento}  {url_rama}")
 
     try:
         client = httpx.AsyncClient(timeout=60.0, verify=False, headers=RAMA_HEADERS)
@@ -2874,14 +2910,14 @@ async def descargar_documento_endpoint(id_documento: int):
             stream=True
         )
 
-        print(f"📥 Status Rama Judicial: {response.status_code}")
+        print(f" Status Rama Judicial: {response.status_code}")
 
         if response.status_code != 200:
             await response.aclose()
             await client.aclose()
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"La Rama Judicial devolvió {response.status_code} para el documento {id_documento}."
+                detail=f"La Rama Judicial devolvi {response.status_code} para el documento {id_documento}."
             )
 
         content_type = response.headers.get("content-type", "application/pdf")
@@ -2908,11 +2944,11 @@ async def descargar_documento_endpoint(id_documento: int):
     except HTTPException:
         raise
     except httpx.TimeoutException:
-        raise HTTPException(504, f"Timeout: La Rama Judicial tardó demasiado (documento {id_documento}).")
+        raise HTTPException(504, f"Timeout: La Rama Judicial tard demasiado (documento {id_documento}).")
     except httpx.ConnectError as e:
         raise HTTPException(502, f"No se pudo conectar a la Rama Judicial: {str(e)}")
     except Exception as e:
-        print(f"📥 Error inesperado descargando {id_documento}: {e}")
+        print(f" Error inesperado descargando {id_documento}: {e}")
         traceback.print_exc()
         raise HTTPException(500, f"Error interno descargando documento: {str(e)}")
 
@@ -2956,7 +2992,7 @@ async def refresh_publications(radicado: str, background_tasks: BackgroundTasks,
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     background_tasks.add_task(save_new_publications_task, case.id)
-    return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
+    return {"ok": True, "message": "Sincronizacin iniciada en segundo plano"}
 
 @app.post("/cases/id/{case_id}/refresh-publicaciones")
 async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -2965,10 +3001,10 @@ async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundT
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     background_tasks.add_task(save_new_publications_task, case.id)
-    return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
+    return {"ok": True, "message": "Sincronizacin iniciada en segundo plano"}
 
 async def save_new_publications_task(case_id: int):
-    """Wrapper para ejecutar save_new_publications con su propia sesión de DB."""
+    """Wrapper para ejecutar save_new_publications con su propia sesin de DB."""
     db = SessionLocal()
     try:
         case = db.query(Case).filter(Case.id == case_id).first()
@@ -2990,14 +3026,14 @@ async def save_new_publications(case: Case, db: Session):
         actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
         
         if not relevantes:
-            print(f"ℹ️ No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
+            print(f" No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
 
-        # 3. Limitar a las 5 más recientes para evitar Timeouts (504)
+        # 3. Limitar a las 5 ms recientes para evitar Timeouts (504)
         relevantes = relevantes[:5]
-        print(f"[refresh] Iniciando búsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
+        print(f"[refresh] Iniciando bsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
 
-        # 3. Para cada actuación relevante, buscar en Publicaciones en su ventana de tiempo
+        # 3. Para cada actuacin relevante, buscar en Publicaciones en su ventana de tiempo
         for act in relevantes:
             fecha_act_str = act.get("fechaActuacion") or ""
             if not fecha_act_str: continue
@@ -3029,7 +3065,7 @@ async def save_new_publications(case: Case, db: Session):
                     else:
                         exists.documento_url = p["documento_url"]
             except Exception as e:
-                print(f"[refresh] Error procesando ventana de publicación para {case.radicado}: {e}")
+                print(f"[refresh] Error procesando ventana de publicacin para {case.radicado}: {e}")
                 
     except Exception as e:
         print(f"[refresh] Error guardando publicaciones: {e}")
@@ -3038,7 +3074,7 @@ async def save_new_publications(case: Case, db: Session):
 async def backfill_publicaciones(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Escanea todos los casos existentes y busca publicaciones para actuaciones relevantes (en segundo plano)."""
     background_tasks.add_task(run_backfill_publicaciones_task)
-    return {"status": "ok", "message": "Puesta al día masiva de publicaciones iniciada en segundo plano."}
+    return {"status": "ok", "message": "Puesta al da masiva de publicaciones iniciada en segundo plano."}
 
 async def run_backfill_publicaciones_task():
     """Ejecuta el backfill de publicaciones de forma segura en segundo plano."""
@@ -3046,7 +3082,7 @@ async def run_backfill_publicaciones_task():
     try:
         cases = db.query(Case).all()
         count = 0
-        print(f"[backfill] Iniciando puesta al día masiva para {len(cases)} casos...")
+        print(f"[backfill] Iniciando puesta al da masiva para {len(cases)} casos...")
         for case in cases:
             # save_new_publications ya maneja el filtro estricto de keywords
             await save_new_publications(case, db)
@@ -3062,7 +3098,7 @@ async def run_backfill_publicaciones_task():
         db.close()
 
 # =========================
-# BÚSQUEDA MASIVA (NAMES / RADICADOS)
+# BSQUEDA MASIVA (NAMES / RADICADOS)
 # =========================
 
 @app.post("/search/names/upload")
@@ -3084,7 +3120,7 @@ async def upload_names_search(
     
     date_range = {"from": from_date, "to": to_date}
     
-    # Pasamos una factoría de sesión para que el hilo de fondo tenga su propia DB connection
+    # Pasamos una factora de sesin para que el hilo de fondo tenga su propia DB connection
     background_tasks.add_task(run_name_search_job, job.id, content, lambda: SessionLocal(), date_range)
 
     return {"job_id": job.id, "status": "pending"}
@@ -3147,8 +3183,8 @@ async def import_search_results(
                 case = Case(radicado=radicado, id_proceso=id_proceso)
                 db.add(case)
             
-            # Actualizar datos básicos
-            # Parsear sujetos para obtener demandante/demandado si están vacíos
+            # Actualizar datos bsicos
+            # Parsear sujetos para obtener demandante/demandado si estn vacos
             sujetos_str = sel.get("sujetosProcesales") or ""
             d1, d2, _ = parse_sujetos_procesales(sujetos_str)
             
@@ -3156,7 +3192,7 @@ async def import_search_results(
             case.demandado = d2 or sel.get("demandado") or case.demandado
             case.juzgado = sel.get("despacho") or case.juzgado
             
-            # Cédula y Abogado del Excel de búsqueda
+            # Cdula y Abogado del Excel de bsqueda
             case.cedula = item.get("cedula") or case.cedula
             case.abogado = item.get("abogado") or case.abogado
             
@@ -3177,7 +3213,7 @@ async def import_search_results(
         return {"ok": True, "imported": imported_count}
     except Exception as e:
         db.rollback()
-        log_job(f"💥 Error en import_search_results: {str(e)}")
+        log_job(f" Error en import_search_results: {str(e)}")
         log_job(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error al importar: {str(e)}")
 
@@ -3239,11 +3275,11 @@ async def export_search_results(job_id: int, db: Session = Depends(get_db)):
         workbook = writer.book
         worksheet = writer.sheets['Resultados']
         
-        # Formato de texto para columnas de números largos
+        # Formato de texto para columnas de nmeros largos
         text_format = workbook.add_format({'num_format': '@'})
         
-        # Aplicamos formato de texto a la columna RADICADO (índice 3 usualmente: Nombre, Cédula, Abogado, Cant, RADICADO...)
-        # Buscamos el índice dinámicamente
+        # Aplicamos formato de texto a la columna RADICADO (ndice 3 usualmente: Nombre, Cdula, Abogado, Cant, RADICADO...)
+        # Buscamos el ndice dinmicamente
         if "RADICADO" in df.columns:
             col_idx = df.columns.get_loc("RADICADO")
             # Aplicar a toda la columna (filas 1 a N)
@@ -3251,7 +3287,7 @@ async def export_search_results(job_id: int, db: Session = Depends(get_db)):
             
         # Opcionalmente ajustar anchos
         worksheet.set_column('A:A', 30) # Nombre
-        worksheet.set_column('H:H', 20) # Ultima Actuación
+        worksheet.set_column('H:H', 20) # Ultima Actuacin
         worksheet.set_column('I:I', 15) # ID Proceso
         worksheet.set_column('J:J', 50) # Link Portal
     

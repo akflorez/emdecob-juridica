@@ -26,6 +26,7 @@ class Case(Base):
     alias = Column(String(200), nullable=True)
     cedula = Column(String(50), nullable=True)
     abogado = Column(String(200), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
     last_hash = Column(String(64), nullable=True)
     current_hash = Column(String(64), nullable=True)
@@ -76,6 +77,7 @@ class InvalidRadicado(Base):
     radicado = Column(String(60), unique=True, index=True, nullable=False)
     motivo = Column(String(255), default="No encontrado en Rama Judicial")
     intentos = Column(Integer, default=1)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
