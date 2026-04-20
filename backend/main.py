@@ -770,6 +770,21 @@ HARDCODED_USERS = {
 }
 
 
+# =========================
+# DB
+# =========================
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# =========================
+# AUTH  LOGIN / LOGOUT / USUARIOS
+# =========================
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     db: Session = Depends(get_db),
@@ -835,15 +850,7 @@ def _ensure_default_user():
         db.close()
 
 
-# =========================
-# DB
-# =========================
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+
 
 
 # =========================
