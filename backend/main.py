@@ -3627,25 +3627,43 @@ async def update_task(
 # =========================
 
 @app.get("/cases/stats/dashboard")
-async def get_advanced_dashboard_stats(db: Session = Depends(get_db)):
+async def get_advanced_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Obtiene estadísticas de negocio para las etiquetas superiores."""
-    now = datetime.now(pytz.utc).astimezone(TIMEZONE_CO)
-    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    hoy = today_colombia()
+    ayer = hoy - timedelta(days=1)
     
-    # 1. Conteo de actuaciones en el mes actual (Abril o el que sea)
-    # Buscamos eventos cuya fecha sea mayor o igual al inicio de mes
-    month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month).count()
+    # 1. Conteo de actuaciones en el mes actual
+    # month_actions: eventos filtrados manualmente si el formato String varía
+    first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
+    month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str).count()
     
     # 2. Conteo de casos por Abogado (desglose)
-    lawyer_counts = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado != None).group_by(Case.abogado).all()
+    q_abogados = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado.isnot(None), Case.abogado != "")
+    if not current_user.is_admin:
+        q_abogados = q_abogados.filter(Case.user_id == current_user.id)
+    lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
     
-    # 3. Alertas (ej. tareas vencidas hoy o casos sin leer)
-    unread_total = db.query(Case).filter(Case.unread == True).count()
+    # 3. Alertas (casos sin leer) calculando la misma lógica que en list_cases
+    q_unread = db.query(Case).filter(
+        Case.juzgado.isnot(None),
+        Case.current_hash.isnot(None),
+        or_(
+            and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+            and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
+        )
+    )
+    if not current_user.is_admin:
+        q_unread = q_unread.filter(Case.user_id == current_user.id)
+        
+    unread_total = q_unread.count()
     
     return {
         "month_actions": month_actions,
-        "month_name": now.strftime("%B"),
+        "month_name": hoy.strftime("%B"),
         "lawyer_stats": lawyer_stats,
         "unread_total": unread_total
     }
