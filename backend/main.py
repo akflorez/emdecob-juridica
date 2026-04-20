@@ -848,6 +848,19 @@ def _ensure_default_user():
             u2.nombre = "Juridico Emdecob"
         
         db.commit()
+
+        # Automate assignment of orphan cases to fna_juridica
+        fna_user = db.query(User).filter(User.username == "fna_juridica").first()
+        if fna_user:
+            orphan_count = db.query(Case).filter(Case.user_id == None).count()
+            if orphan_count > 0:
+                db.query(Case).filter(Case.user_id == None).update({Case.user_id: fna_user.id})
+                db.commit()
+                print(f" [DB-SYNC] {orphan_count} casos huerfanos asignados a fna_juridica")
+        
+        total_cases = db.query(Case).count()
+        print(f" [DB-INFO] Total casos en BD: {total_cases}")
+
     except Exception as e:
         print(f" Error creando usuario por defecto: {e}")
     finally:
