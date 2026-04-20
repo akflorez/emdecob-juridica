@@ -734,7 +734,8 @@ def verify_access_token(token: str) -> Optional[int]:
         payload = fernet.decrypt(token.encode('utf-8'), ttl=86400).decode('utf-8')
         data = json.loads(payload)
         return data.get("user_id")
-    except Exception:
+    except Exception as e:
+        print(f"[AUTH-DEBUG] Error validando token: {e}")
         return None
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -790,14 +791,18 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     if not credentials:
+        print("[AUTH-DEBUG] No se recibieron credenciales en el header")
         raise HTTPException(status_code=401, detail="No autenticado")
     
     token = credentials.credentials
     user_id = verify_access_token(token)
     if not user_id:
+        print("[AUTH-DEBUG] El token no pudo ser verificado")
         raise HTTPException(status_code=401, detail="Token invalido o expirado")
 
-    # Hardcoded fallback matches (using IDs from HARDCODED_USERS)
+    print(f"[AUTH-DEBUG] Token valido. UserID: {user_id}")
+
+    # Hardcoded fallback matches
     if user_id == 9999:
         return User(id=9999, username="admin", nombre="Administrador", is_admin=True, is_active=True)
     if user_id == 9998:
@@ -805,6 +810,7 @@ def get_current_user(
 
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     if not user:
+        print(f"[AUTH-DEBUG] Usuario ID {user_id} no encontrado en BD")
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     
     return user
@@ -3073,6 +3079,17 @@ async def save_new_publications(case: Case, db: Session):
                         ))
                     else:
                         exists.documento_url = p["documento_url"]
+                try:
+                    # Fix too many values to unpack (expected 2)
+                    validation_result = await validar_radicado_completo(c.radicado, db)
+                    if isinstance(validation_result, tuple):
+                        res, msg = validation_result
+                    else:
+                        res, msg = validation_result, "Resultado de validacion unico"
+                    
+                    print(f"[pending-loop] Resultado para {c.radicado}: {res}")
+                except Exception as loop_e:
+                    print(f"[pending-loop] Error en {c.radicado}: {loop_e}")
             except Exception as e:
                 print(f"[refresh] Error procesando ventana de publicacin para {case.radicado}: {e}")
                 
