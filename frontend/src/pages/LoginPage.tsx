@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -35,30 +36,24 @@ export default function LoginPage() {
     e.preventDefault();
     
     if (!username || !password) {
-      toast({
-        title: 'Campos requeridos',
-        description: 'Por favor ingrese usuario y contraseña',
-        variant: 'destructive',
-      });
+      const msg = 'Por favor ingrese usuario y contraseña';
+      setLoginError(msg);
+      toast({ title: 'Campos requeridos', description: msg, variant: 'destructive' });
       return;
     }
 
+    setLoginError(null);
     setIsSubmitting(true);
     const result = await login({ username, password });
     setIsSubmitting(false);
 
     if (result.success) {
-      toast({
-        title: '¡Bienvenido!',
-        description: 'Sesión iniciada correctamente',
-      });
+      toast({ title: '¡Bienvenido!', description: 'Sesión iniciada correctamente' });
       navigate(from, { replace: true });
     } else {
-      toast({
-        title: 'Error de autenticación',
-        description: result.error || 'Credenciales inválidas',
-        variant: 'destructive',
-      });
+      const errMsg = result.error || 'Usuario o contraseña incorrectos';
+      setLoginError(errMsg);
+      toast({ title: 'Error de autenticación', description: errMsg, variant: 'destructive' });
     }
   };
 
@@ -131,7 +126,7 @@ export default function LoginPage() {
                       type="text"
                       placeholder="nombre_usuario"
                       value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      onChange={(e) => { setUsername(e.target.value); setLoginError(null); }}
                       className="pl-10 h-11"
                       autoComplete="username"
                       autoFocus
@@ -167,6 +162,16 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Error message inline */}
+                {loginError && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>{loginError}</span>
+                  </div>
+                )}
 
                 <Button 
                   type="submit" 

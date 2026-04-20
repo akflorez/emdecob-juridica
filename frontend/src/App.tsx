@@ -25,6 +25,7 @@ const App = () => (
     <TooltipProvider>
       <ThemeProvider>
         <Sonner />
+        <Toaster />
         <AuthProvider>
           <BrowserRouter>
             <Routes>
