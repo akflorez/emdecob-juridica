@@ -14,7 +14,7 @@ export class ApiError extends Error {
 }
 
 function getToken() {
-  return localStorage.getItem("access_token");
+  return localStorage.getItem("emdecob_auth_token");
 }
 
 async function parseError(res: Response) {
