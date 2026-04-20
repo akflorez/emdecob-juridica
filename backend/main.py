@@ -2144,45 +2144,70 @@ def mark_read_all(data: MarkReadAllRequest, db: Session = Depends(get_db)):
 # VALIDATE PENDIENTES
 # =========================
 @app.post("/cases/validate-batch")
-async def validate_batch(db: Session = Depends(get_db), batch_size: int = Query(default=50, ge=1, le=200)):
-    pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(batch_size).all()
+async def validate_batch(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    batch_size: int = Query(default=10, ge=1, le=50)
+):
+    """Lanza la validacion en segundo plano y retorna inmediatamente para evitar timeouts."""
 
-    if not pendientes:
-        return {"ok": True, "processed": 0, "validated": 0, "not_found": 0, "remaining": 0, "message": "No hay ms casos pendientes"}
+    # Count how many are pending for this user
+    q = db.query(Case).filter(Case.juzgado.is_(None))
+    if not current_user.is_admin:
+        q = q.filter(Case.user_id == current_user.id)
+    
+    pendientes_count = q.count()
 
-    validated = 0
-    not_found = 0
+    if pendientes_count == 0:
+        return {"ok": True, "processed": 0, "validated": 0, "not_found": 0, "remaining": 0, "message": "No hay casos pendientes"}
 
-    for i, c in enumerate(pendientes):
+    # Get the IDs to process (avoid passing db session to background)
+    batch_ids = [c.id for c in q.limit(batch_size).all()]
+
+    async def _run_batch(ids):
+        _db = SessionLocal()
+        validated = 0
+        not_found = 0
         try:
-            if i > 0:
-                await delay_between_requests(0.3, 0.6)
+            for i, case_id in enumerate(ids):
+                c = _db.query(Case).filter(Case.id == case_id).first()
+                if not c:
+                    continue
+                try:
+                    if i > 0:
+                        await delay_between_requests(0.5, 1.0)
+                    result = await validar_radicado_completo(c.radicado, _db, is_new_import=True)
+                    if result["found"]:
+                        inv = _db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        if inv:
+                            _db.delete(inv)
+                        validated += 1
+                    else:
+                        not_found += 1
+                        inv = _db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        if inv:
+                            inv.intentos += 1
+                            inv.updated_at = now_colombia()
+                        else:
+                            _db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                    _db.flush()
+                except Exception as e:
+                    print(f"[validate-batch] Error en {c.radicado}: {e}")
+            _db.commit()
+            print(f"[validate-batch] Lote completado: {validated} validados, {not_found} no encontrados")
+        except Exception as e:
+            print(f"[validate-batch] Error general: {e}")
+        finally:
+            _db.close()
 
-            result = await validar_radicado_completo(c.radicado, db, is_new_import=True)
-
-            if result["found"]:
-                inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                if inv:
-                    db.delete(inv)
-                validated += 1
-            else:
-                not_found += 1
-                inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                if inv:
-                    inv.intentos += 1
-                    inv.updated_at = now_colombia()
-                else:
-                    db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
-            db.flush()
-        except Exception:
-            pass
-
-    db.commit()
-    remaining = db.query(Case).filter(Case.juzgado.is_(None)).count()
+    background_tasks.add_task(_run_batch, batch_ids)
 
     return {
-        "ok": True, "processed": len(pendientes), "validated": validated, "not_found": not_found,
-        "remaining": remaining, "message": f"Procesados {len(pendientes)}: {validated} validados, {not_found} no encontrados."
+        "ok": True,
+        "processed": len(batch_ids),
+        "remaining": pendientes_count,
+        "message": f"Procesando {len(batch_ids)} casos en segundo plano. Recarga la pagina en 1-2 minutos para ver los resultados."
     }
 
 @app.post("/cases/validate-selected")
