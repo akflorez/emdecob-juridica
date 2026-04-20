@@ -16,6 +16,7 @@ import {
   getTasks,
   updateTask,
   createTask,
+  getCaseById,
   type Task as TaskType
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
