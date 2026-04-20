@@ -765,7 +765,13 @@ HARDCODED_USERS = {
     "fna_juridica": {
         "password": "juridicaEmdecob2026$",
         "id": 9998,
-        "nombre": "FNA Jurdica",
+        "nombre": "FNA Juridica",
+        "is_admin": False,
+    },
+    "jurico_emdecob": {
+        "password": "emdecob2027$",
+        "id": 9997,
+        "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
 }
@@ -791,11 +797,7 @@ def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    # Diagnostic Log
-    print(f"[AUTH-DEBUG] Headers recibidos: {dict(request.headers)}")
-    
     if not credentials:
-        print("[AUTH-DEBUG] No se recibieron credenciales en el header de seguridad")
         raise HTTPException(status_code=401, detail="No autenticado")
     
     token = credentials.credentials
@@ -1329,6 +1331,48 @@ def login(data: LoginRequest):
                     "is_admin": user.is_admin,
                 }
             }
+        
+        # If DB hash is stale, try hardcoded fallback and update hash in DB
+        hc = HARDCODED_USERS.get(data.username)
+        if hc and data.password == hc["password"]:
+            # Update the hash in DB so future logins work via DB
+            if user:
+                user.hashed_password = _hash_password(data.password)
+                db.commit()
+                token = create_access_token(user.id)
+                return {
+                    "token": token,
+                    "token_type": "bearer",
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "nombre": user.nombre or hc["nombre"],
+                        "is_admin": user.is_admin,
+                    }
+                }
+            else:
+                # User not in DB yet, create them
+                new_user = User(
+                    username=data.username,
+                    hashed_password=_hash_password(data.password),
+                    nombre=hc["nombre"],
+                    is_admin=hc["is_admin"],
+                    is_active=True,
+                )
+                db.add(new_user)
+                db.commit()
+                db.refresh(new_user)
+                token = create_access_token(new_user.id)
+                return {
+                    "token": token,
+                    "token_type": "bearer",
+                    "user": {
+                        "id": new_user.id,
+                        "username": new_user.username,
+                        "nombre": new_user.nombre,
+                        "is_admin": new_user.is_admin,
+                    }
+                }
     finally:
         db.close()
     
