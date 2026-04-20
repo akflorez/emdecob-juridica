@@ -1309,6 +1309,9 @@ def login(data: LoginRequest):
                     "is_admin": user.is_admin,
                 }
             }
+    finally:
+        db.close()
+    
     raise HTTPException(status_code=401, detail="Usuario o contrasena incorrectos")
 
 
