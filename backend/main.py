@@ -1869,10 +1869,24 @@ def list_cases(
     if not current_user.is_admin:
         q = q.filter(Case.user_id == current_user.id)
 
+    # Default filtering logic:
+    # If explicit filters are provided, follow them.
+    # Otherwise, if it's a standard user with NO valid cases but has pending cases, 
+    # we default to showing pending cases instead of an empty valid list.
+    
     if solo_pendientes:
         q = q.filter(Case.juzgado.is_(None))
     elif solo_validos:
-        q = q.filter(Case.juzgado.isnot(None))
+        # Check if we should override default solo_validos=True
+        if not search and not current_user.is_admin:
+            valid_exists = db.query(Case).filter(Case.user_id == current_user.id, Case.juzgado.isnot(None)).first()
+            if not valid_exists:
+                # User has no valid cases, show pending instead
+                q = q.filter(Case.juzgado.is_(None))
+            else:
+                q = q.filter(Case.juzgado.isnot(None))
+        else:
+            q = q.filter(Case.juzgado.isnot(None))
 
     if solo_no_leidos:
         hoy = today_colombia()
@@ -1919,14 +1933,19 @@ def list_cases(
     hoy_count = today_colombia()
     ayer_count = hoy_count - timedelta(days=1)
 
-    unread_count = db.query(Case).filter(
+    q_unread = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.current_hash.isnot(None),
         or_(
             and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count),
         )
-    ).count()
+    )
+
+    if not current_user.is_admin:
+        q_unread = q_unread.filter(Case.user_id == current_user.id)
+    
+    unread_count = q_unread.count()
 
     unread_order = sql_case(
         (and_(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash), 0),
