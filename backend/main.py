@@ -1271,19 +1271,26 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     hoy = today_colombia()
     ayer = hoy - timedelta(days=1)
 
-    total_no_leidos = db.query(Case).filter(
+    q_no_leidos = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.current_hash.isnot(None),
         or_(
             and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
         )
-    ).count()
+    )
 
-    total_actualizados_hoy = db.query(Case).filter(
+    q_hoy = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.ultima_actuacion == hoy,
-    ).count()
+    )
+
+    if not current_user.is_admin:
+        q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
+        q_hoy = q_hoy.filter(Case.user_id == current_user.id)
+
+    total_no_leidos = q_no_leidos.count()
+    total_actualizados_hoy = q_hoy.count()
 
     return {
         "total_validos": total_validos,
