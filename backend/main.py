@@ -664,7 +664,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "Authorization", "Content-Type", "Accept"],
 )
 
 
@@ -787,11 +787,15 @@ def get_db():
 # =========================
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    # Diagnostic Log
+    print(f"[AUTH-DEBUG] Headers recibidos: {dict(request.headers)}")
+    
     if not credentials:
-        print("[AUTH-DEBUG] No se recibieron credenciales en el header")
+        print("[AUTH-DEBUG] No se recibieron credenciales en el header de seguridad")
         raise HTTPException(status_code=401, detail="No autenticado")
     
     token = credentials.credentials
@@ -1140,7 +1144,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
             det = {}
 
     sujetos = p.get("sujetosProcesales") or ""
-    d1, d2 = parse_sujetos_procesales(sujetos)
+    d1, d2, ab_rama = parse_sujetos_procesales(sujetos)
     juzgado = extract_juzgado(p, det) or "JUZGADO NO ESPECIFICADO"
     fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
 
