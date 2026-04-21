@@ -156,7 +156,7 @@ export default function ProjectDashboardPage() {
             </span>
             <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
           </Button>
-          <Button className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300 font-bold px-6 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500">
+          <Button onClick={() => setSelectedTask({ title: '', status: 'to do', priority: 'normal', list_id: selectedListId } as any)} className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300 font-bold px-6 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500">
             <Plus className="mr-2 h-4 w-4" /> Lanzar Tarea
           </Button>
         </div>
@@ -325,7 +325,11 @@ export default function ProjectDashboardPage() {
                       </div>
                       
                       <div className="p-3 border-t border-white/5 dark:border-white/10 bg-background/30 rounded-b-2xl">
-                        <Button variant="ghost" className="w-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all border border-transparent hover:border-border/50 border-dashed rounded-xl h-9">
+                        <Button 
+                          onClick={() => setSelectedTask({ title: '', status: col.id, priority: 'normal', list_id: selectedListId } as any)}
+                          variant="ghost" 
+                          className="w-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all border border-transparent hover:border-border/50 border-dashed rounded-xl h-9"
+                        >
                           <Plus className="h-4 w-4 mr-2" /> Nueva Tarjeta
                         </Button>
                       </div>

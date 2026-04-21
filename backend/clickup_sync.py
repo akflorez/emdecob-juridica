@@ -127,9 +127,30 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                                 main_assignee_name = task['assignees'][0]['username'].lower().strip()
                                 assignee_id = user_map.get(main_assignee_name)
 
-                            # VINCULACIÓN AUTOMÁTICA POR RADICADO (23 dígitos)
-                            radicado_match = re.search(r'\d{23}', task['name'] + (task.get('description') or ""))
-                            linked_radicado = radicado_match.group(0) if radicado_match else None
+                            # VINCULACIÓN AUTOMÁTICA INTELIGENTE (Cruce con Casos)
+                            case_id = None
+                            
+                            # 1. Intentar machchar el Radicado de 23 dígitos en el Título o Descripción de la Tarea
+                            task_content = task['name'] + " " + (task.get('description') or "")
+                            radicado_match = re.search(r'\d{21,23}', task_content)
+                            if radicado_match:
+                                rad = radicado_match.group(0)
+                                matching_case = db.query(Case).filter(Case.radicado.like(f"%{rad}%")).first()
+                                if matching_case:
+                                    case_id = matching_case.id
+                            
+                            # 2. Si no cruzó por radicado, intentar cruzar usando el nombre de la Lista (que suele ser el Demandante/Demandado)
+                            if not case_id and lst['name']:
+                                search_term = f"%{lst['name'].strip()}%"
+                                from sqlalchemy import or_
+                                matching_case = db.query(Case).filter(
+                                    or_(
+                                        Case.demandante.ilike(search_term),
+                                        Case.demandado.ilike(search_term)
+                                    )
+                                ).first()
+                                if matching_case:
+                                    case_id = matching_case.id
 
                             db_task = Task(
                                 title=task['name'],
@@ -138,11 +159,10 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                                 priority=task.get('priority', {}).get('priority') if task.get('priority') else None,
                                 clickup_id=task['id'],
                                 list_id=db_list.id,
+                                case_id=case_id,
                                 assignee_id=assignee_id,
                                 creator_id=owner_id
                             )
-                            # Opcional: podrías guardar el radicado en un campo nuevo si lo tuviéramos
-                            # De momento lo usaremos en la búsqueda al filtrar.
                             db.add(db_task)
                     except Exception as e:
                         print(f"Error cargando tareas para list {lst['name']}: {e}")
