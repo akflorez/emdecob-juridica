@@ -37,6 +37,13 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional, Tuple
 from contextlib import asynccontextmanager
 
+class UserOut(BaseModel):
+    id: int
+    username: str
+    nombre: Optional[str] = None
+    is_active: bool
+    is_admin: bool
+
 from .db import SessionLocal, engine, Base
 from .models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
@@ -3517,13 +3524,6 @@ class WorkspaceCreate(BaseModel):
     name: str
     description: Optional[str] = None
     visibility: str = "TEAM_COLLABORATION"
-
-class UserOut(BaseModel):
-    id: int
-    username: str
-    nombre: Optional[str] = None
-    is_active: bool
-    is_admin: bool
 
 class FolderCreate(BaseModel):
     name: str
