@@ -84,6 +84,13 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL"))
                 except:
                     pass
+            if 'parent_id' not in columns_tasks:
+                print("+ [MIGRATION] tasks: agregando 'parent_id'...")
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN parent_id INTEGER"))
+                try:
+                    conn.execute(text("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_parent FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL"))
+                except:
+                    pass
 
     # --- Tabla 'users' ---
     columns_users = [c['name'] for c in inspector.get_columns('users')]
