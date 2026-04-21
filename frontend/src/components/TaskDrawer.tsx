@@ -5,10 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus } from 'lucide-react';
-import { Task as TaskType, updateTask, createTask } from '@/services/api';
+import { Task as TaskType, updateTask, createTask, getUsers, User } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -22,6 +29,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    getUsers().then(setUsers).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (task) {
@@ -84,12 +96,28 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3"/> Asignado</label>
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px]">
-                  {task.assignee_id ? 'AB' : '--'}
-                </div>
-                {task.assignee_id ? `Usuario ID: ${task.assignee_id}` : 'Sin asignar'}
-              </div>
+              <Select 
+                value={task.assignee_id ? String(task.assignee_id) : "unassigned"} 
+                onValueChange={(val) => handleSave({ assignee_id: val === "unassigned" ? undefined : Number(val) })}
+                disabled={isLoading}
+              >
+                <SelectTrigger className="h-9 bg-muted/40 border-border/50 hover:bg-muted transition-colors rounded-lg">
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned" className="text-muted-foreground">Sin asignar</SelectItem>
+                  {users.map(u => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold">
+                          {u.nombre ? u.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '??'}
+                        </div>
+                        <span>{u.nombre || u.username}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="space-y-1">

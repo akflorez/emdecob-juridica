@@ -11,18 +11,20 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  getCasePublications,
+  getCaseByRadicado, 
+  getCaseEvents, 
+  downloadEventsExcel, 
+  getCaseById, 
+  getCaseEventsById, 
   getCasePublicationsById,
-  getTasks,
-  updateTask,
-  createTask,
-  getCaseById,
   getCaseTasks,
+  getUsers,
+  type User,
   type Task as TaskType
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PublicacionesPanel } from '@/components/PublicacionesPanel';
-import { CheckCircle2, ListPlus, MoreVertical, MessageSquare } from 'lucide-react';
+import { CheckCircle2, ListPlus, MoreVertical, MessageSquare, Plus } from 'lucide-react';
 import { TaskDrawer } from '@/components/TaskDrawer';
 
 type DocsState = {
@@ -47,6 +49,7 @@ export default function CasoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [multipleCases, setMultipleCases] = useState<any[] | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
+  const [systemUsers, setSystemUsers] = useState<User[]>([]);
   
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -153,6 +156,7 @@ export default function CasoDetailPage() {
     };
 
     fetchData();
+    getUsers().then(setSystemUsers).catch(console.error);
   }, [radicado, id, toast]);
 
   const filteredEvents = useMemo(() => {
@@ -293,6 +297,31 @@ export default function CasoDetailPage() {
       const d = dateString.includes('T') ? dateString : `${dateString}T12:00:00`;
       return new Date(d).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
     } catch { return dateString; }
+  };
+
+  const handleCreateTask = () => {
+    if (!caseData) return;
+    
+    let assigneeId: number | undefined = undefined;
+    if (caseData.abogado && systemUsers.length > 0) {
+      const match = systemUsers.find(u => 
+        u.nombre?.toLowerCase().includes(caseData.abogado!.toLowerCase()) || 
+        caseData.abogado!.toLowerCase().includes(u.nombre?.toLowerCase() || '')
+      );
+      if (match) assigneeId = match.id;
+    }
+
+    const newTaskStub = {
+      title: '',
+      description: `Gestión para Radicado: ${caseData.radicado}`,
+      status: 'to do',
+      priority: 'normal',
+      case_id: caseData.id,
+      assignee_id: assigneeId,
+      list_id: 1
+    } as any;
+
+    setSelectedTask(newTaskStub);
   };
 
   if (isLoading) {
@@ -721,9 +750,9 @@ export default function CasoDetailPage() {
                 </CardTitle>
                 <CardDescription>Seguimiento de gestión para este radicado</CardDescription>
               </div>
-              <Button size="sm" onClick={() => window.open('/proyectos', '_blank')}>
+              <Button size="sm" onClick={handleCreateTask} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all">
                 <ListPlus className="h-4 w-4 mr-2" />
-                Nueva Tarea
+                Lanzar Tarea
               </Button>
             </CardHeader>
             <CardContent>
@@ -732,11 +761,12 @@ export default function CasoDetailPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : tasks.length === 0 ? (
-                <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                <div className="text-center py-12 border-2 border-dashed rounded-xl bg-muted/10">
                   <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                  <p className="text-muted-foreground">No hay tareas de gestión vinculadas a este radicado.</p>
-                  <Button variant="link" className="mt-2" onClick={() => window.open('/proyectos', '_blank')}>
-                    Ir al Gestor de Proyectos
+                  <p className="text-muted-foreground font-medium">No hay tareas de gestión vinculadas.</p>
+                  <Button variant="outline" className="mt-4 rounded-full" onClick={handleCreateTask}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear primera tarea
                   </Button>
                 </div>
               ) : (

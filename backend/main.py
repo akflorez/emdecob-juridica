@@ -989,6 +989,14 @@ def parse_sujetos_procesales(sujetos):
     demandante, demandado = _asignar_roles_inteligente(demandante, demandado)
     return demandante, demandado, abogado
 
+@app.get("/users", response_model=List[UserOut])
+async def list_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retorna todos los usuarios activos del sistema para asignación de tareas."""
+    return db.query(User).filter(User.is_active == True).all()
+
 def parse_fecha(fecha_str: Optional[str]) -> Optional[date]:
     if not fecha_str:
         return None
@@ -1062,10 +1070,19 @@ def extract_juzgado(p: dict, det: Optional[dict]) -> Optional[str]:
     return juzgado
 
 async def obtener_id_proceso(radicado: str) -> Optional[int]:
+    # Intentar búsqueda directa
     resp = await consulta_por_radicado(radicado, solo_activos=False, pagina=1)
     items = extract_items(resp)
+    
+    # Si no hay items, intentar con los primeros 21 dígitos (por si acaso el final varía)
+    if not items and len(radicado) >= 21:
+        print(f"🔍 [rama] Reintentando obtener_id_proceso con 21 dígitos para {radicado}")
+        resp = await consulta_por_radicado(radicado[:21], solo_activos=False, pagina=1)
+        items = extract_items(resp)
+
     if not items:
         return None
+        
     p0 = items[0] or {}
     idp = (
         p0.get("idProceso")
@@ -3500,6 +3517,13 @@ class WorkspaceCreate(BaseModel):
     name: str
     description: Optional[str] = None
     visibility: str = "TEAM_COLLABORATION"
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    nombre: Optional[str] = None
+    is_active: bool
+    is_admin: bool
 
 class FolderCreate(BaseModel):
     name: str

@@ -76,6 +76,18 @@ export function login(username: string, password: string) {
   );
 }
 
+export type User = {
+  id: number;
+  username: string;
+  nombre?: string;
+  is_active: bool;
+  is_admin: bool;
+};
+
+export function getUsers() {
+  return apiFetch<User[]>("/users");
+}
+
 /** ---------------------------
  * ESTADÍSTICAS
  * -------------------------- */
