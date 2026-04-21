@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderPlus, ListPlus, Plus, RefreshCw, Search, 
   Filter, MoreVertical, ChevronRight, MessageSquare, 
   Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock,
-  LayoutGrid, CalendarDays, List as ListIcon
+  LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +25,10 @@ moment.locale('es');
 const localizer = momentLocalizer(moment);
 
 const BOARD_COLUMNS = [
-  { id: 'to do', label: 'To Do', color: 'border-slate-500' },
-  { id: 'in progress', label: 'En Progreso', color: 'border-blue-500' },
-  { id: 'review', label: 'Revisión', color: 'border-yellow-500' },
-  { id: 'complete', label: 'Completado', color: 'border-green-500' }
+  { id: 'to do', label: 'To Do', color: 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300', dot: 'bg-slate-400' },
+  { id: 'in progress', label: 'En Progreso', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400', dot: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' },
+  { id: 'review', label: 'Revisión', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400', dot: 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]' },
+  { id: 'complete', label: 'Completado', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400', dot: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' }
 ];
 
 export default function ProjectDashboardPage() {
@@ -106,7 +106,6 @@ export default function ProjectDashboardPage() {
     setExpandedFolders(next);
   };
 
-  // Drag & Drop HTML5 nativo
   const handleDrop = async (status: string) => {
     if (!draggedTaskId) return;
     const t = tasks.find(x => x.id === draggedTaskId);
@@ -122,7 +121,6 @@ export default function ProjectDashboardPage() {
     setDraggedTaskId(null);
   };
 
-  // Mapeo para el BigCalendar
   const calendarEvents = tasks.filter(t => t.due_date).map(t => ({
     id: t.id,
     title: t.title,
@@ -132,70 +130,90 @@ export default function ProjectDashboardPage() {
   }));
 
   return (
-    <div className="flex flex-col h-full space-y-6">
+    <div className="flex flex-col h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative overflow-hidden">
+      {/* Decorative Orbs */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] -z-10 pointer-events-none mix-blend-screen" />
+      <div className="absolute bottom-[-20%] left-[-10%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
+
       {/* Header Panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Gestión de Proyectos</h1>
-          <p className="text-muted-foreground">Administra tareas y sincroniza flujos colaborativos en tiempo real.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-6 border-b border-border/40 px-6 backdrop-blur-sm z-10 relative">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-gradient-to-tr from-primary to-blue-500 rounded-lg shadow-lg shadow-primary/20">
+              <Zap className="h-5 w-5 text-white" />
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+              Gestión Avanzada
+            </h1>
+          </div>
+          <p className="text-sm font-medium text-muted-foreground ml-[44px]">Sincroniza y domina tus flujos colaborativos.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="group">
-            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
-            Sincronizar ClickUp
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={handleSync} disabled={isSyncing} className="group relative overflow-hidden bg-background/50 backdrop-blur border-border/50 hover:bg-muted/50 transition-all duration-300 rounded-full px-6">
+            <span className="relative z-10 flex items-center font-semibold">
+              <RefreshCw className={`mr-2 h-4 w-4 text-primary ${isSyncing ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-700"}`} />
+              Sincronizar ClickUp
+            </span>
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
           </Button>
-          <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Nueva Tarea</Button>
+          <Button className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300 font-bold px-6 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500">
+            <Plus className="mr-2 h-4 w-4" /> Lanzar Tarea
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-250px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)] p-6 pt-6 z-10">
         
         {/* Sidebar de Jerarquía (Explorador) */}
-        <div className="lg:col-span-1 shadow-sm border rounded-xl bg-card/60 backdrop-blur-md overflow-hidden flex flex-col">
-          <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explorador</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20 hover:text-primary transition-colors">
-              <FolderPlus className="h-4 w-4" />
+        <div className="lg:col-span-3 flex flex-col h-full bg-card/80 backdrop-blur-xl border border-border/40 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(255,255,255,0.02)] overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+          <div className="p-4 border-b border-border/40 bg-gradient-to-r from-muted/50 to-transparent flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+              <LayoutDashboard className="h-3.5 w-3.5" /> Explorador
+            </span>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background/50 shadow-sm hover:bg-primary hover:text-primary-foreground transition-all duration-300">
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
           
-          <div className="flex-1 overflow-auto p-3 space-y-2">
+          <div className="flex-1 overflow-auto p-3 space-y-3 custom-scrollbar">
             {workspaces.map(ws => (
-              <div key={ws.id} className="space-y-1">
+              <div key={ws.id} className="space-y-1 relative">
                 <div 
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/60 cursor-pointer text-sm font-semibold transition-colors"
+                  className="flex items-center justify-between p-2 rounded-xl hover:bg-primary/5 cursor-pointer text-sm font-bold transition-all duration-200 group"
                   onClick={() => toggleWorkspace(ws.id)}
                 >
-                  <div className="flex items-center gap-2">
-                    <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${expandedWorkspaces.has(ws.id) ? "rotate-90" : ""}`} />
-                    <LayoutDashboard className="h-4 w-4 text-primary" />
-                    <span>{ws.name}</span>
+                  <div className="flex items-center gap-2.5 text-foreground/90 group-hover:text-primary transition-colors">
+                    <ChevronRight className={`h-4 w-4 text-muted-foreground/50 transition-transform duration-300 ${expandedWorkspaces.has(ws.id) ? "rotate-90 text-primary" : "group-hover:translate-x-1"}`} />
+                    <div className="p-1 rounded bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10">
+                      <Lock className="h-3 w-3 text-primary" />
+                    </div>
+                    <span className="truncate">{ws.name}</span>
                   </div>
-                  <Plus className="h-3 w-3 opacity-0 hover:opacity-100 transition-opacity" />
                 </div>
                 
+                {/* Folders con Animacion Slide-Down */}
                 {expandedWorkspaces.has(ws.id) && ws.folders.map(f => (
-                  <div key={f.id} className="ml-4 space-y-1 relative before:absolute before:left-[-12px] before:top-0 before:h-full before:w-[1px] before:bg-border/50">
+                  <div key={f.id} className="ml-5 space-y-1 relative before:absolute before:-left-3 before:top-4 before:h-[calc(100%-16px)] before:w-px before:bg-gradient-to-b before:from-border before:to-transparent animate-in slide-in-from-top-2 fade-in duration-200">
                     <div 
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 cursor-pointer text-sm font-medium opacity-90"
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-muted/50 cursor-pointer text-sm font-semibold opacity-90 transition-all group"
                       onClick={() => toggleFolder(f.id)}
                     >
-                      <div className="flex items-center gap-2">
-                        <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform ${expandedFolders.has(f.id) ? "rotate-90" : ""}`} />
-                        <span>{f.name}</span>
+                      <div className="flex items-center gap-2.5">
+                        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 ${expandedFolders.has(f.id) ? "rotate-90" : "group-hover:translate-x-1"}`} />
+                        <FolderPlus className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        <span className="group-hover:text-foreground transition-colors truncate">{f.name}</span>
                       </div>
-                      <Plus className="h-3 w-3 opacity-0 hover:opacity-100 transition-opacity text-primary" />
                     </div>
 
                     {expandedFolders.has(f.id) && f.lists.map(list => (
                       <div 
                         key={list.id}
-                        className={`ml-5 flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer text-[13px] transition-all ${selectedListId === list.id ? "bg-primary text-primary-foreground font-bold shadow-md" : "text-muted-foreground hover:bg-muted"}`}
+                        className={`ml-5 flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer text-[13px] transition-all duration-300 animate-in slide-in-from-left-2 fade-in ${selectedListId === list.id ? "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold shadow-md shadow-primary/25 translate-x-1" : "text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-1"}`}
                         onClick={() => setSelectedListId(list.id)}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className={`w-1.5 h-1.5 rounded-full ${selectedListId === list.id ? 'bg-background' : 'bg-primary/50'}`} />
-                          <span>{list.name}</span>
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-2 h-2 rounded-full shadow-[0_0_5px_currentColor] ${selectedListId === list.id ? 'bg-white' : 'bg-primary/40'}`} />
+                          <span className="truncate">{list.name}</span>
                         </div>
                       </div>
                     ))}
@@ -207,81 +225,129 @@ export default function ProjectDashboardPage() {
         </div>
 
         {/* Content Area - Tabs para List / Kanban / Calendar */}
-        <div className="lg:col-span-3 flex flex-col h-full overflow-hidden">
-          <Tabs defaultValue="list" className="flex-1 flex flex-col h-full w-full">
+        <div className="lg:col-span-9 flex flex-col h-full overflow-hidden bg-card/40 backdrop-blur-sm border border-border/30 rounded-2xl shadow-xl">
+          <Tabs defaultValue="board" className="flex-1 flex flex-col h-full w-full p-4 pb-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar tareas..." className="pl-9 bg-muted/20 border-border/50" />
+              <div className="relative flex-1 max-w-md group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                </div>
+                <Input placeholder="Buscar en esta carpeta..." className="pl-10 bg-background/50 backdrop-blur shadow-sm border-border/50 focus-visible:ring-primary/30 rounded-full h-10 transition-all duration-300" />
               </div>
-              <div className="flex flex-row items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-                <TabsList className="bg-muted/40 p-1">
-                  <TabsTrigger value="list" className="flex items-center gap-2"><ListIcon className="h-4 w-4"/> Lista</TabsTrigger>
-                  <TabsTrigger value="board" className="flex items-center gap-2"><LayoutGrid className="h-4 w-4"/> Tablero</TabsTrigger>
-                  <TabsTrigger value="calendar" className="flex items-center gap-2"><CalendarDays className="h-4 w-4"/> Calendario</TabsTrigger>
+              
+              <div className="flex items-center justify-end gap-3 flex-wrap">
+                <TabsList className="bg-muted/50 backdrop-blur-md p-1 rounded-full shadow-inner border border-white/5 dark:border-white/10">
+                  <TabsTrigger value="list" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
+                    <ListIcon className="h-4 w-4 mr-2" /> Lista
+                  </TabsTrigger>
+                  <TabsTrigger value="board" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
+                    <LayoutGrid className="h-4 w-4 mr-2" /> Tablero
+                  </TabsTrigger>
+                  <TabsTrigger value="calendar" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
+                    <CalendarDays className="h-4 w-4 mr-2" /> Calendario
+                  </TabsTrigger>
                 </TabsList>
-                <Button variant="ghost" size="icon" className="text-muted-foreground"><Filter className="h-4 w-4" /></Button>
+                <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
+                <Button variant="outline" size="icon" className="rounded-full bg-background/50 backdrop-blur hover:bg-muted shadow-sm">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button variant="outline" size="icon" className="rounded-full bg-background/50 backdrop-blur hover:bg-muted shadow-sm">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-[500px] border border-border/40 rounded-xl overflow-hidden bg-background/50 backdrop-blur-sm relative">
+            <div className="flex-1 w-full relative overflow-hidden pt-2 rounded-t-xl">
               
-              {/* TAB: LIST */}
-              <TabsContent value="list" className="h-full m-0 p-4 overflow-y-auto space-y-3">
+              {/* TAB: LIST (Datatable ultra moderna) */}
+              <TabsContent value="list" className="h-full m-0 overflow-y-auto space-y-3 custom-scrollbar pb-6 animate-in fade-in duration-500">
                 {tasks.length === 0 ? (
-                  <EmptyState text="No hay tareas en esta lista." />
-                ) : tasks.map(task => (
-                  <TaskRow key={task.id} task={task} onClick={() => setSelectedTask(task)} />
+                  <EmptyState text="El lienzo está en blanco. Inicia un nuevo flujo." />
+                ) : tasks.map((task, i) => (
+                  <TaskRow key={task.id} task={task} onClick={() => setSelectedTask(task)} index={i} />
                 ))}
               </TabsContent>
 
-              {/* TAB: BOARD KANBAN */}
-              <TabsContent value="board" className="h-full m-0 p-4 overflow-x-auto flex gap-4 items-start">
+              {/* TAB: BOARD KANBAN (Drag and Drop nativo) */}
+              <TabsContent value="board" className="h-[calc(100%-20px)] m-0 overflow-x-auto flex gap-5 items-start custom-scrollbar pb-4 animate-in fade-in zoom-in-95 duration-500">
                   {BOARD_COLUMNS.map(col => (
                     <div 
                       key={col.id} 
-                      className={`min-w-[300px] max-w-[300px] flex flex-col bg-muted/20 border-t-[3px] rounded-lg h-full max-h-full ${col.color}`}
+                      className={`min-w-[320px] max-w-[320px] flex flex-col bg-background/60 backdrop-blur-lg border border-border/40 rounded-2xl h-full shadow-sm transition-colors duration-300`}
                       onDragOver={e => e.preventDefault()}
                       onDrop={() => handleDrop(col.id)}
                     >
-                      <div className="p-3 font-semibold text-sm flex items-center justify-between border-b border-border/50">
-                        <span>{col.label}</span>
-                        <Badge variant="secondary" className="px-2">{tasks.filter(t => t.status === col.id).length}</Badge>
+                      <div className="p-4 flex items-center justify-between border-b border-white/5 dark:border-white/10 rounded-t-2xl bg-gradient-to-b from-white/40 to-transparent dark:from-white/5 relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-transparent via-current to-transparent pointer-events-none" />
+                        <div className={`flex items-center gap-2 ${col.color.split(' ')[1]}`}>
+                          <div className={`w-2 h-2 rounded-full ${col.dot} animate-pulse`} />
+                          <span className={`font-bold tracking-wide uppercase text-xs ${col.color}`}>{col.label}</span>
+                        </div>
+                        <Badge variant="outline" className="bg-background/80 px-2.5 py-0.5 rounded-full font-bold shadow-sm">{tasks.filter(t => t.status === col.id).length}</Badge>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                      
+                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
                         {tasks.filter(t => t.status === col.id).map(task => (
                           <div 
                             key={task.id}
                             draggable
                             onDragStart={() => setDraggedTaskId(task.id)}
                             onClick={() => setSelectedTask(task)}
-                            className="bg-card border border-border/60 hover:border-primary/50 rounded-md p-3 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
+                            className="group bg-card border border-border/50 hover:border-primary/50 relative rounded-xl p-4 cursor-grab active:cursor-grabbing hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 overflow-hidden"
                           >
-                            <h4 className="font-medium text-sm mb-2 leading-tight">{task.title}</h4>
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span className="bg-muted px-1.5 rounded">{task.priority || 'Normal'}</span>
-                              {task.due_date && <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> {new Date(task.due_date).toLocaleDateString()}</span>}
+                            <div className={`absolute top-0 left-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500 shadow-[0_0_8px_rotate(255,0,0,0.5)]' : task.priority === 'high' ? 'bg-yellow-500' : 'bg-primary/50'}`} />
+                            
+                            <div className="flex justify-between items-start mb-2 pl-2">
+                              {task.clickup_id && (
+                                <span className="text-[10px] font-mono font-medium text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded">#{task.clickup_id.slice(-6)}</span>
+                              )}
+                              <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2">
+                                <PlayCircle className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                              </Button>
+                            </div>
+                            
+                            <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
+                            
+                            <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
+                              <div className="flex -space-x-2">
+                                <div className="h-7 w-7 rounded-full border-2 border-card bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-[10px] text-white font-bold shadow-sm z-10">AK</div>
+                                <div className="h-7 w-7 rounded-full border-2 border-card bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center text-[10px] text-white font-bold shadow-sm z-0">JD</div>
+                              </div>
+                              {task.due_date && (
+                                <Badge variant="secondary" className="bg-muted/50 text-muted-foreground font-medium rounded-full px-2 gap-1.5 shadow-sm border-transparent hover:border-primary/20 transition-colors">
+                                  <CalendarIcon className="h-3 w-3" /> 
+                                  {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
-                      <div className="p-2 border-t border-border/50">
-                        <Button variant="ghost" className="w-full h-8 text-xs text-muted-foreground"><Plus className="h-3 w-3 mr-1"/> Añadir Tarea</Button>
+                      
+                      <div className="p-3 border-t border-white/5 dark:border-white/10 bg-background/30 rounded-b-2xl">
+                        <Button variant="ghost" className="w-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all border border-transparent hover:border-border/50 border-dashed rounded-xl h-9">
+                          <Plus className="h-4 w-4 mr-2" /> Nueva Tarjeta
+                        </Button>
                       </div>
                     </div>
                   ))}
               </TabsContent>
 
-              {/* TAB: CALENDAR */}
-              <TabsContent value="calendar" className="h-full m-0 p-4">
+              {/* TAB: CALENDAR (Visión Macro) */}
+              <TabsContent value="calendar" className="h-full m-0 p-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <style>{`
                   .rbc-calendar { font-family: inherit; }
-                  .rbc-event { background-color: hsl(var(--primary)); border-radius: 6px; padding: 2px 5px; font-size: 12px; }
-                  .rbc-today { background-color: hsl(var(--primary)/0.05); }
-                  .rbc-toolbar button { color: hsl(var(--foreground)); }
-                  .rbc-toolbar button.rbc-active { background-color: hsl(var(--primary)/0.1); box-shadow: none; }
+                  .rbc-month-view { border-radius: 12px; overflow: hidden; border-color: hsl(var(--border)/0.5); border-width: 1px; }
+                  .rbc-header { padding: 10px 0; font-weight: 700; text-transform: uppercase; font-size: 11px; background: hsl(var(--muted)/0.3); border-color: hsl(var(--border)/0.5); }
+                  .rbc-day-bg { border-color: hsl(var(--border)/0.3); }
+                  .rbc-off-range-bg { background: hsl(var(--muted)/0.1); }
+                  .rbc-event { background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary)/0.8)); border: none; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 2px; }
+                  .rbc-today { background-color: hsl(var(--primary)/0.03); }
+                  .rbc-toolbar button { color: hsl(var(--foreground)); border-radius: 8px; border-color: hsl(var(--border)/0.5); padding: 4px 12px; font-weight: 500; transition: all 0.2s; }
+                  .rbc-toolbar button:hover { background-color: hsl(var(--muted)); }
+                  .rbc-toolbar button.rbc-active { background-color: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); box-shadow: 0 4px 10px hsl(var(--primary)/0.3); }
                 `}</style>
-                <div className="h-full bg-card/40 rounded-xl">
+                <div className="h-full bg-background/80 backdrop-blur-xl rounded-2xl p-4 shadow-sm border border-border/40">
                   <BigCalendar
                     localizer={localizer}
                     events={calendarEvents}
@@ -289,7 +355,7 @@ export default function ProjectDashboardPage() {
                     endAccessor="end"
                     style={{ height: '100%' }}
                     onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                    messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día" }}
+                    messages={{ today: "Hoy", previous: "Volver", next: "Avanzar", month: "Mes", week: "Semana", day: "Día" }}
                   />
                 </div>
               </TabsContent>
@@ -299,7 +365,6 @@ export default function ProjectDashboardPage() {
         </div>
       </div>
       
-      {/* Componente Modal Sheet para Detalles y Modificadores de la Tarea */}
       <TaskDrawer 
         task={selectedTask}
         open={!!selectedTask}
@@ -310,50 +375,70 @@ export default function ProjectDashboardPage() {
   );
 }
 
-// Subcomponente de fila de tabla limpia
-function TaskRow({ task, onClick }: { task: TaskType; onClick: () => void }) {
+// Subcomponente de fila Data-Table (List Mode) - Estilizado al máximo nivel
+function TaskRow({ task, onClick, index }: { task: TaskType; onClick: () => void; index: int }) {
   return (
-    <Card 
+    <div 
       onClick={onClick}
-      className={`border-l-4 hover:shadow border border-border/50 transition-all cursor-pointer bg-card/60 ${
-        task.priority === 'urgent' ? 'border-l-red-500' : 
-        task.priority === 'high' ? 'border-l-orange-500' : 
-        task.priority === 'normal' ? 'border-l-blue-500' : 'border-l-primary'
-      }`}
+      style={{ animationDelay: `${index * 50}ms` }}
+      className={`group relative flex items-center justify-between p-4 bg-background/60 backdrop-blur-md border border-border/40 hover:border-primary/40 rounded-xl hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300 cursor-pointer overflow-hidden animate-in fade-in slide-in-from-bottom-2`}
     >
-      <CardContent className="p-3 px-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className={`h-4 w-4 ${task.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
-            <div>
-              <h3 className="font-semibold text-sm">{task.title}</h3>
-              <div className="flex items-center gap-3 mt-1">
-                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${task.status === 'complete' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-muted text-muted-foreground'}`}>
-                  {task.status}
-                </span>
-                {task.due_date && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CalendarIcon className="h-3 w-3" /> {new Date(task.due_date).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <UserIcon className="h-4 w-4 opacity-50" />
-            <MessageSquare className="h-4 w-4 opacity-50" />
+      {/* Dynamic left indicator line */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.status === 'complete' ? 'bg-green-500' : task.priority === 'urgent' ? 'bg-red-500' : 'bg-primary'} transition-all duration-300 group-hover:w-1.5`} />
+      
+      <div className="flex items-center gap-5 ml-2 overflow-hidden">
+        <div className={`flex-shrink-0 h-9 w-9 flex items-center justify-center rounded-full transition-all duration-500 ${task.status === 'complete' ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'}`}>
+          <CheckCircle2 className="h-5 w-5" />
+        </div>
+        <div className="flex flex-col gap-1 min-w-0">
+          <h3 className="font-semibold text-[15px] truncate max-w-[400px] text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h3>
+          <div className="flex items-center gap-3 text-xs">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
+              task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
+              task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+              'bg-muted text-muted-foreground border border-border'
+            }`}>
+              {task.status}
+            </span>
+            <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
+              <Clock className="h-3 w-3" />
+              {task.priority || 'Normal'}
+            </span>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      
+      <div className="flex items-center gap-6 ml-4">
+        <div className="hidden md:flex items-center -space-x-2 mr-4">
+            <div className="h-8 w-8 rounded-full border-2 border-background bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] text-white font-bold shadow-sm opacity-80 group-hover:opacity-100 transition-opacity">US</div>
+        </div>
+        {task.due_date ? (
+          <div className="hidden sm:flex flex-col items-end">
+            <span className="text-xs font-semibold text-foreground/70">Vencimiento</span>
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+            </span>
+          </div>
+        ) : (
+          <div className="hidden sm:text-muted-foreground/30 sm:flex items-center"><CalendarIcon className="h-4 w-4" /></div>
+        )}
+      </div>
+    </div>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground py-20">
-      <CheckCircle2 className="h-16 w-16 opacity-10" />
-      <p className="font-medium text-sm">{text}</p>
+    <div className="flex flex-col items-center justify-center h-[400px] w-full text-center">
+      <div className="relative mb-6">
+        <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
+        <div className="h-24 w-24 rounded-full bg-gradient-to-tr from-muted to-muted/30 border border-white/10 dark:border-white/5 flex items-center justify-center shadow-2xl relative">
+          <LayoutGrid className="h-10 w-10 text-muted-foreground/50" />
+        </div>
+      </div>
+      <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60 mb-2">Workspace Despejado</h3>
+      <p className="text-sm font-medium text-muted-foreground max-w-[250px]">{text}</p>
+      <Button className="mt-8 rounded-full shadow-lg shadow-primary/20 px-8">Crear la primera tarea</Button>
     </div>
   );
 }
