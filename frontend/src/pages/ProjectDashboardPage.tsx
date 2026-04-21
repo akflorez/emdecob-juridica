@@ -373,7 +373,14 @@ export default function ProjectDashboardPage() {
         task={selectedTask}
         open={!!selectedTask}
         onOpenChange={(open) => !open && setSelectedTask(null)}
-        onTaskUpdate={(t) => setTasks(prev => prev.map(pt => pt.id === t.id ? t : pt))}
+        onTaskUpdate={(t) => {
+          setTasks(prev => {
+            const exists = prev.some(pt => pt.id === t.id);
+            if (exists) return prev.map(pt => pt.id === t.id ? t : pt);
+            return [t, ...prev];
+          });
+          setSelectedTask(t);
+        }}
       />
     </div>
   );

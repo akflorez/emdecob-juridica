@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus } from 'lucide-react';
-import { Task as TaskType, updateTask } from '@/services/api';
+import { Task as TaskType, updateTask, createTask } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -34,11 +34,20 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
     if (!task) return;
     setIsLoading(true);
     try {
-      const updated = await updateTask(task.id, field);
-      onTaskUpdate(updated);
-      toast({ title: 'Tarea actualizada', description: 'Los cambios han sido guardados.' });
+      if (task.id) {
+        const updated = await updateTask(task.id, field);
+        onTaskUpdate(updated);
+        toast({ title: 'Tarea actualizada', description: 'Cambios guardados.' });
+      } else {
+        // Es una tarea nueva
+        if (!field.title && !editedTitle) return; // No crear si esta vacia
+        const toCreate = { ...task, ...field, title: field.title || editedTitle };
+        const created = await createTask(toCreate);
+        onTaskUpdate(created);
+        toast({ title: 'Tarea creada', description: 'Iniciaste un nuevo flujo.' });
+      }
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      toast({ title: 'Error', description: e.message || 'Error de servidor', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -64,8 +73,9 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             className="text-2xl font-bold px-0 bg-transparent border-0 focus-visible:ring-0 shadow-none h-auto py-1"
             value={editedTitle}
             onChange={(e) => setEditedTitle(e.target.value)}
-            onBlur={() => editedTitle !== task.title && handleSave({ title: editedTitle })}
+            onBlur={() => (editedTitle && editedTitle !== task.title) && handleSave({ title: editedTitle })}
             disabled={isLoading}
+            placeholder="Nombra esta tarea..."
           />
         </SheetHeader>
 
