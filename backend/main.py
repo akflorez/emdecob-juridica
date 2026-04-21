@@ -3496,6 +3496,20 @@ async def import_clickup(
 # PROJECT MANAGEMENT API
 # =========================
 
+class WorkspaceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    visibility: str = "TEAM_COLLABORATION"
+
+class FolderCreate(BaseModel):
+    name: str
+    workspace_id: int
+
+class ListCreate(BaseModel):
+    name: str
+    folder_id: Optional[int] = None
+    workspace_id: int
+
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -3504,6 +3518,8 @@ class TaskCreate(BaseModel):
     priority: Optional[str] = None
     status: str = "open"
     due_date: Optional[datetime] = None
+    case_id: Optional[int] = None
+    parent_id: Optional[int] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -3512,6 +3528,7 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
+    case_id: Optional[int] = None
 
 class CommentCreate(BaseModel):
     task_id: int
@@ -3563,6 +3580,42 @@ async def get_workspaces(
     
     return results
 
+@app.post("/projects/workspaces")
+async def create_workspace(
+    ws_data: WorkspaceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ws = Workspace(name=ws_data.name, description=ws_data.description, visibility=ws_data.visibility, owner_id=current_user.id)
+    db.add(ws)
+    db.commit()
+    db.refresh(ws)
+    return ws
+
+@app.post("/projects/folders")
+async def create_folder(
+    f_data: FolderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    f = Folder(name=f_data.name, workspace_id=f_data.workspace_id)
+    db.add(f)
+    db.commit()
+    db.refresh(f)
+    return f
+
+@app.post("/projects/lists")
+async def create_list(
+    l_data: ListCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    l = ProjectList(name=l_data.name, folder_id=l_data.folder_id, workspace_id=l_data.workspace_id)
+    db.add(l)
+    db.commit()
+    db.refresh(l)
+    return l
+
 @app.get("/projects/tasks")
 async def get_tasks(
     list_id: Optional[int] = None,
@@ -3594,6 +3647,8 @@ async def get_tasks(
         "assignee_id": t.assignee_id,
         "list_id": t.list_id,
         "due_date": t.due_date,
+        "case_id": t.case_id,
+        "parent_id": t.parent_id,
         "created_at": t.created_at,
         "clickup_id": t.clickup_id
     } for t in tasks]
@@ -3612,6 +3667,8 @@ async def create_task(
         priority=t_data.priority,
         status=t_data.status,
         due_date=t_data.due_date,
+        case_id=t_data.case_id,
+        parent_id=t_data.parent_id,
         creator_id=current_user.id
     )
     db.add(task)
@@ -3636,9 +3693,29 @@ async def update_task(
     if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
     if t_data.priority is not None: task.priority = t_data.priority
     if t_data.due_date is not None: task.due_date = t_data.due_date
+    if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
     
     db.commit()
     return task
+
+@app.get("/cases/{id}/tasks")
+async def get_case_tasks(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tasks = db.query(Task).filter(Task.case_id == id).order_by(desc(Task.created_at)).all()
+    return [{
+        "id": t.id,
+        "title": t.title,
+        "status": t.status,
+        "priority": t.priority,
+        "assignee_id": t.assignee_id,
+        "list_id": t.list_id,
+        "due_date": t.due_date,
+        "parent_id": t.parent_id,
+        "created_at": t.created_at
+    } for t in tasks]
 
 # =========================
 # ADVANCED DASHBOARD & INLINE EDIT

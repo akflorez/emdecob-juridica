@@ -17,11 +17,13 @@ import {
   updateTask,
   createTask,
   getCaseById,
+  getCaseTasks,
   type Task as TaskType
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PublicacionesPanel } from '@/components/PublicacionesPanel';
 import { CheckCircle2, ListPlus, MoreVertical, MessageSquare } from 'lucide-react';
+import { TaskDrawer } from '@/components/TaskDrawer';
 
 type DocsState = {
   items: any[];
@@ -44,6 +46,7 @@ export default function CasoDetailPage() {
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [multipleCases, setMultipleCases] = useState<any[] | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -239,24 +242,28 @@ export default function CasoDetailPage() {
         const result = await getCaseById(Number(id || caseData?.id));
         setCaseData(result);
         
-        const [eventsResult, pubsResult] = await Promise.all([
+        const [eventsResult, pubsResult, tasksResult] = await Promise.all([
           getCaseEventsById(result.id),
-          getCasePublicationsById(result.id)
+          getCasePublicationsById(result.id),
+          getCaseTasks(result.id)
         ]);
         
         setEvents(eventsResult.items || []);
         setPublications(pubsResult.items || []);
+        setTasks(tasksResult || []);
       } else {
         // Fallback a radicado (solo si no hay ID, ej. búsqueda inicial)
         const results = await getCaseByRadicado(decoded);
         if (results.length === 1) {
           setCaseData(results[0]);
-          const [eventsResult, pubsResult] = await Promise.all([
+          const [eventsResult, pubsResult, tasksResult] = await Promise.all([
             getCaseEventsById(results[0].id),
-            getCasePublicationsById(results[0].id)
+            getCasePublicationsById(results[0].id),
+            getCaseTasks(results[0].id)
           ]);
           setEvents(eventsResult.items || []);
           setPublications(pubsResult.items || []);
+          setTasks(tasksResult || []);
         } else if (results.length > 1) {
           setMultipleCases(results);
         } else {
@@ -737,6 +744,7 @@ export default function CasoDetailPage() {
                   {tasks.map(task => (
                     <div 
                       key={task.id} 
+                      onClick={() => setSelectedTask(task)}
                       className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/30 transition-all cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
@@ -768,6 +776,16 @@ export default function CasoDetailPage() {
               )}
             </CardContent>
           </Card>
+          
+          <TaskDrawer 
+            task={selectedTask} 
+            open={!!selectedTask} 
+            onOpenChange={(open) => !open && setSelectedTask(null)}
+            onTaskUpdate={(updated) => {
+              setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+              setSelectedTask(updated); // refrescar drawer data en vivo
+            }}
+          />
         </TabsContent>
       </Tabs>
 

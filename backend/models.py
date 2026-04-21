@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     UniqueConstraint,
+    Table,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -46,6 +47,8 @@ class Case(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    
+    tasks = relationship("Task", back_populates="case", cascade="all, delete-orphan")
 
 
 class CaseEvent(Base):
@@ -259,6 +262,27 @@ class ProjectList(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
+# =========================
+# ASOCIACIONES DE ETIQUETAS
+# =========================
+task_tags = Table(
+    'task_tags',
+    Base.metadata,
+    Column('task_id', Integer, ForeignKey('tasks.id', ondelete="CASCADE"), primary_key=True),
+    Column('tag_id', Integer, ForeignKey('tags.id', ondelete="CASCADE"), primary_key=True)
+)
+
+class Tag(Base):
+    """Etiquetas personalizadas para clasificación en proyectos."""
+    __tablename__ = "tags"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    color = Column(String(50), default="#3b82f6") # Hex code
+    
+    tasks = relationship("Task", secondary=task_tags, back_populates="tags")
+
+
 class Task(Base):
     """Tareas individuales con jerarquía (soporta subtareas)"""
     __tablename__ = "tasks"
@@ -277,6 +301,9 @@ class Task(Base):
     assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     creator_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
+    # Vinculación clave con los expedientes/casos jurídicos
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="SET NULL"), nullable=True, index=True)
+    
     # Soporte para subtareas (recursivo)
     parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     
@@ -284,6 +311,11 @@ class Task(Base):
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
     
     project_list = relationship("ProjectList", back_populates="tasks")
+    case = relationship("Case", back_populates="tasks")
+    
+    # Colecciones de checklist y tags
+    checklists = relationship("TaskChecklistItem", back_populates="task", cascade="all, delete-orphan")
+    tags = relationship("Tag", secondary=task_tags, back_populates="tasks")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -297,6 +329,20 @@ class TaskComment(Base):
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=False)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class TaskChecklistItem(Base):
+    """Sub-elementos tipo checklist rápidos dentro de una tarea"""
+    __tablename__ = "task_checklist_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    content = Column(String(500), nullable=False)
+    is_completed = Column(Boolean, default=False)
+    
+    task = relationship("Task", back_populates="checklists")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 

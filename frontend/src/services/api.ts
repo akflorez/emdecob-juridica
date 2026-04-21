@@ -811,6 +811,8 @@ export type Task = {
   assignee_id?: number;
   list_id: number;
   due_date?: string;
+  case_id?: number;
+  parent_id?: number;
   created_at: string;
   clickup_id?: string;
 };
@@ -826,6 +828,22 @@ export function getTasks(params: { list_id?: number; status?: string; assignee_i
   if (params.assignee_id) qs.set("assignee_id", String(params.assignee_id));
   if (params.radicado) qs.set("radicado", params.radicado);
   return apiFetch<Task[]>(`/projects/tasks?${qs.toString()}`);
+}
+
+export function getCaseTasks(caseId: number) {
+  return apiFetch<Task[]>(`/cases/${caseId}/tasks`);
+}
+
+export function createWorkspace(data: { name: string; description?: string; visibility?: string }) {
+  return apiFetch<Workspace>("/projects/workspaces", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function createFolder(data: { name: string; workspace_id: number }) {
+  return apiFetch<WorkspaceFolder>("/projects/folders", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function createList(data: { name: string; folder_id?: number; workspace_id: number }) {
+  return apiFetch<WorkspaceList>("/projects/lists", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createTask(data: Partial<Task>) {

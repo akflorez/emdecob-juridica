@@ -9,7 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.db import engine, Base
 from backend.models import (
     Case, CaseEvent, InvalidRadicado, User, CasePublication, SearchJob,
-    IntegrationConfig
+    IntegrationConfig, Workspace, WorkspaceMember, Folder, ProjectList, Task,
+    TaskComment, TaskChecklistItem, TaskAttachment, Tag, task_tags
 )
 
 def run_migrations():
@@ -26,15 +27,15 @@ def run_migrations():
     columns_cases = [c['name'] for c in inspector.get_columns('cases')]
     with engine.begin() as conn:
         if 'cedula' not in columns_cases:
-            print("➕ [MIGRATION] cases: agregando 'cedula'...")
+            print("+ [MIGRATION] cases: agregando 'cedula'...")
             conn.execute(text("ALTER TABLE cases ADD COLUMN cedula VARCHAR(50)"))
         
         if 'abogado' not in columns_cases:
-            print("➕ [MIGRATION] cases: agregando 'abogado'...")
+            print("+ [MIGRATION] cases: agregando 'abogado'...")
             conn.execute(text("ALTER TABLE cases ADD COLUMN abogado VARCHAR(200)"))
             
         if 'id_proceso' not in columns_cases:
-            print("➕ [MIGRATION] cases: agregando 'id_proceso'...")
+            print("+ [MIGRATION] cases: agregando 'id_proceso'...")
             conn.execute(text("ALTER TABLE cases ADD COLUMN id_proceso VARCHAR(20)"))
             try:
                 conn.execute(text("CREATE UNIQUE INDEX ix_cases_id_proceso ON cases (id_proceso)"))
@@ -42,7 +43,7 @@ def run_migrations():
                 pass
                 
         if 'telefono' not in columns_cases:
-            print("➕ [MIGRATION] cases: agregando 'telefono'...")
+            print("+ [MIGRATION] cases: agregando 'telefono'...")
             conn.execute(text("ALTER TABLE cases ADD COLUMN telefono VARCHAR(50)"))
         
         if 'user_id' not in columns_cases:
@@ -72,12 +73,24 @@ def run_migrations():
             except:
                 pass
 
+    # --- Tabla 'tasks' ---
+    columns_tasks = [c['name'] for c in inspector.get_columns('tasks')]
+    if columns_tasks:
+        with engine.begin() as conn:
+            if 'case_id' not in columns_tasks:
+                print("+ [MIGRATION] tasks: agregando 'case_id'...")
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN case_id INTEGER"))
+                try:
+                    conn.execute(text("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL"))
+                except:
+                    pass
+
     # --- Tabla 'users' ---
     columns_users = [c['name'] for c in inspector.get_columns('users')]
     if columns_users: # Solo si la tabla ya existe
         with engine.begin() as conn:
             if 'telefono' not in columns_users:
-                print("➕ [MIGRATION] users: agregando 'telefono'...")
+                print("+ [MIGRATION] users: agregando 'telefono'...")
                 conn.execute(text("ALTER TABLE users ADD COLUMN telefono VARCHAR(50)"))
 
     print("[MIGRATION] Sincronizacion finalizada satisfactoriamente.")
