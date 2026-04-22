@@ -720,16 +720,6 @@ export function getCasePublicationsById(id: number) {
   return apiFetch<{ items: any[] }>(`/cases/id/${id}/publications`);
 }
 
-export function updateCaseLawyer(id: number, abogado: string) {
-  return apiFetch<{ ok: boolean; abogado: string; user_id?: number }>(`/cases/${id}/lawyer`, {
-    method: 'PATCH',
-    body: JSON.stringify({ abogado })
-  });
-}
-
-export function markCaseRead(id: number) {
-  return apiFetch(`/cases/id/${id}/read`, { method: 'POST' });
-}
 
 export function refreshCasePublications(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
@@ -812,10 +802,16 @@ export async function downloadSearchResultsExcel(jobId: number) {
  * PROYECTOS Y TAREAS (CLICKUP CLONE / GESTIÓN INTERNA)
  * -------------------------- */
 
+export type WorkspaceList = {
+  id: number;
+  name: string;
+  folder_id?: number;
+};
+
 export type WorkspaceFolder = {
   id: number;
   name: string;
-  lists: { id: number; name: string }[];
+  lists: WorkspaceList[];
 };
 
 export type Workspace = {
@@ -906,14 +902,14 @@ export function getDashboardStats() {
 }
 
 export function updateCaseLawyer(caseId: number, lawyerName: string) {
-  return apiFetch(`/cases/${caseId}/lawyer`, {
+  return apiFetch<any>(`/cases/${caseId}/lawyer`, {
     method: "PATCH",
     body: JSON.stringify({ lawyer: lawyerName }),
   });
 }
 
 export function updateCaseIdProceso(caseId: number, idProceso: string) {
-  return apiFetch(`/cases/${caseId}/id-proceso`, {
+  return apiFetch<any>(`/cases/${caseId}/id-proceso`, {
     method: "PATCH",
     body: JSON.stringify({ id_proceso: idProceso }),
   });

@@ -340,87 +340,49 @@ export default function ProjectDashboardPage() {
 
               {/* TAB: BOARD KANBAN (Drag and Drop nativo) */}
               <TabsContent value="board" className="h-[calc(100%-20px)] m-0 overflow-x-auto flex gap-5 items-start custom-scrollbar pb-4 animate-in fade-in zoom-in-95 duration-500">
+                {BOARD_COLUMNS.map(col => (
+                  <div 
+                    key={col.id}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => handleDrop(col.id)}
+                    className="min-w-[320px] max-w-[320px] flex flex-col bg-background/40 backdrop-blur-md border border-border/40 rounded-2xl h-full shadow-sm hover:shadow-md transition-all duration-300"
+                  >
+                    <div className="p-4 flex items-center justify-between border-b border-border/40 rounded-t-2xl bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${col.color}`} />
+                        <span className="font-bold tracking-wide uppercase text-xs text-foreground/80">{col.label}</span>
+                        <Badge variant="secondary" className="ml-1 text-[10px] bg-background/50">{filteredTasks.filter(t => t.status.toLowerCase() === col.id).length}</Badge>
                       </div>
-                      
-                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                        {tasks.filter(t => t.status === col.id).map(task => (
-                          <div 
-                            key={task.id}
-                            draggable
-                            onDragStart={() => setDraggedTaskId(task.id)}
-                            onClick={() => setSelectedTask(task)}
-                            className="group bg-card border border-border/50 hover:border-primary/50 relative rounded-xl p-4 cursor-grab active:cursor-grabbing hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 overflow-hidden"
-                          >
-                            <div className={`absolute top-0 left-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500 shadow-[0_0_8px_rotate(255,0,0,0.5)]' : task.priority === 'high' ? 'bg-yellow-500' : 'bg-primary/50'}`} />
-                            
-                            <div className="flex justify-between items-start mb-2 pl-2">
-                              {task.clickup_id && (
-                                <span className="text-[10px] font-mono font-medium text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded">#{task.clickup_id.slice(-6)}</span>
-                              )}
-                              {task.title.match(/^\d{23}/) && (
-                                <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-[10px] font-mono h-5">RADICADO DETECTADO</Badge>
-                              )}
-                              <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2">
-                                <PlayCircle className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                              </Button>
-                            </div>
-                            
-                            <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
-                            
-                            <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
-                              <div className="flex -space-x-2">
-                                <div className="h-7 w-7 rounded-full border-2 border-card bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-[10px] text-white font-bold shadow-sm z-10">AK</div>
-                                <div className="h-7 w-7 rounded-full border-2 border-card bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center text-[10px] text-white font-bold shadow-sm z-0">JD</div>
-                              </div>
-                              {task.due_date && (
-                                <Badge variant="secondary" className="bg-muted/50 text-muted-foreground font-medium rounded-full px-2 gap-1.5 shadow-sm border-transparent hover:border-primary/20 transition-colors">
-                                  <CalendarIcon className="h-3 w-3" /> 
-                                  {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="p-3 border-t border-white/5 dark:border-white/10 bg-background/30 rounded-b-2xl">
-                        <Button 
-                          onClick={() => setSelectedTask({ title: '', status: col.id, priority: 'normal', list_id: selectedListId } as any)}
-                          variant="ghost" 
-                          className="w-full text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all border border-transparent hover:border-border/50 border-dashed rounded-xl h-9"
+                      <Plus className="h-4 w-4 text-muted-foreground/50 cursor-pointer hover:text-primary transition-colors" />
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                      {filteredTasks.filter(t => t.status.toLowerCase() === col.id).map(task => (
+                        <div 
+                          key={task.id}
+                          draggable
+                          onDragStart={() => setDraggedTaskId(task.id)}
+                          onClick={() => setSelectedTask(task)}
+                          className="group bg-card/80 hover:bg-card p-4 rounded-xl border border-border/50 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 cursor-pointer relative overflow-hidden animate-in fade-in slide-in-from-bottom-2"
                         >
-                          <Plus className="h-4 w-4 mr-2" /> Nueva Tarjeta
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* GENERACIÓN DINÁMICA DE COLUMNAS PARA ESTADOS PERSONALIZADOS (POR PRESENTAR, RETIRO, ETC) */}
-                  {Array.from(new Set(filteredTasks.map(t => t.status.toLowerCase())))
-                    .filter(status => !BOARD_COLUMNS.map(c => c.id).includes(status))
-                    .map(status => (
-                    <div key={status} className="min-w-[320px] max-w-[320px] flex flex-col bg-slate-500/5 backdrop-blur-lg border border-slate-500/20 rounded-2xl h-full shadow-sm">
-                      <div className="p-4 flex items-center justify-between border-b border-slate-500/10 rounded-t-2xl bg-slate-500/10">
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-400">
-                          <LayoutGrid className="h-4 w-4" />
-                          <span className="font-bold tracking-wide uppercase text-xs">{status}</span>
-                          <Badge variant="secondary" className="ml-1 text-[10px]">{filteredTasks.filter(t => t.status.toLowerCase() === status).length}</Badge>
+                          <div className={`absolute left-0 top-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500/50' : 'bg-primary/30'}`} />
+                          <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
+                          <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
+                            <span className="text-muted-foreground font-medium flex items-center gap-1">
+                              <User className="h-3 w-3" /> US
+                            </span>
+                            {task.due_date && (
+                              <span className="flex items-center gap-1 font-bold text-primary">
+                                <CalendarIcon className="h-3 w-3" />
+                                {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                         {filteredTasks.filter(t => t.status.toLowerCase() === status).map(task => (
-                           <div key={task.id} onClick={() => setSelectedTask(task)} className="group bg-card/80 hover:bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer relative overflow-hidden">
-                             <div className="absolute left-0 top-0 w-1 h-full bg-slate-500/50" />
-                             <h4 className="font-bold text-sm mb-2 group-hover:text-primary transition-colors line-clamp-2">{task.title}</h4>
-                             <div className="flex items-center gap-2">
-                               {task.title.match(/^\d{23}/) && <Badge className="bg-blue-500/10 text-blue-600 border-none text-[9px]">RADICADO</Badge>}
-                               {task.due_date && <span className="text-[10px] text-muted-foreground flex items-center"><Clock className="h-3 w-3 mr-1" />{new Date(task.due_date).toLocaleDateString()}</span>}
-                             </div>
-                           </div>
-                         ))}
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                ))}
               </TabsContent>
 
               {/* TAB: CALENDAR (Visión Macro) */}
