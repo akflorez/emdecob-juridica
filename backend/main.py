@@ -276,28 +276,23 @@ async def do_auto_refresh() -> dict:
                 if nueva_fecha:
                     es_actuacion_reciente = nueva_fecha >= ayer
 
-                if hay_cambio and es_actuacion_reciente:
-                    sujetos = p.get("sujetosProcesales") or ""
-                    d1, d2, abo  = parse_sujetos_procesales(sujetos)
-                    c.demandante     = d1 or c.demandante
-                    c.demandado      = d2 or c.demandado
-                    # c.abogado        = abo or c.abogado (Removido por peticin del usuario)
-                    c.ultima_actuacion = nueva_fecha
-                    new_hash = sha256_obj({"radicado": c.radicado, "ultima_actuacion": str(nueva_fecha), "ts": now_colombia().isoformat()})
-                    c.current_hash   = new_hash
-                    updated_cases.append({
-                        "radicado": c.radicado,
-                        "demandante": c.demandante,
-                        "demandado": c.demandado,
-                        "juzgado": c.juzgado,
-                        "ultima_actuacion": nueva_fecha.isoformat() if nueva_fecha else None,
-                        "fecha_anterior":   fecha_actual.isoformat() if fecha_actual else None,
-                    })
-                elif hay_cambio and not es_actuacion_reciente:
-                    c.ultima_actuacion = nueva_fecha
-                    new_hash = sha256_obj({"radicado": c.radicado, "ultima_actuacion": str(nueva_fecha), "ts": now_colombia().isoformat()})
-                    c.current_hash = new_hash
-                    c.last_hash    = new_hash
+                if hay_cambio:
+                    # Si hay cambio detectado, usamos la funcin maestra para traer todo (actuaciones, sujetos, etc.)
+                    try:
+                        print(f"   [SYNC] Cambio detectado en {c.radicado}. Sincronizando actuaciones...")
+                        await validar_radicado_completo(c.radicado, db, is_new_import=False)
+                        updated_cases.append({
+                            "radicado": c.radicado,
+                            "demandante": c.demandante,
+                            "demandado": c.demandado,
+                            "juzgado": c.juzgado,
+                            "ultima_actuacion": nueva_fecha.isoformat() if nueva_fecha else None,
+                        })
+                    except Exception as sync_e:
+                        print(f"    [ERROR-SYNC] Fall en sincronizacin profunda de {c.radicado}: {sync_e}")
+                        # Fallback: al menos actualizamos la fecha para que no intente refrescarlo de inmediato en el siguiente loop
+                        c.ultima_actuacion = nueva_fecha
+                        c.last_check_at = now_colombia()
 
                 sujetos_raw = p.get("sujetosProcesales") or ""
                 if sujetos_raw:
@@ -3111,16 +3106,15 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 # REFRESH ALL (MANUAL)
 # =========================
 @app.post("/cases/refresh-all")
-async def refresh_all_cases(db: Session = Depends(get_db)):
-    """Dispara una tarea en segundo plano para recorrer todos los casos vlidos."""
+async def refresh_all_cases(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Dispara una tarea en segundo plano para recorrer todos los casos válidos."""
     if REFRESH_LOCK.locked():
-        return {"ok": False, "message": "Ya existe una actualizacin masiva en curso. Por favor, espere a que termine."}
+        return {"ok": False, "message": "Ya existe una actualización masiva en curso. Por favor, espere a que termine."}
     
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(do_auto_refresh_with_lock, db)
-    return {"ok": True, "message": "Sincronizacin masiva iniciada en segundo plano."}
+    background_tasks.add_task(do_auto_refresh_with_lock)
+    return {"ok": True, "message": "Sincronización masiva iniciada en segundo plano."}
 
-async def do_auto_refresh_with_lock(db: Session):
+async def do_auto_refresh_with_lock():
     if REFRESH_LOCK.locked():
         return
     async with REFRESH_LOCK:

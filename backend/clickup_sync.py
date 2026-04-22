@@ -46,9 +46,18 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     case_id = None
     radicado = extract_radicado(task_data['name'] + " " + (task_data.get('description') or ""))
     if radicado:
+        # Intentamos encontrar por radicado exacto o que lo contenga
         matching_case = db.query(Case).filter(Case.radicado.like(f"%{radicado}%")).first()
         if matching_case:
             case_id = matching_case.id
+        else:
+            # SI NO EXISTE, lo creamos para que Juricob empiece a trackearlo
+            # No le ponemos juzgado para que aparezca en "Pendientes" y el validador lo tome
+            new_case = Case(radicado=radicado, user_id=owner_id)
+            db.add(new_case)
+            db.flush()
+            case_id = new_case.id
+            print(f"[ClickUp Sync] Nuevo radicado '{radicado}' creado desde tarea.")
 
     # 3. Mapear fechas
     due_date = None
