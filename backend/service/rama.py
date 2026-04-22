@@ -48,7 +48,7 @@ class RamaRateLimitError(RamaError):
     pass
 
 
-async def _get(path: str, params: dict | None = None):
+async def _get(path: str, params: dict | None = None, retries: int = MAX_RETRIES):
     """
     Hace GET a la API de Rama Judicial con reintentos, backoff exponencial,
     semaforización y caché.
@@ -65,7 +65,7 @@ async def _get(path: str, params: dict | None = None):
             return cached_data
 
     # 2. Reintentos (Iterativo para liberar el semáforo durante el sleep)
-    for retry_count in range(MAX_RETRIES + 1):
+    for retry_count in range(retries + 1):
         # Usar semáforo para limitar concurrencia (SOLO durante la petición)
         async with global_semaphore:
             url = f"{BASE_URL}{path}"

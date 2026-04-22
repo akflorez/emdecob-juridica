@@ -78,11 +78,15 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
         job.total_items = total
         db.commit()
 
-        results = {} # Usamos dict para manejar reintentos fácilmente
+        results = {}
         failed_indices = []
 
         async def process_row(idx, row_data, is_retry=False, date_range=None):
             try:
+                # Inicializar entrada para evitar KeyError
+                if idx not in results:
+                    results[idx] = {"index": idx, "input_name1": "", "found_count": 0, "selected": None}
+                
                 # Extraer datos con fallbacks
                 depto_name = str(row_data.get("DEPARTAMENTO", "")).strip().upper()
                 name1 = str(row_data.get("DEMANDADO 1", row_data.get("NOMBRE 1", ""))).strip()
@@ -95,32 +99,22 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
 
                 # Búsqueda secuencial: Intentar Nombre 1
                 if name1 and name1.lower() != "nan":
-                    prefix = "🔄 [REINTENTO]" if is_retry else "🔍"
-                    log_job(f"{prefix} [{idx}] {name1}")
                     try:
-                        res1 = await asyncio.wait_for(consulta_por_nombre(name1, id_depto=id_depto), timeout=30.0)
+                        res1 = await asyncio.wait_for(consulta_por_nombre(name1, id_depto=id_depto), timeout=45.0)
                         if res1 and res1.get("procesos"):
                             found_for_row.extend(res1["procesos"])
-                    except asyncio.TimeoutError:
-                        log_job(f"⚠️ [{idx}] Timeout Name1 (30s)")
-                        return False # Marcar para reintento
                     except Exception as e:
                         log_job(f"⚠️ [{idx}] Error Name1: {e}")
-                        return False # Marcar para reintento
+                        # No retornamos False aquí para permitir que intente Name2
 
                 # Si no hay resultados, intentar Nombre 2
                 if not found_for_row and name2 and name2.lower() != "nan":
-                    log_job(f"🔍 [{idx}] {name2} (Fallback)")
                     try:
-                        res2 = await asyncio.wait_for(consulta_por_nombre(name2, id_depto=id_depto), timeout=30.0)
+                        res2 = await asyncio.wait_for(consulta_por_nombre(name2, id_depto=id_depto), timeout=45.0)
                         if res2 and res2.get("procesos"):
                             found_for_row.extend(res2["procesos"])
-                    except asyncio.TimeoutError:
-                        log_job(f"⚠️ [{idx}] Timeout Name2 (30s)")
-                        return False
                     except Exception as e:
                         log_job(f"⚠️ [{idx}] Error Name2: {e}")
-                        return False
 
                 # Seleccionar mejor radicado con filtro de fechas
                 best_radicado = None
@@ -130,34 +124,22 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
                         f_rad = p.get("fechaRadicacion") or p.get("FechaRadicacion") or ""
                         return max(f_ult, f_rad)
                     
-                    # Filtrar por fecha si el usuario lo pidió
                     if date_range and (date_range.get("from") or date_range.get("to")):
                         df_from = date_range.get("from")
                         df_to = date_range.get("to")
-                        
                         filtered = []
                         for p in found_for_row:
                             p_rad_date_raw = p.get("fechaRadicacion") or p.get("FechaRadicacion") or ""
-                            p_rad_date = p_rad_date_raw[:10] # Tomar solo YYYY-MM-DD
-                            
+                            p_rad_date = p_rad_date_raw[:10]
                             is_ok = True
-                            if df_from and p_rad_date and p_rad_date < df_from:
-                                is_ok = False
-                            if df_to and p_rad_date and p_rad_date > df_to:
-                                is_ok = False
-                            
+                            if df_from and p_rad_date and p_rad_date < df_from: is_ok = False
+                            if df_to and p_rad_date and p_rad_date > df_to: is_ok = False
                             if is_ok:
-                                # Normalizar para que el resto del sistema vea solo la fecha
                                 if "fechaRadicacion" in p: p["fechaRadicacion"] = p_rad_date
                                 if "FechaRadicacion" in p: p["FechaRadicacion"] = p_rad_date
-                                if "fechaUltimaActuacion" in p and p["fechaUltimaActuacion"]:
-                                    p["fechaUltimaActuacion"] = p["fechaUltimaActuacion"][:10]
                                 filtered.append(p)
-                        
                         if filtered:
                             best_radicado = max(filtered, key=get_sort_key)
-                        else:
-                            best_radicado = None # Ninguno en el rango
                     else:
                         best_radicado = max(found_for_row, key=get_sort_key)
 
@@ -171,37 +153,39 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
                     "selected": best_radicado,
                     "all_options": found_for_row[:5]
                 }
-                return True
+                return True if found_for_row else False
             except Exception as e:
                 log_job(f"💥 [{idx}] Error inesperado: {e}")
-                results[idx] = {"index": idx, "error": str(e)}
+                results[idx] = {"index": idx, "input_name1": name1, "error": str(e), "found_count": 0, "selected": None}
                 return False
 
-        # --- PRIMERA PASADA ---
-        log_job(f"--- PRIMERA PASADA ({total} filas) ---")
-        for index, row in df.iterrows():
-            success = await process_row(index, row, is_retry=False, date_range=date_range)
-            if not success:
-                failed_indices.append(index)
+        # --- PROCESAMIENTO POR LOTES (MAX 3 CONCURRENTES PARA NO BLOQUEAR IP) ---
+        log_job(f"--- INICIANDO BÚSQUEDA ({total} filas) ---")
+        batch_size = 3
+        for i in range(0, total, batch_size):
+            batch = df.iloc[i : i + batch_size]
+            tasks = []
+            for index, row in batch.iterrows():
+                tasks.append(process_row(index, row, date_range=date_range))
             
-            job.processed_items = index + 1
-            if index % 5 == 0 or index == total - 1:
-                log_job(f"📊 Progreso: {index + 1}/{total}")
-                db.commit()
-            await asyncio.sleep(1.0)
+            await asyncio.gather(*tasks)
+            
+            # Actualizar progreso
+            processed_so_far = min(i + batch_size, total)
+            job.processed_items = processed_so_far
+            db.commit()
+            
+            log_job(f"📊 Progreso: {processed_so_far}/{total}")
+            await asyncio.sleep(1.5) # Pausa cortés entre batches
 
-        # --- SEGUNDA PASADA (REINTENTOS) ---
-        if failed_indices:
-            log_job(f"--- SEGUNDA PASADA (REINTENTOS) para {len(failed_indices)} filas ---")
-            for i, idx in enumerate(failed_indices):
-                row = df.iloc[idx]
-                await process_row(idx, row, is_retry=True, date_range=date_range)
-                log_job(f"🔄 Reintento {i+1}/{len(failed_indices)} ok")
-                db.commit()
-                await asyncio.sleep(3.0)
-
-        # Convertir a lista final ordenada
-        final_results = [results[i] for i in sorted(results.keys())]
+        # Convertir a lista final ordenada (Aseguramos que no falte ningún índice)
+        final_results = []
+        for i in range(total):
+            if i in results:
+                final_results.append(results[i])
+            else:
+                # Fallback por si acaso falló algún batch entero
+                final_results.append({"index": i, "input_name1": "Error", "found_count":0, "selected":None})
         
         log_job(f"🏁 Trabajo {job_id} completado")
         job.status = "completed"

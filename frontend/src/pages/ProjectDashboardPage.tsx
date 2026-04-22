@@ -43,6 +43,10 @@ export default function ProjectDashboardPage() {
   // States para el Modal/Drawer interactivo
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
+  
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   useEffect(() => {
     fetchInitialData();
@@ -72,12 +76,19 @@ export default function ProjectDashboardPage() {
 
   const fetchTasks = async (listId: number) => {
     try {
-      const taskData = await getTasks({ list_id: listId });
+      const taskData = await getTasks({ list_id: listId, radicado: searchTerm || undefined });
       setTasks(taskData);
     } catch (error) {
       toast.error("Error al cargar tareas");
     }
   };
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (selectedListId) fetchTasks(selectedListId);
+    }, 500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
 
   const handleSync = async () => {
     const token = prompt("Ingresa tu ClickUp API Token:");
@@ -121,7 +132,35 @@ export default function ProjectDashboardPage() {
     setDraggedTaskId(null);
   };
 
-  const calendarEvents = tasks.filter(t => t.due_date).map(t => ({
+  const filteredTasks = tasks.filter(t => {
+    // Filtro de búsqueda (Radicado o Título)
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      const matchTitle = t.title.toLowerCase().includes(search);
+      const matchDesc = t.description?.toLowerCase().includes(search);
+      if (!matchTitle && !matchDesc) return false;
+    }
+
+    // Filtro de fechas
+    if (!dateRange.start && !dateRange.end) return true;
+    if (!t.due_date) return false;
+    const d = new Date(t.due_date);
+    if (dateRange.start && d < new Date(dateRange.start)) return false;
+    if (dateRange.end && d > new Date(dateRange.end)) return false;
+    return true;
+  });
+
+  // Agrupar por parent_id para visualización jerárquica
+  const parentTasks = filteredTasks.filter(t => !t.parent_id);
+  const subtasksMap = filteredTasks.reduce((acc, t) => {
+    if (t.parent_id) {
+       if (!acc[t.parent_id]) acc[t.parent_id] = [];
+       acc[t.parent_id].push(t);
+    }
+    return acc;
+  }, {} as Record<number, TaskType[]>);
+
+  const calendarEvents = filteredTasks.filter(t => t.due_date).map(t => ({
     id: t.id,
     title: t.title,
     start: new Date(t.due_date!),
@@ -142,11 +181,12 @@ export default function ProjectDashboardPage() {
             <div className="p-2 bg-gradient-to-tr from-primary to-blue-500 rounded-lg shadow-lg shadow-primary/20">
               <Zap className="h-5 w-5 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 leading-[1.2]">
               Gestión Avanzada
             </h1>
+            <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-200 font-bold ml-2 h-6 self-start mt-2 px-3 animate-pulse">v4.0 SENIOR</Badge>
           </div>
-          <p className="text-sm font-medium text-muted-foreground ml-[44px]">Sincroniza y domina tus flujos colaborativos.</p>
+          <p className="text-sm font-medium text-muted-foreground ml-[44px]">Sincronización de grado militar y diagnóstico resiliente.</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={handleSync} disabled={isSyncing} className="group relative overflow-hidden bg-background/50 backdrop-blur border-border/50 hover:bg-muted/50 transition-all duration-300 rounded-full px-6">
@@ -232,7 +272,28 @@ export default function ProjectDashboardPage() {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 </div>
-                <Input placeholder="Buscar en esta carpeta..." className="pl-10 bg-background/50 backdrop-blur shadow-sm border-border/50 focus-visible:ring-primary/30 rounded-full h-10 transition-all duration-300" />
+                <Input 
+                  placeholder="Buscar por radicado o nombre..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 bg-background/50 backdrop-blur shadow-sm border-border/50 focus-visible:ring-primary/30 rounded-full h-10 transition-all duration-300" 
+                />
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <Input 
+                  type="date" 
+                  value={dateRange.start} 
+                  onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                  className="h-9 w-32 text-xs rounded-lg"
+                />
+                <span className="text-muted-foreground">→</span>
+                <Input 
+                  type="date" 
+                  value={dateRange.end} 
+                  onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                  className="h-9 w-32 text-xs rounded-lg"
+                />
               </div>
               
               <div className="flex items-center justify-end gap-3 flex-wrap">
@@ -261,29 +322,24 @@ export default function ProjectDashboardPage() {
               
               {/* TAB: LIST (Datatable ultra moderna) */}
               <TabsContent value="list" className="h-full m-0 overflow-y-auto space-y-3 custom-scrollbar pb-6 animate-in fade-in duration-500">
-                {tasks.length === 0 ? (
+                {parentTasks.length === 0 ? (
                   <EmptyState text="El lienzo está en blanco. Inicia un nuevo flujo." />
-                ) : tasks.map((task, i) => (
-                  <TaskRow key={task.id} task={task} onClick={() => setSelectedTask(task)} index={i} />
+                ) : parentTasks.map((task, i) => (
+                  <div key={task.id} className="space-y-2">
+                    <TaskRow task={task} onClick={() => setSelectedTask(task)} index={i} />
+                    {subtasksMap[task.id] && (
+                      <div className="ml-12 space-y-2 border-l-2 border-dashed border-primary/20 pl-4 py-1">
+                        {subtasksMap[task.id].map((sub, si) => (
+                          <TaskRow key={sub.id} task={sub} onClick={() => setSelectedTask(sub)} index={si} isSubtask />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </TabsContent>
 
               {/* TAB: BOARD KANBAN (Drag and Drop nativo) */}
               <TabsContent value="board" className="h-[calc(100%-20px)] m-0 overflow-x-auto flex gap-5 items-start custom-scrollbar pb-4 animate-in fade-in zoom-in-95 duration-500">
-                  {BOARD_COLUMNS.map(col => (
-                    <div 
-                      key={col.id} 
-                      className={`min-w-[320px] max-w-[320px] flex flex-col bg-background/60 backdrop-blur-lg border border-border/40 rounded-2xl h-full shadow-sm transition-colors duration-300`}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => handleDrop(col.id)}
-                    >
-                      <div className="p-4 flex items-center justify-between border-b border-white/5 dark:border-white/10 rounded-t-2xl bg-gradient-to-b from-white/40 to-transparent dark:from-white/5 relative overflow-hidden">
-                        <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-transparent via-current to-transparent pointer-events-none" />
-                        <div className={`flex items-center gap-2 ${col.color.split(' ')[1]}`}>
-                          <div className={`w-2 h-2 rounded-full ${col.dot} animate-pulse`} />
-                          <span className={`font-bold tracking-wide uppercase text-xs ${col.color}`}>{col.label}</span>
-                        </div>
-                        <Badge variant="outline" className="bg-background/80 px-2.5 py-0.5 rounded-full font-bold shadow-sm">{tasks.filter(t => t.status === col.id).length}</Badge>
                       </div>
                       
                       <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
@@ -300,6 +356,9 @@ export default function ProjectDashboardPage() {
                             <div className="flex justify-between items-start mb-2 pl-2">
                               {task.clickup_id && (
                                 <span className="text-[10px] font-mono font-medium text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded">#{task.clickup_id.slice(-6)}</span>
+                              )}
+                              {task.title.match(/^\d{23}/) && (
+                                <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-[10px] font-mono h-5">RADICADO DETECTADO</Badge>
                               )}
                               <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2">
                                 <PlayCircle className="h-3 w-3 text-muted-foreground hover:text-primary" />
@@ -332,6 +391,33 @@ export default function ProjectDashboardPage() {
                         >
                           <Plus className="h-4 w-4 mr-2" /> Nueva Tarjeta
                         </Button>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* GENERACIÓN DINÁMICA DE COLUMNAS PARA ESTADOS PERSONALIZADOS (POR PRESENTAR, RETIRO, ETC) */}
+                  {Array.from(new Set(filteredTasks.map(t => t.status.toLowerCase())))
+                    .filter(status => !BOARD_COLUMNS.map(c => c.id).includes(status))
+                    .map(status => (
+                    <div key={status} className="min-w-[320px] max-w-[320px] flex flex-col bg-slate-500/5 backdrop-blur-lg border border-slate-500/20 rounded-2xl h-full shadow-sm">
+                      <div className="p-4 flex items-center justify-between border-b border-slate-500/10 rounded-t-2xl bg-slate-500/10">
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-400">
+                          <LayoutGrid className="h-4 w-4" />
+                          <span className="font-bold tracking-wide uppercase text-xs">{status}</span>
+                          <Badge variant="secondary" className="ml-1 text-[10px]">{filteredTasks.filter(t => t.status.toLowerCase() === status).length}</Badge>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                         {filteredTasks.filter(t => t.status.toLowerCase() === status).map(task => (
+                           <div key={task.id} onClick={() => setSelectedTask(task)} className="group bg-card/80 hover:bg-card p-4 rounded-xl border border-border shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer relative overflow-hidden">
+                             <div className="absolute left-0 top-0 w-1 h-full bg-slate-500/50" />
+                             <h4 className="font-bold text-sm mb-2 group-hover:text-primary transition-colors line-clamp-2">{task.title}</h4>
+                             <div className="flex items-center gap-2">
+                               {task.title.match(/^\d{23}/) && <Badge className="bg-blue-500/10 text-blue-600 border-none text-[9px]">RADICADO</Badge>}
+                               {task.due_date && <span className="text-[10px] text-muted-foreground flex items-center"><Clock className="h-3 w-3 mr-1" />{new Date(task.due_date).toLocaleDateString()}</span>}
+                             </div>
+                           </div>
+                         ))}
                       </div>
                     </div>
                   ))}
@@ -387,35 +473,37 @@ export default function ProjectDashboardPage() {
 }
 
 // Subcomponente de fila Data-Table (List Mode) - Estilizado al máximo nivel
-function TaskRow({ task, onClick, index }: { task: TaskType; onClick: () => void; index: int }) {
+function TaskRow({ task, onClick, index, isSubtask }: { task: TaskType; onClick: () => void; index: number; isSubtask?: boolean }) {
   return (
     <div 
       onClick={onClick}
       style={{ animationDelay: `${index * 50}ms` }}
-      className={`group relative flex items-center justify-between p-4 bg-background/60 backdrop-blur-md border border-border/40 hover:border-primary/40 rounded-xl hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300 cursor-pointer overflow-hidden animate-in fade-in slide-in-from-bottom-2`}
+      className={`group relative flex items-center justify-between ${isSubtask ? 'p-3 bg-background/40 hover:bg-background/60 text-xs py-2' : 'p-4 bg-background/60'} backdrop-blur-md border border-border/40 hover:border-primary/40 rounded-xl hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300 cursor-pointer overflow-hidden animate-in fade-in slide-in-from-bottom-2`}
     >
       {/* Dynamic left indicator line */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.status === 'complete' ? 'bg-green-500' : task.priority === 'urgent' ? 'bg-red-500' : 'bg-primary'} transition-all duration-300 group-hover:w-1.5`} />
       
       <div className="flex items-center gap-5 ml-2 overflow-hidden">
-        <div className={`flex-shrink-0 h-9 w-9 flex items-center justify-center rounded-full transition-all duration-500 ${task.status === 'complete' ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'}`}>
-          <CheckCircle2 className="h-5 w-5" />
+        <div className={`flex-shrink-0 ${isSubtask ? 'h-7 w-7' : 'h-9 w-9'} flex items-center justify-center rounded-full transition-all duration-500 ${task.status === 'complete' ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'}`}>
+          <CheckCircle2 className={`${isSubtask ? 'h-4 w-4' : 'h-5 w-5'}`} />
         </div>
         <div className="flex flex-col gap-1 min-w-0">
-          <h3 className="font-semibold text-[15px] truncate max-w-[400px] text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h3>
-          <div className="flex items-center gap-3 text-xs">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
-              task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
-              task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
-              'bg-muted text-muted-foreground border border-border'
-            }`}>
-              {task.status}
-            </span>
-            <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
-              <Clock className="h-3 w-3" />
-              {task.priority || 'Normal'}
-            </span>
-          </div>
+          <h3 className={`font-semibold ${isSubtask ? 'text-[13px]' : 'text-[15px]'} truncate max-w-[400px] text-foreground/90 group-hover:text-primary transition-colors`}>{task.title}</h3>
+          {!isSubtask && (
+            <div className="flex items-center gap-3 text-xs">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
+                task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
+                task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                'bg-muted text-muted-foreground border border-border'
+              }`}>
+                {task.status}
+              </span>
+              <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
+                <Clock className="h-3 w-3" />
+                {task.priority || 'Normal'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
       

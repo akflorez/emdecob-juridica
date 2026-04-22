@@ -208,8 +208,8 @@ class Workspace(Base):
     description = Column(Text, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
-    # PRIVATE o TEAM_COLLABORATION
-    visibility = Column(String(50), default="TEAM_COLLABORATION")
+    # Referencia a ClickUp para sincronización
+    clickup_id = Column(String(100), unique=True, index=True, nullable=True)
     
     folders = relationship("Folder", back_populates="workspace", cascade="all, delete-orphan")
     
@@ -241,6 +241,9 @@ class Folder(Base):
     name = Column(String(255), nullable=False)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     
+    # Referencia a ClickUp para sincronización
+    clickup_id = Column(String(100), unique=True, index=True, nullable=True)
+
     workspace = relationship("Workspace", back_populates="folders")
     lists = relationship("ProjectList", back_populates="folder", cascade="all, delete-orphan")
     
@@ -256,6 +259,9 @@ class ProjectList(Base):
     folder_id = Column(Integer, ForeignKey("folders.id", ondelete="CASCADE"), nullable=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     
+    # Referencia a ClickUp para sincronización
+    clickup_id = Column(String(100), unique=True, index=True, nullable=True)
+
     folder = relationship("Folder", back_populates="lists")
     tasks = relationship("Task", back_populates="project_list", cascade="all, delete-orphan")
     

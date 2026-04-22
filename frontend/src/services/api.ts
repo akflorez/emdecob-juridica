@@ -717,7 +717,18 @@ export function getCasePublications(radicado: string) {
 }
 
 export function getCasePublicationsById(id: number) {
-  return apiFetch<{ items: CasePublication[] }>(`/cases/id/${id}/publicaciones`);
+  return apiFetch<{ items: any[] }>(`/cases/id/${id}/publications`);
+}
+
+export function updateCaseLawyer(id: number, abogado: string) {
+  return apiFetch<{ ok: boolean; abogado: string; user_id?: number }>(`/cases/${id}/lawyer`, {
+    method: 'PATCH',
+    body: JSON.stringify({ abogado })
+  });
+}
+
+export function markCaseRead(id: number) {
+  return apiFetch(`/cases/id/${id}/read`, { method: 'POST' });
 }
 
 export function refreshCasePublications(radicado: string) {
@@ -894,9 +905,16 @@ export function getDashboardStats() {
   return apiFetch<DashboardStats>("/cases/stats/dashboard");
 }
 
-export function updateCaseLawyer(caseId: number, lawyer: string) {
-  return apiFetch<{ ok: boolean; abogado: string }>(`/cases/${caseId}/lawyer`, {
+export function updateCaseLawyer(caseId: number, lawyerName: string) {
+  return apiFetch(`/cases/${caseId}/lawyer`, {
     method: "PATCH",
-    body: JSON.stringify({ abogado: lawyer }),
+    body: JSON.stringify({ lawyer: lawyerName }),
+  });
+}
+
+export function updateCaseIdProceso(caseId: number, idProceso: string) {
+  return apiFetch(`/cases/${caseId}/id-proceso`, {
+    method: "PATCH",
+    body: JSON.stringify({ id_proceso: idProceso }),
   });
 }

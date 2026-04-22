@@ -159,6 +159,17 @@ export default function CasoDetailPage() {
     getUsers().then(setSystemUsers).catch(console.error);
   }, [radicado, id, toast]);
 
+  const handleUpdateLawyer = async (newLawyer: string) => {
+    if (!caseData?.id) return;
+    try {
+      const res = await updateCaseLawyer(caseData.id, newLawyer);
+      setCaseData({ ...caseData, abogado: res.abogado, user_id: res.user_id } as any);
+      toast({ title: 'Abogado actualizado', description: `Asignado a: ${res.abogado}` });
+    } catch (e) {
+      toast({ title: 'Error', description: 'No se pudo actualizar el abogado', variant: 'destructive' });
+    }
+  };
+
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
       if (searchText) {
@@ -447,6 +458,48 @@ export default function CasoDetailPage() {
                 <p className={`text-sm font-medium break-all ${mono ? 'font-mono' : ''}`}>{value}</p>
               </div>
             ))}
+            
+            {/* ABOGADO SELECTOR */}
+            <div className="space-y-1 p-3 rounded-lg bg-primary/5 border border-primary/10">
+              <div className="flex items-center gap-2 text-xs text-primary font-semibold">
+                <UserCheck className="h-3 w-3" />
+                ABOGADO RESPONSABLE
+              </div>
+              <select 
+                className="w-full bg-transparent text-sm font-bold border-none focus:ring-0 cursor-pointer text-primary"
+                value={caseData.abogado || ''}
+                onChange={(e) => handleUpdateLawyer(e.target.value)}
+              >
+                <option value="">Sin asignar</option>
+                {systemUsers.map(u => (
+                  <option key={u.id} value={u.nombre || u.username}>{u.nombre || u.username}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* ID PROCESO (MANUAL OVERRIDE) - SENIOR FEATURE */}
+            <div className="space-y-1 p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+              <div className="flex items-center gap-2 text-xs text-orange-600 font-semibold">
+                <ChevronRight className="h-3 w-3" />
+                ID PROCESO (RAMA)
+              </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="text"
+                  placeholder="Sin ID"
+                  className="w-full bg-transparent text-sm font-mono font-bold border-none focus:ring-0 p-0 text-orange-700"
+                  defaultValue={caseData.id_proceso || ''}
+                  onBlur={(e) => {
+                    if (e.target.value !== caseData.id_proceso) {
+                      updateCaseIdProceso(caseData.id, e.target.value)
+                        .then(() => toast.success("ID Judicial actualizado"))
+                        .catch(() => toast.error("Error al actualizar ID"));
+                    }
+                  }}
+                />
+                <Edit3 className="h-3 w-3 text-orange-400" />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -770,38 +823,30 @@ export default function CasoDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {tasks.map(task => (
-                    <div 
-                      key={task.id} 
-                      onClick={() => setSelectedTask(task)}
-                      className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/30 transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-4">
-                        <CheckCircle2 className={`h-5 w-5 ${task.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
-                        <div>
-                          <p className="text-sm font-semibold">{task.title}</p>
-                          <div className="flex items-center gap-4 mt-1">
-                            <Badge variant="outline" className="text-[10px] h-4 uppercase">{task.status}</Badge>
-                            {task.due_date && (
-                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(task.due_date).toLocaleDateString()}
-                              </span>
-                            )}
+                <div className="space-y-4">
+                  {(() => {
+                    const parents = tasks.filter(t => !t.parent_id);
+                    const subs = tasks.reduce((acc, t) => {
+                      if (t.parent_id) {
+                        if (!acc[t.parent_id]) acc[t.parent_id] = [];
+                        acc[t.parent_id].push(t);
+                      }
+                      return acc;
+                    }, {} as Record<number, TaskType[]>);
+
+                    return parents.map(task => (
+                      <div key={task.id} className="space-y-2">
+                        <TaskItem task={task} onSelect={setSelectedTask} />
+                        {subs[task.id] && (
+                          <div className="ml-10 space-y-2 border-l-2 border-dashed border-primary/20 pl-4 py-1">
+                            {subs[task.id].map(sub => (
+                              <TaskItem key={sub.id} task={sub} onSelect={setSelectedTask} isSubtask />
+                            ))}
                           </div>
-                        </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
               )}
             </CardContent>

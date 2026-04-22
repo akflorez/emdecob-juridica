@@ -16,6 +16,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Search, FileText, CheckCircle } from 'lucide-react';
+import { getCases, type CaseRow } from '@/services/api';
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -30,10 +32,36 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
   const [editedDesc, setEditedDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [caseSearch, setCaseSearch] = useState('');
+  const [caseResults, setCaseResults] = useState<CaseRow[]>([]);
+  const [linkedCase, setLinkedCase] = useState<CaseRow | null>(null);
 
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
   }, []);
+
+  // Buscar caso vinculado inicialmente
+  useEffect(() => {
+    if (task?.case_id) {
+      getCases({ search: String(task.case_id), page_size: 1 }).then(res => {
+        if (res.items.length > 0) setLinkedCase(res.items[0]);
+      });
+    } else {
+      setLinkedCase(null);
+    }
+  }, [task?.case_id]);
+
+  // Búsqueda dinámica de casos
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      if (caseSearch.length > 3) {
+        getCases({ search: caseSearch, page_size: 5 }).then(res => setCaseResults(res.items));
+      } else {
+        setCaseResults([]);
+      }
+    }, 400);
+    return () => clearTimeout(delay);
+  }, [caseSearch]);
 
   useEffect(() => {
     if (task) {
@@ -138,6 +166,65 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
               onBlur={() => editedDesc !== task.description && handleSave({ description: editedDesc })}
               disabled={isLoading}
             />
+          </div>
+
+          {/* VINCULACIÓN DE PROCESO (RADICADO) */}
+          <div className="space-y-3 pt-4 border-t border-border/50">
+             <label className="text-sm font-semibold flex items-center gap-2">
+               <FileText className="h-4 w-4 text-primary" /> Vincular Proceso Judicial
+             </label>
+             
+             {linkedCase ? (
+               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-2 relative group">
+                  <div className="flex justify-between items-start">
+                    <div className="text-xs font-bold font-mono text-primary truncate max-w-[80%]">{linkedCase.radicado}</div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleSave({ case_id: null as any })}
+                    >
+                      <Plus className="h-3 w-3 rotate-45" />
+                    </Button>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase font-medium">{linkedCase.demandante} vs {linkedCase.demandado}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className="text-[9px] h-4 bg-background">En Línea</Badge>
+                    <span className="text-[9px] text-muted-foreground">{linkedCase.juzgado}</span>
+                  </div>
+               </div>
+             ) : (
+               <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Buscar por radicado o nombre..." 
+                      className="pl-9 h-9 bg-muted/20 border-border/50 rounded-lg text-sm"
+                      value={caseSearch}
+                      onChange={(e) => setCaseSearch(e.target.value)}
+                    />
+                  </div>
+                  {caseResults.length > 0 && (
+                    <div className="border border-border/50 rounded-xl overflow-hidden bg-card/50 backdrop-blur shadow-xl animate-in fade-in slide-in-from-top-2">
+                      {caseResults.map(c => (
+                        <div 
+                          key={c.id} 
+                          className="p-3 hover:bg-primary/10 cursor-pointer border-b border-border/20 last:border-0 transition-colors"
+                          onClick={() => {
+                            setLinkedCase(c);
+                            setCaseResults([]);
+                            setCaseSearch('');
+                            handleSave({ case_id: c.id });
+                          }}
+                        >
+                          <div className="text-xs font-bold font-mono truncate">{c.radicado}</div>
+                          <div className="text-[9px] text-muted-foreground truncate">{c.demandante} vs {c.demandado}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+               </div>
+             )}
           </div>
 
           {/* Subtasks / Checklists Stub */}

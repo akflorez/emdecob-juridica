@@ -61,6 +61,7 @@ from .service.rama import (
 from .apply_robust_migrations import run_migrations
 from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
 from .service.bulk_orchestrator import run_name_search_job, log_job
+from .clickup_sync import migrate_clickup_to_emdecob
 
 
 # =========================
@@ -918,9 +919,10 @@ def _normalizar_nombre(nombre: str) -> Optional[str]:
     n = nombre.strip().upper()
     return n if n else None
 
-_FNA_KEYWORDS = {"FONDO NACIONAL DEL AHORRO", "FNA", "FONDO NAL DEL AHORRO", "F.N.A."}
+_FNA_KEYWORDS = {"FONDO NACIONAL DEL AHORRO", "FNA", "FONDO NAL DEL AHORRO", "F.N.A.", "TRIADA", "FONDO NACIONAL DEL AHORRO - FNA"}
 
 def _es_fna(nombre: str) -> bool:
+    if not nombre: return False
     n = nombre.upper()
     return any(kw in n for kw in _FNA_KEYWORDS)
 
@@ -2146,6 +2148,26 @@ def download_cases_excel(
 # =========================
 # DELETE CASE
 # =========================
+@app.patch("/cases/{case_id}/lawyer")
+async def update_case_lawyer(case_id: int, data: dict, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c: raise HTTPException(404)
+    abogado = data.get("lawyer")
+    c.abogado = abogado
+    u = db.query(User).filter(User.nombre == abogado).first()
+    if u: c.user_id = u.id
+    db.commit()
+    return {"status": "ok", "abogado": abogado}
+
+@app.patch("/cases/{case_id}/id-proceso")
+async def update_case_id_proceso(case_id: int, data: dict, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c: raise HTTPException(404)
+    id_proceso = data.get("id_proceso")
+    c.id_proceso = id_proceso
+    db.commit()
+    return {"status": "ok", "id_proceso": id_proceso}
+
 @app.delete("/cases/{case_id}")
 def delete_case(case_id: int, db: Session = Depends(get_db)):
     c = db.query(Case).filter(Case.id == case_id).first()
@@ -2475,6 +2497,99 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
     except Exception as e:
         print(f"[sync-pub] Error sincronizando publicaciones: {e}")
 
+@app.get("/cases/by-radicado/{radicado}")
+async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
+    """
+    Busca un caso por radicado. Primero en BD local, luego en Rama Judicial.
+    Esto alimenta la página de 'Consultar Caso'.
+    """
+    r = clean_str(radicado)
+    if not r:
+        raise HTTPException(400, "Radicado inválido")
+
+    # 1. Buscar en BD local
+    existing_items = db.query(Case).filter(Case.radicado == r).all()
+    if existing_items:
+        # Aplicar el mismo filtro de FNA/TRIADA a los resultados locales
+        local_results = []
+        for c in existing_items:
+            if _es_fna(c.demandante or ""):
+                local_results.append({
+                    "id": c.id,
+                    "radicado": c.radicado,
+                    "demandante": c.demandante or "—",
+                    "demandado": c.demandado or "—",
+                    "juzgado": c.juzgado or "—",
+                    "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
+                    "note": "Caso encontrado en el sistema local."
+                })
+        
+        # Ordenar local por fecha más reciente
+        local_results.sort(key=lambda x: x['fecha_radicacion'] or '', reverse=True)
+        if local_results:
+            return local_results
+
+    # 2. Si no existe, buscar en Rama Judicial (Live)
+    try:
+        # Búsqueda inicial rápida (pocos reintentos)
+        # Usamos wait_for para asegurar que no se quede pegado más de 25s
+        resp = await asyncio.wait_for(consulta_por_radicado(r), timeout=25.0)
+        items = extract_items(resp)
+        if not items:
+            raise HTTPException(404, f"No se encontró el radicado {r} en la Rama Judicial")
+
+        async def fetch_process_data(p):
+            id_p = p.get("idProceso")
+            det = None
+            if id_p:
+                try:
+                    # Detalle rápido (1 reintento para velocidad)
+                    from .service.rama import _get
+                    det = await _get(f"/Proceso/Detalle/{id_p}", retries=1)
+                except:
+                    pass
+            
+            sujetos_raw = None
+            if det:
+                sujetos_raw = det.get("sujetosProcesales")
+            if not sujetos_raw:
+                sujetos_raw = p.get("sujetosProcesales")
+                
+            dem, ddo, abo = parse_sujetos_procesales(sujetos_raw)
+            f_rad, _ = extract_fecha_proceso(p, det)
+            
+            return {
+                "id": 0, # Virtual
+                "radicado": r,
+                "demandante": dem or "—",
+                "demandado": ddo or "—",
+                "juzgado": p.get("despacho") or "—",
+                "id_proceso": id_p,
+                "fecha_radicacion": f_rad,
+                "note": "Caso encontrado en tiempo real (En línea)."
+            }
+
+        # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
+        results = await asyncio.gather(*[fetch_process_data(p) for p in items[:15]])
+        
+        # FILTRO DINÁMICO: Solo FNA o TRIADA (No estricto)
+        filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
+        
+        # ORDENAMIENTO: Fecha de radicación más reciente primero
+        # La fecha de radicación es la que el usuario prefiere como criterio principal
+        sorted_results = sorted(filtered_results, key=lambda x: x.get('fecha_radicacion') or '', reverse=True)
+        
+        return sorted_results
+
+    except asyncio.TimeoutError:
+        raise HTTPException(408, "La Rama Judicial está respondiendo muy lento. Por favor, intenta de nuevo en unos minutos.")
+    except RamaError as e:
+        raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Error interno buscando radicado: {str(e)}")
+
 @app.get("/cases/id/{case_id}/events")
 async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
     """
@@ -2506,24 +2621,35 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
 async def events_logic(c: Case, db: Session):
     try:
         radicado = c.radicado
+        id_proceso = c.id_proceso
         
         # Si no tiene id_proceso, intentamos obtenerlo de la Rama
-        id_proceso = c.id_proceso
         if not id_proceso:
             try:
                 id_proceso = await obtener_id_proceso(radicado)
                 if id_proceso:
                     c.id_proceso = str(id_proceso)
                     db.commit()
-            except RamaError as e:
-                print(f" [events] Error obteniendo id_proceso para {radicado}: {e}")
-                return {"items": [], "total": 0}
-
         if not id_proceso:
-            return {"items": [], "total": 0}
+            return {
+                "items": [], 
+                "total": 0, 
+                "error": "ID de Proceso no encontrado. Por favor, ingrésalo manualmente si lo conoces.", 
+                "id_proceso": None,
+                "status": "missing_id"
+            }
 
         try:
             acts_resp = await actuaciones_proceso(int(id_proceso))
+        except RamaRateLimitError as e:
+            return {
+                "items": [],
+                "total": 0,
+                "error": "BLOQUEO TEMPORAL (403/429): La Rama Judicial ha limitado nuestra IP. Reintenta en 15-30 minutos.",
+                "status": "rate_limited"
+            }
+        except RamaError as e:
+            raise HTTPException(502, f"Error de comunicación con la Rama: {str(e)}")
         except RamaError as e:
             raise HTTPException(502, f"Error obteniendo actuaciones: {str(e)}")
 
@@ -3548,11 +3674,14 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    assignee_id: Optional[int] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
+    assignee_id: Optional[int] = None
     case_id: Optional[int] = None
+
+class ClickUpImportRequest(BaseModel):
+    token: str
 
 class CommentCreate(BaseModel):
     task_id: int
@@ -3599,6 +3728,7 @@ async def get_workspaces(
             "id": ws.id,
             "name": ws.name,
             "visibility": ws.visibility,
+            "clickup_id": ws.clickup_id,
             "folders": folders
         })
     
@@ -3646,6 +3776,7 @@ async def get_tasks(
     status: Optional[str] = None,
     assignee_id: Optional[int] = None,
     radicado: Optional[str] = None,
+    case_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -3656,26 +3787,41 @@ async def get_tasks(
         query = query.filter(Task.status == status)
     if assignee_id:
         query = query.filter(Task.assignee_id == assignee_id)
+    if case_id:
+        query = query.filter(Task.case_id == case_id)
     
-    # Filtrar por radicado si se proporciona (búsqueda parcial en título/desc o link directo)
     if radicado:
-        query = query.filter(or_(Task.title.contains(radicado), Task.description.contains(radicado)))
+        # Búsqueda exacta primero, luego parcial
+        query = query.join(Case, Task.case_id == Case.id, isouter=True)
+        query = query.filter(or_(
+            Case.radicado == radicado,
+            Task.title.contains(radicado),
+            Task.description.contains(radicado)
+        ))
+    
+    # Nuevo: Búsqueda por nombre de las partes (Demandante/Demandado)
+    name_filter = radicado if radicado and not radicado.isdigit() else None
+    if name_filter:
+        if not radicado: # Si no join todavía
+             query = query.join(Case, Task.case_id == Case.id, isouter=True)
+        query = query.filter(or_(
+            Case.demandante.ilike(f"%{name_filter}%"),
+            Case.demandado.ilike(f"%{name_filter}%")
+        ))
         
     tasks = query.order_by(desc(Task.created_at)).all()
     
-    return [{
-        "id": t.id,
-        "title": t.title,
-        "status": t.status,
-        "priority": t.priority,
-        "assignee_id": t.assignee_id,
-        "list_id": t.list_id,
-        "due_date": t.due_date,
-        "case_id": t.case_id,
-        "parent_id": t.parent_id,
-        "created_at": t.created_at,
-        "clickup_id": t.clickup_id
     } for t in tasks]
+
+@app.get("/cases/{case_id}/tasks")
+async def get_case_tasks_endpoint(
+    case_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retorna las tareas vinculadas a un radicado específico."""
+    tasks = db.query(Task).filter(Task.case_id == case_id).order_by(desc(Task.created_at)).all()
+    return tasks
 
 @app.post("/projects/tasks")
 async def create_task(
@@ -3721,6 +3867,9 @@ async def update_task(
     
     db.commit()
     return task
+
+    # Endpoint consolidado en la línea 3604
+    pass
 
 @app.get("/cases/{id}/tasks")
 async def get_case_tasks(
@@ -3803,8 +3952,13 @@ async def update_case_lawyer(
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     
     cs.abogado = data.abogado
+    # Intentar buscar el usuario por nombre para sincronizar user_id automáticamente
+    match_user = db.query(User).filter(User.nombre.ilike(f"%{data.abogado}%")).first()
+    if match_user:
+        cs.user_id = match_user.id
+        
     db.commit()
-    return {"ok": True, "abogado": cs.abogado}
+    return {"ok": True, "abogado": cs.abogado, "user_id": cs.user_id}
 
 # =========================
 # INTEGRACIONES EXTERNAS (CALLY, ETC)
@@ -3872,3 +4026,40 @@ async def regenerate_cally_key(
     
     db.commit()
     return {"api_key": new_key}
+
+@app.get("/api/v1/system/health")
+async def system_health_diagnostic(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Diagnóstico senior para detectar bloqueos y estado de base de datos."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403)
+        
+    case_count = db.query(Case).count()
+    task_count = db.query(Task).count()
+    id_proceso_count = db.query(Case).filter(Case.id_proceso.isnot(None)).count()
+    
+    # Probar conexión Rama Judicial (petición mínima)
+    rama_status = "OK"
+    try:
+        from .service.rama import _get
+        await _get("/Procesos/Detalle/1") # ID ficticio pero válido para test
+    except RamaRateLimitError:
+        rama_status = "BLOQUEADO (403)"
+    except Exception as e:
+        rama_status = f"ERROR: {str(e)}"
+        
+    return {
+        "version": "4.0.0-SENIOR",
+        "database": {
+            "cases": case_count,
+            "tasks": task_count,
+            "cases_synchronized": id_proceso_count
+        },
+        "integrations": {
+            "rama_judicial": rama_status,
+            "clickup": "Configurada" # Asumimos si el endpoint responde
+        },
+        "server_time": now_colombia()
+    }

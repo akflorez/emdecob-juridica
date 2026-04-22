@@ -11,28 +11,47 @@ import { Button } from "@/components/ui/button";
 moment.locale('es');
 const localizer = momentLocalizer(moment);
 
-const events = [
-  {
-    title: 'REINOSO CORDOBA - Vencimiento Actuación',
-    start: new Date(2026, 3, 20, 10, 0),
-    end: new Date(2026, 3, 20, 11, 0),
-    resource: 'Alta',
-  },
-  {
-    title: 'WILLIAM POLANIA - Envío Memorial',
-    start: new Date(2026, 3, 21, 14, 0),
-    end: new Date(2026, 3, 21, 15, 30),
-    resource: 'Normal',
-  },
-  {
-    title: 'FNA - Saneamiento Cartera',
-    start: new Date(2026, 3, 22, 9, 0),
-    end: new Date(2026, 3, 24, 18, 0),
-    resource: 'Proyectos',
-  },
-];
+import { useState, useEffect } from 'react';
+import { getTasks, type Task as TaskType } from '@/services/api';
+import { toast } from "sonner";
 
 export default function AgendaView() {
+  const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    setIsLoading(true);
+    try {
+      // Traer todas las tareas (sin filtrar por lista para tener panorama completo)
+      const data = await getTasks({});
+      setTasks(data);
+    } catch (error) {
+      toast.error("No se pudo cargar la agenda real.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const events = tasks.filter(t => t.due_date).map(t => ({
+    id: t.id,
+    title: t.title,
+    start: new Date(t.due_date!),
+    end: new Date(t.due_date!),
+    resource: t.priority,
+    task: t
+  }));
+
+  const todayTasks = tasks.filter(t => {
+    if (!t.due_date) return false;
+    const d = new Date(t.due_date);
+    const today = new Date();
+    return d.toDateString() === today.toDateString();
+  });
+
   return (
     <div className="flex flex-col h-full space-y-6">
       {/* Header */}
@@ -46,11 +65,11 @@ export default function AgendaView() {
         </div>
         
         <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-                <Filter className="mr-2 h-4 w-4" /> Filtrar Equipo
+            <Button variant="outline" size="sm" onClick={fetchTasks} disabled={isLoading}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
             </Button>
             <Button size="sm">
-                <Plus className="mr-2 h-4 w-4" /> Programar Evento
+                <Plus className="mr-2 h-4 w-4" /> Programar Tarea
             </Button>
         </div>
       </div>
@@ -65,30 +84,36 @@ export default function AgendaView() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold italic">4 Tareas</div>
-                    <p className="text-xs text-muted-foreground mt-1">2 vencimientos críticos</p>
+                    <div className="text-2xl font-bold italic">{todayTasks.length} Tareas</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {todayTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length} críticas
+                    </p>
                 </CardContent>
             </Card>
 
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold px-2">Próximos Vencimientos</h3>
-                <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors text-xs">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                    {tasks.filter(t => t.due_date).slice(0, 10).map((t) => (
+                        <div key={t.id} className="p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors text-xs">
                             <div className="flex justify-between items-start mb-1">
-                                <span className="font-bold">Proceso #342{i}</span>
-                                <Badge variant="outline" className="text-[9px] h-4">Urgente</Badge>
+                                <span className="font-bold truncate max-w-[150px]">{t.title}</span>
+                                <Badge variant="outline" className={`text-[9px] h-4 ${t.priority === 'urgent' ? 'text-red-500 border-red-500' : ''}`}>
+                                  {t.priority || 'Normal'}
+                                </Badge>
                             </div>
-                            <p className="text-muted-foreground truncate">Revisión de estados procesales...</p>
-                            <div className="mt-2 text-primary font-medium">Hace 2 horas</div>
+                            <p className="text-muted-foreground truncate">{new Date(t.due_date!).toLocaleDateString('es-CO')}</p>
                         </div>
                     ))}
+                    {tasks.filter(t => t.due_date).length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-4">No hay tareas programadas.</p>
+                    )}
                 </div>
             </div>
         </div>
 
         {/* Calendario Principal */}
-        <Card className="lg:col-span-3 min-h-[600px] shadow-sm overflow-hidden">
+        <Card className="lg:col-span-3 min-h-[600px] shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
             <CardContent className="p-0">
                 <div className="h-[650px] p-4 text-sm" id="main-calendar">
                     <BigCalendar
@@ -111,8 +136,9 @@ export default function AgendaView() {
                         style={{ height: '100%' }}
                         eventPropGetter={(event) => {
                             let backgroundColor = '#3b82f6';
-                            if (event.resource === 'Alta') backgroundColor = '#ef4444';
-                            if (event.resource === 'Proyectos') backgroundColor = '#8b5cf6';
+                            const p = event.resource?.toLowerCase();
+                            if (p === 'urgent' || p === 'high' || p === 'alta') backgroundColor = '#ef4444';
+                            if (p === 'proyectos') backgroundColor = '#8b5cf6';
                             return { style: { backgroundColor, border: 'none', borderRadius: '4px' } };
                         }}
                     />
