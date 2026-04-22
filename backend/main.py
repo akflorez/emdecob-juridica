@@ -3809,9 +3809,7 @@ async def get_tasks(
             Case.demandado.ilike(f"%{name_filter}%")
         ))
         
-    tasks = query.order_by(desc(Task.created_at)).all()
-    
-    } for t in tasks]
+    return tasks
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(

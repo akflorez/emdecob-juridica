@@ -66,7 +66,7 @@ export async function apiFetch<T>(
 /** ---------------------------
  * AUTH
  * -------------------------- */
-export type LoginResponse = { access_token: string; role: "ADMIN" | "ABOGADO" };
+export type LoginResponse = { token: string; user: User };
 
 export function login(username: string, password: string) {
   return apiFetch<LoginResponse>(
@@ -80,8 +80,8 @@ export type User = {
   id: number;
   username: string;
   nombre?: string;
-  is_active: bool;
-  is_admin: bool;
+  is_active: boolean;
+  is_admin: boolean;
 };
 
 export function getUsers() {
