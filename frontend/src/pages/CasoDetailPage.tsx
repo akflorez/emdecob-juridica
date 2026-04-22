@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, FileText, Loader2, Filter, AlertCircle, 
   Download, User, Users, Building2, Hash, Paperclip, ChevronDown,
-  FileDown, RefreshCw, ArrowRight
+  FileDown, RefreshCw, ArrowRight, UserCheck, Edit3, ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

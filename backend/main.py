@@ -2572,8 +2572,10 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
         # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
         results = await asyncio.gather(*[fetch_process_data(p) for p in items[:15]])
         
-        # FILTRO DINÁMICO: Solo FNA o TRIADA (No estricto)
+        # FILTRO DINÁMICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
         filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
+        if not filtered_results:
+            filtered_results = results
         
         # ORDENAMIENTO: Fecha de radicación más reciente primero
         # La fecha de radicación es la que el usuario prefiere como criterio principal
