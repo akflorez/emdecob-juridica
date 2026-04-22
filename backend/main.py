@@ -2630,6 +2630,8 @@ async def events_logic(c: Case, db: Session):
                 if id_proceso:
                     c.id_proceso = str(id_proceso)
                     db.commit()
+            except Exception:
+                id_proceso = c.id_proceso
         if not id_proceso:
             return {
                 "items": [], 
