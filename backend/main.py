@@ -3008,10 +3008,11 @@ async def import_excel(
                         c.abogado = abogado or c.abogado
                     updated += 1
                 else:
+                    # Si ya estaba marcado como invlido, lo removemos para que vuelva a intentar validarse
                     existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
                     if existing_invalid:
-                        skipped += 1
-                        continue
+                        db.delete(existing_invalid)
+                        db.flush()
 
                     db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado, user_id=current_user.id))
                     created += 1
