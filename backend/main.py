@@ -57,6 +57,7 @@ from .service.rama import (
     documentos_actuacion,
     consulta_por_nombre,
     RamaError,
+    RamaRateLimitError,
 )
 from .apply_robust_migrations import run_migrations
 from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
@@ -3624,7 +3625,6 @@ class ClickUpImportRequest(BaseModel):
 async def import_clickup(
     data: ClickUpImportRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Lanza la migración desde ClickUp en segundo plano."""
@@ -3635,10 +3635,13 @@ async def import_clickup(
         raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importación masiva")
 
     async def _do_import():
+        db = SessionLocal()
         try:
             await migrate_clickup_to_emdecob(data.token, db, current_user.id)
         except Exception as e:
             print(f"[CLICKUP-IMPORT] Fallo: {e}")
+        finally:
+            db.close()
 
     background_tasks.add_task(_do_import)
     
@@ -3685,8 +3688,6 @@ class TaskUpdate(BaseModel):
     assignee_id: Optional[int] = None
     case_id: Optional[int] = None
 
-class ClickUpImportRequest(BaseModel):
-    token: str
 
 class CommentCreate(BaseModel):
     task_id: int
