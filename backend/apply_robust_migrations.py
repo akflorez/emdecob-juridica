@@ -92,6 +92,14 @@ def run_migrations():
                 except:
                     pass
 
+    # --- Tabla 'workspaces' ---
+    columns_ws = [c['name'] for c in inspector.get_columns('workspaces')]
+    if columns_ws:
+        with engine.begin() as conn:
+            if 'visibility' not in columns_ws:
+                print("+ [MIGRATION] workspaces: agregando 'visibility'...")
+                conn.execute(text("ALTER TABLE workspaces ADD COLUMN visibility VARCHAR(50) DEFAULT 'TEAM_COLLABORATION'"))
+
     # --- Tabla 'users' ---
     columns_users = [c['name'] for c in inspector.get_columns('users')]
     if columns_users: # Solo si la tabla ya existe

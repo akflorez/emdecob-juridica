@@ -3809,7 +3809,7 @@ async def get_tasks(
             Case.demandado.ilike(f"%{name_filter}%")
         ))
         
-    return tasks
+    return query.all()
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
