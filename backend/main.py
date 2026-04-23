@@ -294,13 +294,6 @@ async def do_auto_refresh() -> dict:
                         c.ultima_actuacion = nueva_fecha
                         c.last_check_at = now_colombia()
 
-                sujetos_raw = p.get("sujetosProcesales") or ""
-                if sujetos_raw:
-                    d1f, d2f, abof = parse_sujetos_procesales(sujetos_raw)
-                    if d1f: c.demandante = d1f
-                    if d2f: c.demandado  = d2f
-                    # if abof: c.abogado   = abof (Removido por peticin del usuario)
-
                 c.last_check_at = now_colombia()
                 checked += 1
 
@@ -999,7 +992,7 @@ async def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna todos los usuarios activos del sistema para asignación de tareas."""
+    """Retorna todos los usuarios activos del sistema para asignaciÃ³n de tareas."""
     return db.query(User).filter(User.is_active == True).all()
 
 def parse_fecha(fecha_str: Optional[str]) -> Optional[date]:
@@ -1021,48 +1014,46 @@ def extract_items(resp):
     return items
 
 def extract_fecha_proceso(p: dict, det: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
-    fecha_proceso = (
-        p.get("fechaProceso")
-        or p.get("FechaProceso")
-        or p.get("fechaRadicacion")
-        or p.get("FechaRadicacion")
-        or p.get("fechaProcesoRadicacion")
-    )
-    fecha_ult = (
-        p.get("fechaUltimaActuacion")
-        or p.get("FechaUltimaActuacion")
-        or p.get("ultimaActuacion")
-        or p.get("UltimaActuacion")
-    )
-
+    # Priorizar detalle (det) sobre bsqueda (p)
+    f_rad = None
+    f_ult = None
+    
     if det and isinstance(det, dict):
-        if not fecha_proceso:
-            fecha_proceso = (
-                det.get("fechaRadicacion")
-                or det.get("fechaProceso")
-                or det.get("FechaProceso")
-                or det.get("FechaRadicacion")
-            )
-        if not fecha_ult:
-            fecha_ult = (
-                det.get("fechaUltimaActuacion")
-                or det.get("FechaUltimaActuacion")
-                or det.get("ultimaActuacion")
-            )
+        f_rad = (
+            det.get("fechaRadicacion")
+            or det.get("fechaProceso")
+            or det.get("FechaProceso")
+            or det.get("FechaRadicacion")
+            or det.get("fechaProcesoRadicacion")
+        )
+        f_ult = (
+            det.get("fechaUltimaActuacion")
+            or det.get("FechaUltimaActuacion")
+            or det.get("ultimaActuacion")
+            or det.get("UltimaActuacion")
+        )
 
-    return fecha_proceso, fecha_ult
+    # Fallback a p
+    if not f_rad:
+        f_rad = (
+            p.get("fechaRadicacion")
+            or p.get("fechaProceso")
+            or p.get("FechaProceso")
+            or p.get("FechaRadicacion")
+            or p.get("fechaProcesoRadicacion")
+        )
+    if not f_ult:
+        f_ult = (
+            p.get("fechaUltimaActuacion")
+            or p.get("FechaUltimaActuacion")
+            or p.get("ultimaActuacion")
+            or p.get("UltimaActuacion")
+        )
 
+    return f_rad, f_ult
 def extract_juzgado(p: dict, det: Optional[dict]) -> Optional[str]:
-    juzgado = (
-        p.get("despacho")
-        or p.get("Despacho")
-        or p.get("nombreDespacho")
-        or p.get("NombreDespacho")
-        or p.get("juzgado")
-        or p.get("Juzgado")
-    )
-
-    if not juzgado and det and isinstance(det, dict):
+    juzgado = None
+    if det and isinstance(det, dict):
         juzgado = (
             det.get("despacho")
             or det.get("Despacho")
@@ -1071,17 +1062,27 @@ def extract_juzgado(p: dict, det: Optional[dict]) -> Optional[str]:
             or det.get("juzgado")
             or det.get("Juzgado")
         )
+    
+    if not juzgado:
+        juzgado = (
+            p.get("despacho")
+            or p.get("Despacho")
+            or p.get("nombreDespacho")
+            or p.get("NombreDespacho")
+            or p.get("juzgado")
+            or p.get("Juzgado")
+        )
 
     return juzgado
 
 async def obtener_id_proceso(radicado: str) -> Optional[int]:
-    # Intentar búsqueda directa
+    # Intentar bÃºsqueda directa
     resp = await consulta_por_radicado(radicado, solo_activos=False, pagina=1)
     items = extract_items(resp)
     
-    # Si no hay items, intentar con los primeros 21 dígitos (por si acaso el final varía)
+    # Si no hay items, intentar con los primeros 21 dÃ­gitos (por si acaso el final varÃ­a)
     if not items and len(radicado) >= 21:
-        print(f"🔍 [rama] Reintentando obtener_id_proceso con 21 dígitos para {radicado}")
+        print(f"ðŸ” [rama] Reintentando obtener_id_proceso con 21 dÃ­gitos para {radicado}")
         resp = await consulta_por_radicado(radicado[:21], solo_activos=False, pagina=1)
         items = extract_items(resp)
 
@@ -1193,6 +1194,9 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
             det = {}
 
     sujetos = p.get("sujetosProcesales") or ""
+    if not sujetos and det:
+        sujetos = det.get("sujetosProcesales") or ""
+        
     d1, d2, ab_rama = parse_sujetos_procesales(sujetos)
     juzgado = extract_juzgado(p, det) or "JUZGADO NO ESPECIFICADO"
     fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
@@ -1349,9 +1353,9 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
 @app.post("/auth/login")
 def login(data: LoginRequest):
-    """Autentica un usuario y retorna un token de sesión."""
+    """Autentica un usuario y retorna un token de sesiÃ³n."""
 
-    # 1. Intentar identificación por Hardcoded Users primero para rapidez y resiliencia
+    # 1. Intentar identificaciÃ³n por Hardcoded Users primero para rapidez y resiliencia
     hc = HARDCODED_USERS.get(data.username)
     
     # 2. Intentar contra la base de datos
@@ -1377,9 +1381,9 @@ def login(data: LoginRequest):
                 }
             }
     except Exception as e:
-        print(f"⚠️ [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
+        print(f"âš ï¸ [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
     
-    # 3. Fallback Hardcoded si la DB falló o no encontró al usuario
+    # 3. Fallback Hardcoded si la DB fallÃ³ o no encontrÃ³ al usuario
     if hc and data.password == hc["password"]:
         # Si el usuario existe en DB, intentamos actualizar su hash (silenciosamente)
         user_id = hc["id"]
@@ -1406,7 +1410,7 @@ def login(data: LoginRequest):
     if db:
         db.close()
     
-    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contraseÃ±a incorrectos")
 
 
 @app.post("/auth/logout")
@@ -2497,11 +2501,11 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
 async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
     """
     Busca un caso por radicado. Primero en BD local, luego en Rama Judicial.
-    Esto alimenta la página de 'Consultar Caso'.
+    Esto alimenta la pÃ¡gina de 'Consultar Caso'.
     """
     r = clean_str(radicado)
     if not r:
-        raise HTTPException(400, "Radicado inválido")
+        raise HTTPException(400, "Radicado invÃ¡lido")
 
     # 1. Buscar en BD local
     existing_items = db.query(Case).filter(Case.radicado == r).all()
@@ -2513,33 +2517,33 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
                 local_results.append({
                     "id": c.id,
                     "radicado": c.radicado,
-                    "demandante": c.demandante or "—",
-                    "demandado": c.demandado or "—",
-                    "juzgado": c.juzgado or "—",
+                    "demandante": c.demandante or "â€”",
+                    "demandado": c.demandado or "â€”",
+                    "juzgado": c.juzgado or "â€”",
                     "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
                     "note": "Caso encontrado en el sistema local."
                 })
         
-        # Ordenar local por fecha más reciente
+        # Ordenar local por fecha mÃ¡s reciente
         local_results.sort(key=lambda x: x['fecha_radicacion'] or '', reverse=True)
         if local_results:
             return local_results
 
     # 2. Si no existe, buscar en Rama Judicial (Live)
     try:
-        # Búsqueda inicial rápida (pocos reintentos)
-        # Usamos wait_for para asegurar que no se quede pegado más de 25s
+        # BÃºsqueda inicial rÃ¡pida (pocos reintentos)
+        # Usamos wait_for para asegurar que no se quede pegado mÃ¡s de 25s
         resp = await asyncio.wait_for(consulta_por_radicado(r), timeout=25.0)
         items = extract_items(resp)
         if not items:
-            raise HTTPException(404, f"No se encontró el radicado {r} en la Rama Judicial")
+            raise HTTPException(404, f"No se encontrÃ³ el radicado {r} en la Rama Judicial")
 
         async def fetch_process_data(p):
             id_p = p.get("idProceso")
             det = None
             if id_p:
                 try:
-                    # Detalle rápido (1 reintento para velocidad)
+                    # Detalle rÃ¡pido (1 reintento para velocidad)
                     from .service.rama import _get
                     det = await _get(f"/Proceso/Detalle/{id_p}", retries=1)
                 except:
@@ -2557,30 +2561,30 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
             return {
                 "id": 0, # Virtual
                 "radicado": r,
-                "demandante": dem or "—",
-                "demandado": ddo or "—",
-                "juzgado": p.get("despacho") or "—",
+                "demandante": dem or "â€”",
+                "demandado": ddo or "â€”",
+                "juzgado": p.get("despacho") or "â€”",
                 "id_proceso": id_p,
                 "fecha_radicacion": f_rad,
-                "note": "Caso encontrado en tiempo real (En línea)."
+                "note": "Caso encontrado en tiempo real (En lÃ­nea)."
             }
 
         # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
         results = await asyncio.gather(*[fetch_process_data(p) for p in items[:15]])
         
-        # FILTRO DINÁMICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
+        # FILTRO DINÃMICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
         filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
         if not filtered_results:
             filtered_results = results
         
-        # ORDENAMIENTO: Fecha de radicación más reciente primero
-        # La fecha de radicación es la que el usuario prefiere como criterio principal
+        # ORDENAMIENTO: Fecha de radicaciÃ³n mÃ¡s reciente primero
+        # La fecha de radicaciÃ³n es la que el usuario prefiere como criterio principal
         sorted_results = sorted(filtered_results, key=lambda x: x.get('fecha_radicacion') or '', reverse=True)
         
         return sorted_results
 
     except asyncio.TimeoutError:
-        raise HTTPException(408, "La Rama Judicial está respondiendo muy lento. Por favor, intenta de nuevo en unos minutos.")
+        raise HTTPException(408, "La Rama Judicial estÃ¡ respondiendo muy lento. Por favor, intenta de nuevo en unos minutos.")
     except RamaError as e:
         raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
     except Exception as e:
@@ -2634,7 +2638,7 @@ async def events_logic(c: Case, db: Session):
             return {
                 "items": [], 
                 "total": 0, 
-                "error": "ID de Proceso no encontrado. Por favor, ingrésalo manualmente si lo conoces.", 
+                "error": "ID de Proceso no encontrado. Por favor, ingrÃ©salo manualmente si lo conoces.", 
                 "id_proceso": None,
                 "status": "missing_id"
             }
@@ -2649,7 +2653,7 @@ async def events_logic(c: Case, db: Session):
                 "status": "rate_limited"
             }
         except RamaError as e:
-            raise HTTPException(502, f"Error de comunicación con la Rama: {str(e)}")
+            raise HTTPException(502, f"Error de comunicaciÃ³n con la Rama: {str(e)}")
         except RamaError as e:
             raise HTTPException(502, f"Error obteniendo actuaciones: {str(e)}")
 
@@ -3107,12 +3111,12 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 # =========================
 @app.post("/cases/refresh-all")
 async def refresh_all_cases(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Dispara una tarea en segundo plano para recorrer todos los casos válidos."""
+    """Dispara una tarea en segundo plano para recorrer todos los casos vÃ¡lidos."""
     if REFRESH_LOCK.locked():
-        return {"ok": False, "message": "Ya existe una actualización masiva en curso. Por favor, espere a que termine."}
+        return {"ok": False, "message": "Ya existe una actualizaciÃ³n masiva en curso. Por favor, espere a que termine."}
     
     background_tasks.add_task(do_auto_refresh_with_lock)
-    return {"ok": True, "message": "Sincronización masiva iniciada en segundo plano."}
+    return {"ok": True, "message": "SincronizaciÃ³n masiva iniciada en segundo plano."}
 
 async def do_auto_refresh_with_lock():
     if REFRESH_LOCK.locked():
@@ -3621,12 +3625,12 @@ async def import_clickup(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Lanza la migración desde ClickUp en segundo plano."""
+    """Lanza la migraciÃ³n desde ClickUp en segundo plano."""
     from .clickup_sync import migrate_clickup_to_emdecob
     
     # Check admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importación masiva")
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importaciÃ³n masiva")
 
     async def _do_import():
         db = SessionLocal()
@@ -3641,7 +3645,7 @@ async def import_clickup(
     
     return {
         "ok": True,
-        "message": "La importación ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
+        "message": "La importaciÃ³n ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
     }
 
 # =========================
@@ -3692,13 +3696,13 @@ async def get_workspaces(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna la jerarquía completa de espacios para el usuario."""
+    """Retorna la jerarquÃ­a completa de espacios para el usuario."""
     if current_user.is_admin:
         workspaces = db.query(Workspace).all()
         
-        # Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
+        # Solo para modo local: si no hay espacios, crear un flujo local mÃ­nimo por defecto
         if not workspaces:
-            print("[PROJECTS] Creando estructura básica de proyectos local...")
+            print("[PROJECTS] Creando estructura bÃ¡sica de proyectos local...")
             ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
             db.add(ws)
             db.commit()
@@ -3791,7 +3795,7 @@ async def get_tasks(
         query = query.filter(Task.case_id == case_id)
     
     if radicado:
-        # Búsqueda exacta primero, luego parcial
+        # BÃºsqueda exacta primero, luego parcial
         query = query.join(Case, Task.case_id == Case.id, isouter=True)
         query = query.filter(or_(
             Case.radicado == radicado,
@@ -3799,10 +3803,10 @@ async def get_tasks(
             Task.description.contains(radicado)
         ))
     
-    # Nuevo: Búsqueda por nombre de las partes (Demandante/Demandado)
+    # Nuevo: BÃºsqueda por nombre de las partes (Demandante/Demandado)
     name_filter = radicado if radicado and not radicado.isdigit() else None
     if name_filter:
-        if not radicado: # Si no join todavía
+        if not radicado: # Si no join todavÃ­a
              query = query.join(Case, Task.case_id == Case.id, isouter=True)
         query = query.filter(or_(
             Case.demandante.ilike(f"%{name_filter}%"),
@@ -3817,7 +3821,7 @@ async def get_case_tasks_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna las tareas vinculadas a un radicado específico."""
+    """Retorna las tareas vinculadas a un radicado especÃ­fico."""
     tasks = db.query(Task).filter(Task.case_id == case_id).order_by(desc(Task.created_at)).all()
     return tasks
 
@@ -3866,7 +3870,7 @@ async def update_task(
     db.commit()
     return task
 
-    # Endpoint consolidado en la línea 3604
+    # Endpoint consolidado en la lÃ­nea 3604
     pass
 
 @app.get("/cases/{id}/tasks")
@@ -3897,12 +3901,12 @@ async def get_advanced_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Obtiene estadísticas de negocio para las etiquetas superiores."""
+    """Obtiene estadÃ­sticas de negocio para las etiquetas superiores."""
     hoy = today_colombia()
     ayer = hoy - timedelta(days=1)
     
     # 1. Conteo de actuaciones en el mes actual
-    # month_actions: eventos filtrados manualmente si el formato String varía
+    # month_actions: eventos filtrados manualmente si el formato String varÃ­a
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str).count()
     
@@ -3913,7 +3917,7 @@ async def get_advanced_dashboard_stats(
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
     
-    # 3. Alertas (casos sin leer) calculando la misma lógica que en list_cases
+    # 3. Alertas (casos sin leer) calculando la misma lÃ³gica que en list_cases
     q_unread = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.current_hash.isnot(None),
@@ -3944,13 +3948,13 @@ async def update_case_lawyer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Actualización ultra-rápida del abogado para edición en línea."""
+    """ActualizaciÃ³n ultra-rÃ¡pida del abogado para ediciÃ³n en lÃ­nea."""
     cs = db.query(Case).filter(Case.id == case_id).first()
     if not cs:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     
     cs.abogado = data.abogado
-    # Intentar buscar el usuario por nombre para sincronizar user_id automáticamente
+    # Intentar buscar el usuario por nombre para sincronizar user_id automÃ¡ticamente
     match_user = db.query(User).filter(User.nombre.ilike(f"%{data.abogado}%")).first()
     if match_user:
         cs.user_id = match_user.id
@@ -3972,7 +3976,7 @@ def verify_cally_key(api_key: str):
             IntegrationConfig.is_active == True
         ).first()
         if not config:
-            raise HTTPException(status_code=401, detail="Clave de API de Cally inválida")
+            raise HTTPException(status_code=401, detail="Clave de API de Cally invÃ¡lida")
         return config
     finally:
         db.close()
@@ -3982,7 +3986,7 @@ async def get_integrations_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """(Admin) Obtiene las claves de integración externas."""
+    """(Admin) Obtiene las claves de integraciÃ³n externas."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="No autorizado")
     
@@ -4030,7 +4034,7 @@ async def system_health_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Diagnóstico senior para detectar bloqueos y estado de base de datos."""
+    """DiagnÃ³stico senior para detectar bloqueos y estado de base de datos."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403)
         
@@ -4038,11 +4042,11 @@ async def system_health_diagnostic(
     task_count = db.query(Task).count()
     id_proceso_count = db.query(Case).filter(Case.id_proceso.isnot(None)).count()
     
-    # Probar conexión Rama Judicial (petición mínima)
+    # Probar conexiÃ³n Rama Judicial (peticiÃ³n mÃ­nima)
     rama_status = "OK"
     try:
         from .service.rama import _get
-        await _get("/Procesos/Detalle/1") # ID ficticio pero válido para test
+        await _get("/Procesos/Detalle/1") # ID ficticio pero vÃ¡lido para test
     except RamaRateLimitError:
         rama_status = "BLOQUEADO (403)"
     except Exception as e:
