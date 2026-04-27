@@ -41,6 +41,12 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         main_assignee = task_data['assignees'][0]
         name = main_assignee.get('username', '').lower().strip()
         assignee_id = user_map.get(name)
+        
+        # --- Lógica específica solicitada: Juan Jose Escobar -> jurico_emdecob ---
+        if "juan" in name and "escobar" in name:
+            juridico_user = db.query(User).filter(User.username == 'jurico_emdecob').first()
+            if juridico_user:
+                assignee_id = juridico_user.id
 
     # 2. Vinculación con Radicado Jurídico
     case_id = None
@@ -53,7 +59,11 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         else:
             # SI NO EXISTE, lo creamos para que Juricob empiece a trackearlo
             # No le ponemos juzgado para que aparezca en "Pendientes" y el validador lo tome
-            new_case = Case(radicado=radicado, user_id=owner_id)
+            target_user_id = owner_id
+            if assignee_id:
+                target_user_id = assignee_id
+                
+            new_case = Case(radicado=radicado, user_id=target_user_id, demandado=task_data['name'])
             db.add(new_case)
             db.flush()
             case_id = new_case.id
