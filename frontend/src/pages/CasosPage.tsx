@@ -504,18 +504,28 @@ export default function CasosPage() {
     }
   };
 
-  const handleDownloadExcel = () => {
-    if (activeTab === "no_encontrados" || activeTab === "pendientes") return;
-    downloadCasesExcel({ 
-      search: appliedSearch, 
-      juzgado: appliedJuzgado, 
-      abogado: appliedAbogado,
-      cedula: appliedCedula,
-      mes_actuacion: appliedMonth,
-      solo_no_leidos: activeTab === "no_leidos", 
-      solo_actualizados_hoy: activeTab === "hoy" 
-    });
-    toast({ title: "Descargando...", description: "El archivo Excel se descargará en unos segundos" });
+  const handleDownloadExcel = async () => {
+    if (activeTab === "pendientes") return;
+
+    try {
+      if (activeTab === "no_encontrados") {
+        await downloadInvalidRadicadosExcel();
+        return;
+      }
+
+      await downloadCasesExcel({ 
+        search: appliedSearch, 
+        juzgado: appliedJuzgado, 
+        abogado: appliedAbogado,
+        cedula: appliedCedula,
+        mes_actuacion: appliedMonth,
+        solo_no_leidos: activeTab === "no_leidos", 
+        solo_actualizados_hoy: activeTab === "hoy" 
+      });
+      toast({ title: "Descargando...", description: "El archivo Excel se descargará en unos segundos" });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo generar el archivo", variant: "destructive" });
+    }
   };
 
   const handleRetryInvalid = async (item: InvalidRadicado) => {
@@ -815,7 +825,7 @@ export default function CasosPage() {
                   Descargar {selectedIds.size}
                 </Button>
               )}
-              {activeTab !== "no_encontrados" && activeTab !== "pendientes" && total > 0 && (
+              {activeTab !== "pendientes" && total > 0 && (
                 <Button onClick={handleDownloadExcel} variant="outline" size="sm">
                   <Download className="h-4 w-4 mr-2" />Exportar
                 </Button>
@@ -991,7 +1001,7 @@ export default function CasosPage() {
                           <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(c)}>
+                          <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(row)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>

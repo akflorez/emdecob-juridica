@@ -185,12 +185,28 @@ export default function ImportarPage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <AlertTriangle className="h-6 w-6 text-yellow-500" />
-                    <div>
-                      <p className="text-xl font-bold text-yellow-500">{importResult.skipped}</p>
-                      <p className="text-xs text-muted-foreground">Ignorados</p>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="h-6 w-6 text-yellow-500" />
+                      <div>
+                        <p className="text-xl font-bold text-yellow-500">{importResult.skipped}</p>
+                        <p className="text-xs text-muted-foreground">Ignorados</p>
+                      </div>
                     </div>
+                    {importResult.skipped > 0 && (
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="h-8 gap-2"
+                        onClick={() => {
+                          const list = importResult.skipped_list?.map(r => ({ radicado: r, motivo: "Omitido en la importación / Ya existe" })) || [];
+                          downloadInvalidReport(list);
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                        Reporte
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

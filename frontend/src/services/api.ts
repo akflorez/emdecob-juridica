@@ -338,7 +338,10 @@ export function downloadCasesExcel(params: {
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
   const q = qs.toString();
-  window.open(`${cleanBaseUrl}/cases/download${q ? `?${q}` : ""}`, "_blank");
+  const token = getToken();
+  const downloadUrl = `${cleanBaseUrl}/cases/download?${q}${token ? `&token=${token}` : ""}`;
+  
+  window.location.assign(downloadUrl);
 }
 
 /** ---------------------------
@@ -466,7 +469,10 @@ export function retryInvalidRadicado(id: number) {
 
 export function downloadInvalidRadicadosExcel() {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
-  window.open(`${cleanBaseUrl}/invalid-radicados/download`, "_blank");
+  const token = getToken();
+  const downloadUrl = `${cleanBaseUrl}/invalid-radicados/download${token ? `?token=${token}` : ""}`;
+  
+  window.location.assign(downloadUrl);
 }
 
 /** ---------------------------
@@ -775,27 +781,13 @@ export function importSearchResults(jobId: number, selectedIndices: number[]) {
   });
 }
 
-export async function downloadSearchResultsExcel(jobId: number) {
+export function downloadSearchResultsExcel(jobId: number) {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
   const token = getToken();
   
-  const res = await fetch(`${cleanBaseUrl}/search/jobs/${jobId}/export`, {
-    headers: token ? { "Authorization": `Bearer ${token}` } : {}
-  });
-
-  if (!res.ok) {
-    throw new Error("Error al descargar el archivo");
-  }
-
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `resultados_busqueda_${jobId}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  a.remove();
+  const downloadUrl = `${cleanBaseUrl}/search/jobs/${jobId}/export${token ? `?token=${token}` : ""}`;
+  
+  window.location.assign(downloadUrl);
 }
 
 /** ---------------------------

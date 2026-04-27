@@ -811,12 +811,18 @@ def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     db: Session = Depends(get_db),
+    token: Optional[str] = Query(None)
 ) -> User:
-    if not credentials:
+    actual_token = None
+    if credentials:
+        actual_token = credentials.credentials
+    elif token:
+        actual_token = token
+    
+    if not actual_token:
         raise HTTPException(status_code=401, detail="No autenticado")
     
-    token = credentials.credentials
-    user_id = verify_access_token(token)
+    user_id = verify_access_token(actual_token)
     if not user_id:
         print("[AUTH-DEBUG] El token no pudo ser verificado")
         raise HTTPException(status_code=401, detail="Token invalido o expirado")
@@ -992,7 +998,7 @@ async def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna todos los usuarios activos del sistema para asignaciÃ³n de tareas."""
+    """Retorna todos los usuarios activos del sistema para asignaci?n de tareas."""
     return db.query(User).filter(User.is_active == True).all()
 
 def parse_fecha(fecha_str: Optional[str]) -> Optional[date]:
@@ -1076,13 +1082,13 @@ def extract_juzgado(p: dict, det: Optional[dict]) -> Optional[str]:
     return juzgado
 
 async def obtener_id_proceso(radicado: str) -> Optional[int]:
-    # Intentar bÃºsqueda directa
+    # Intentar b?squeda directa
     resp = await consulta_por_radicado(radicado, solo_activos=False, pagina=1)
     items = extract_items(resp)
     
-    # Si no hay items, intentar con los primeros 21 dÃ­gitos (por si acaso el final varÃ­a)
+    # Si no hay items, intentar con los primeros 21 d?gitos (por si acaso el final var?a)
     if not items and len(radicado) >= 21:
-        print(f"ðŸ” [rama] Reintentando obtener_id_proceso con 21 dÃ­gitos para {radicado}")
+        print(f"? [rama] Reintentando obtener_id_proceso con 21 d?gitos para {radicado}")
         resp = await consulta_por_radicado(radicado[:21], solo_activos=False, pagina=1)
         items = extract_items(resp)
 
@@ -1353,9 +1359,9 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
 @app.post("/auth/login")
 def login(data: LoginRequest):
-    """Autentica un usuario y retorna un token de sesiÃ³n."""
+    """Autentica un usuario y retorna un token de sesi?n."""
 
-    # 1. Intentar identificaciÃ³n por Hardcoded Users primero para rapidez y resiliencia
+    # 1. Intentar identificaci?n por Hardcoded Users primero para rapidez y resiliencia
     hc = HARDCODED_USERS.get(data.username)
     
     # 2. Intentar contra la base de datos
@@ -1381,9 +1387,9 @@ def login(data: LoginRequest):
                 }
             }
     except Exception as e:
-        print(f"âš ï¸ [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
+        print(f"? [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
     
-    # 3. Fallback Hardcoded si la DB fallÃ³ o no encontrÃ³ al usuario
+    # 3. Fallback Hardcoded si la DB fall? o no encontr? al usuario
     if hc and data.password == hc["password"]:
         # Si el usuario existe en DB, intentamos actualizar su hash (silenciosamente)
         user_id = hc["id"]
@@ -1410,7 +1416,7 @@ def login(data: LoginRequest):
     if db:
         db.close()
     
-    raise HTTPException(status_code=401, detail="Usuario o contraseÃ±a incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contrase?a incorrectos")
 
 
 @app.post("/auth/logout")
@@ -1777,7 +1783,10 @@ def delete_invalid_radicado(radicado_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 @app.get("/invalid-radicados/download")
-def download_invalid_radicados_excel(db: Session = Depends(get_db)):
+def download_invalid_radicados_excel(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     items = db.query(InvalidRadicado).order_by(desc(InvalidRadicado.updated_at)).all()
 
     data = [
@@ -2076,6 +2085,7 @@ def list_cases(
 @app.get("/cases/download")
 def download_cases_excel(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     search: Optional[str] = Query(default=None),
     juzgado: Optional[str] = Query(default=None),
     cedula: Optional[str] = Query(default=None),
@@ -2501,11 +2511,11 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
 async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
     """
     Busca un caso por radicado. Primero en BD local, luego en Rama Judicial.
-    Esto alimenta la pÃ¡gina de 'Consultar Caso'.
+    Esto alimenta la p?gina de 'Consultar Caso'.
     """
     r = clean_str(radicado)
     if not r:
-        raise HTTPException(400, "Radicado invÃ¡lido")
+        raise HTTPException(400, "Radicado inv?lido")
 
     # 1. Buscar en BD local
     existing_items = db.query(Case).filter(Case.radicado == r).all()
@@ -2517,33 +2527,33 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
                 local_results.append({
                     "id": c.id,
                     "radicado": c.radicado,
-                    "demandante": c.demandante or "â€”",
-                    "demandado": c.demandado or "â€”",
-                    "juzgado": c.juzgado or "â€”",
+                    "demandante": c.demandante or "?",
+                    "demandado": c.demandado or "?",
+                    "juzgado": c.juzgado or "?",
                     "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
                     "note": "Caso encontrado en el sistema local."
                 })
         
-        # Ordenar local por fecha mÃ¡s reciente
+        # Ordenar local por fecha m?s reciente
         local_results.sort(key=lambda x: x['fecha_radicacion'] or '', reverse=True)
         if local_results:
             return local_results
 
     # 2. Si no existe, buscar en Rama Judicial (Live)
     try:
-        # BÃºsqueda inicial rÃ¡pida (pocos reintentos)
-        # Usamos wait_for para asegurar que no se quede pegado mÃ¡s de 25s
+        # B?squeda inicial r?pida (pocos reintentos)
+        # Usamos wait_for para asegurar que no se quede pegado m?s de 25s
         resp = await asyncio.wait_for(consulta_por_radicado(r), timeout=25.0)
         items = extract_items(resp)
         if not items:
-            raise HTTPException(404, f"No se encontrÃ³ el radicado {r} en la Rama Judicial")
+            raise HTTPException(404, f"No se encontr? el radicado {r} en la Rama Judicial")
 
         async def fetch_process_data(p):
             id_p = p.get("idProceso")
             det = None
             if id_p:
                 try:
-                    # Detalle rÃ¡pido (1 reintento para velocidad)
+                    # Detalle r?pido (1 reintento para velocidad)
                     from .service.rama import _get
                     det = await _get(f"/Proceso/Detalle/{id_p}", retries=1)
                 except:
@@ -2561,30 +2571,30 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
             return {
                 "id": 0, # Virtual
                 "radicado": r,
-                "demandante": dem or "â€”",
-                "demandado": ddo or "â€”",
-                "juzgado": p.get("despacho") or "â€”",
+                "demandante": dem or "?",
+                "demandado": ddo or "?",
+                "juzgado": p.get("despacho") or "?",
                 "id_proceso": id_p,
                 "fecha_radicacion": f_rad,
-                "note": "Caso encontrado en tiempo real (En lÃ­nea)."
+                "note": "Caso encontrado en tiempo real (En l?nea)."
             }
 
         # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
         results = await asyncio.gather(*[fetch_process_data(p) for p in items[:15]])
         
-        # FILTRO DINÃMICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
+        # FILTRO DIN?MICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
         filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
         if not filtered_results:
             filtered_results = results
         
-        # ORDENAMIENTO: Fecha de radicaciÃ³n mÃ¡s reciente primero
-        # La fecha de radicaciÃ³n es la que el usuario prefiere como criterio principal
+        # ORDENAMIENTO: Fecha de radicaci?n m?s reciente primero
+        # La fecha de radicaci?n es la que el usuario prefiere como criterio principal
         sorted_results = sorted(filtered_results, key=lambda x: x.get('fecha_radicacion') or '', reverse=True)
         
         return sorted_results
 
     except asyncio.TimeoutError:
-        raise HTTPException(408, "La Rama Judicial estÃ¡ respondiendo muy lento. Por favor, intenta de nuevo en unos minutos.")
+        raise HTTPException(408, "La Rama Judicial est? respondiendo muy lento. Por favor, intenta de nuevo en unos minutos.")
     except RamaError as e:
         raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
     except Exception as e:
@@ -2638,7 +2648,7 @@ async def events_logic(c: Case, db: Session):
             return {
                 "items": [], 
                 "total": 0, 
-                "error": "ID de Proceso no encontrado. Por favor, ingrÃ©salo manualmente si lo conoces.", 
+                "error": "ID de Proceso no encontrado. Por favor, ingr?salo manualmente si lo conoces.", 
                 "id_proceso": None,
                 "status": "missing_id"
             }
@@ -2653,7 +2663,7 @@ async def events_logic(c: Case, db: Session):
                 "status": "rate_limited"
             }
         except RamaError as e:
-            raise HTTPException(502, f"Error de comunicaciÃ³n con la Rama: {str(e)}")
+            raise HTTPException(502, f"Error de comunicaci?n con la Rama: {str(e)}")
         except RamaError as e:
             raise HTTPException(502, f"Error obteniendo actuaciones: {str(e)}")
 
@@ -3111,12 +3121,12 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 # =========================
 @app.post("/cases/refresh-all")
 async def refresh_all_cases(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Dispara una tarea en segundo plano para recorrer todos los casos vÃ¡lidos."""
+    """Dispara una tarea en segundo plano para recorrer todos los casos v?lidos."""
     if REFRESH_LOCK.locked():
-        return {"ok": False, "message": "Ya existe una actualizaciÃ³n masiva en curso. Por favor, espere a que termine."}
+        return {"ok": False, "message": "Ya existe una actualizaci?n masiva en curso. Por favor, espere a que termine."}
     
     background_tasks.add_task(do_auto_refresh_with_lock)
-    return {"ok": True, "message": "SincronizaciÃ³n masiva iniciada en segundo plano."}
+    return {"ok": True, "message": "Sincronizaci?n masiva iniciada en segundo plano."}
 
 async def do_auto_refresh_with_lock():
     if REFRESH_LOCK.locked():
@@ -3402,6 +3412,26 @@ async def upload_names_search(
 
     return {"job_id": job.id, "status": "pending"}
 
+@app.post("/search/radicados/upload")
+async def upload_radicados_search(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Crear el Job
+    job = SearchJob(job_type="radicado", status="pending")
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    # 2. Leer contenido y lanzar tarea en segundo plano
+    content = await file.read()
+    
+    from .service.bulk_orchestrator import run_radicado_search_job
+    background_tasks.add_task(run_radicado_search_job, job.id, content, lambda: SessionLocal())
+
+    return {"job_id": job.id, "status": "pending"}
+
 @app.get("/search/jobs/{job_id}")
 async def get_search_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
@@ -3495,7 +3525,11 @@ async def import_search_results(
         raise HTTPException(status_code=500, detail=f"Error al importar: {str(e)}")
 
 @app.get("/search/jobs/{job_id}/export")
-async def export_search_results(job_id: int, db: Session = Depends(get_db)):
+async def export_search_results(
+    job_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
     if not job or not job.results_json:
         raise HTTPException(status_code=404, detail="Resultados no encontrados")
@@ -3505,7 +3539,7 @@ async def export_search_results(job_id: int, db: Session = Depends(get_db)):
     flattened = []
     for res in results:
         base = {
-            "NOMBRE BUSCADO": res.get("input_name1", ""),
+            "BUSCADO": res.get("input_name1", ""),
             "CEDULA": res.get("cedula", ""),
             "ABOGADO": res.get("abogado", ""),
             "CANT_ENCONTRADOS": res.get("found_count", 0),
@@ -3625,12 +3659,12 @@ async def import_clickup(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Lanza la migraciÃ³n desde ClickUp en segundo plano."""
+    """Lanza la migraci?n desde ClickUp en segundo plano."""
     from .clickup_sync import migrate_clickup_to_emdecob
     
     # Check admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importaciÃ³n masiva")
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar la importaci?n masiva")
 
     async def _do_import():
         db = SessionLocal()
@@ -3645,7 +3679,7 @@ async def import_clickup(
     
     return {
         "ok": True,
-        "message": "La importaciÃ³n ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
+        "message": "La importaci?n ha comenzado en segundo plano. Esto puede tardar varios minutos dependiendo del volumen de datos."
     }
 
 # =========================
@@ -3696,13 +3730,13 @@ async def get_workspaces(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna la jerarquÃ­a completa de espacios para el usuario."""
+    """Retorna la jerarqu?a completa de espacios para el usuario."""
     if current_user.is_admin:
         workspaces = db.query(Workspace).all()
         
-        # Solo para modo local: si no hay espacios, crear un flujo local mÃ­nimo por defecto
+        # Solo para modo local: si no hay espacios, crear un flujo local m?nimo por defecto
         if not workspaces:
-            print("[PROJECTS] Creando estructura bÃ¡sica de proyectos local...")
+            print("[PROJECTS] Creando estructura b?sica de proyectos local...")
             ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
             db.add(ws)
             db.commit()
@@ -3795,7 +3829,7 @@ async def get_tasks(
         query = query.filter(Task.case_id == case_id)
     
     if radicado:
-        # BÃºsqueda exacta primero, luego parcial
+        # B?squeda exacta primero, luego parcial
         query = query.join(Case, Task.case_id == Case.id, isouter=True)
         query = query.filter(or_(
             Case.radicado == radicado,
@@ -3803,10 +3837,10 @@ async def get_tasks(
             Task.description.contains(radicado)
         ))
     
-    # Nuevo: BÃºsqueda por nombre de las partes (Demandante/Demandado)
+    # Nuevo: B?squeda por nombre de las partes (Demandante/Demandado)
     name_filter = radicado if radicado and not radicado.isdigit() else None
     if name_filter:
-        if not radicado: # Si no join todavÃ­a
+        if not radicado: # Si no join todav?a
              query = query.join(Case, Task.case_id == Case.id, isouter=True)
         query = query.filter(or_(
             Case.demandante.ilike(f"%{name_filter}%"),
@@ -3821,7 +3855,7 @@ async def get_case_tasks_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna las tareas vinculadas a un radicado especÃ­fico."""
+    """Retorna las tareas vinculadas a un radicado espec?fico."""
     tasks = db.query(Task).filter(Task.case_id == case_id).order_by(desc(Task.created_at)).all()
     return tasks
 
@@ -3870,7 +3904,7 @@ async def update_task(
     db.commit()
     return task
 
-    # Endpoint consolidado en la lÃ­nea 3604
+    # Endpoint consolidado en la l?nea 3604
     pass
 
 @app.get("/cases/{id}/tasks")
@@ -3901,12 +3935,12 @@ async def get_advanced_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Obtiene estadÃ­sticas de negocio para las etiquetas superiores."""
+    """Obtiene estad?sticas de negocio para las etiquetas superiores."""
     hoy = today_colombia()
     ayer = hoy - timedelta(days=1)
     
     # 1. Conteo de actuaciones en el mes actual
-    # month_actions: eventos filtrados manualmente si el formato String varÃ­a
+    # month_actions: eventos filtrados manualmente si el formato String var?a
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str).count()
     
@@ -3917,7 +3951,7 @@ async def get_advanced_dashboard_stats(
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
     
-    # 3. Alertas (casos sin leer) calculando la misma lÃ³gica que en list_cases
+    # 3. Alertas (casos sin leer) calculando la misma l?gica que en list_cases
     q_unread = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.current_hash.isnot(None),
@@ -3948,13 +3982,13 @@ async def update_case_lawyer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """ActualizaciÃ³n ultra-rÃ¡pida del abogado para ediciÃ³n en lÃ­nea."""
+    """Actualizaci?n ultra-r?pida del abogado para edici?n en l?nea."""
     cs = db.query(Case).filter(Case.id == case_id).first()
     if not cs:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     
     cs.abogado = data.abogado
-    # Intentar buscar el usuario por nombre para sincronizar user_id automÃ¡ticamente
+    # Intentar buscar el usuario por nombre para sincronizar user_id autom?ticamente
     match_user = db.query(User).filter(User.nombre.ilike(f"%{data.abogado}%")).first()
     if match_user:
         cs.user_id = match_user.id
@@ -3976,7 +4010,7 @@ def verify_cally_key(api_key: str):
             IntegrationConfig.is_active == True
         ).first()
         if not config:
-            raise HTTPException(status_code=401, detail="Clave de API de Cally invÃ¡lida")
+            raise HTTPException(status_code=401, detail="Clave de API de Cally inv?lida")
         return config
     finally:
         db.close()
@@ -3986,7 +4020,7 @@ async def get_integrations_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """(Admin) Obtiene las claves de integraciÃ³n externas."""
+    """(Admin) Obtiene las claves de integraci?n externas."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="No autorizado")
     
@@ -4034,7 +4068,7 @@ async def system_health_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """DiagnÃ³stico senior para detectar bloqueos y estado de base de datos."""
+    """Diagn?stico senior para detectar bloqueos y estado de base de datos."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403)
         
@@ -4042,11 +4076,11 @@ async def system_health_diagnostic(
     task_count = db.query(Task).count()
     id_proceso_count = db.query(Case).filter(Case.id_proceso.isnot(None)).count()
     
-    # Probar conexiÃ³n Rama Judicial (peticiÃ³n mÃ­nima)
+    # Probar conexi?n Rama Judicial (petici?n m?nima)
     rama_status = "OK"
     try:
         from .service.rama import _get
-        await _get("/Procesos/Detalle/1") # ID ficticio pero vÃ¡lido para test
+        await _get("/Procesos/Detalle/1") # ID ficticio pero v?lido para test
     except RamaRateLimitError:
         rama_status = "BLOQUEADO (403)"
     except Exception as e:

@@ -200,3 +200,111 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
         db.commit()
     finally:
         db.close()
+
+async def run_radicado_search_job(job_id: int, file_content: bytes, db_factory):
+    """
+    Orquestador de búsqueda por radicados (23 dígitos) en segundo plano.
+    """
+    db = db_factory()
+    job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
+    if not job:
+        db.close()
+        return
+
+    try:
+        log_job(f"🚀 Iniciando trabajo de radicado {job_id}")
+        job.status = "processing"
+        db.commit()
+
+        # 1. Parsear Excel
+        log_job(f"Reading excel content...")
+        df = pd.read_excel(BytesIO(file_content))
+        # Columnas esperadas: Radicado, Cedula (opcional), Abogado (opcional)
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        
+        total = len(df)
+        job.total_items = total
+        db.commit()
+
+        results = {}
+
+        async def process_row(idx, row_data):
+            try:
+                radicado = str(row_data.get("RADICADO", "")).strip()
+                cedula = str(row_data.get("CEDULA", "")).strip()
+                abogado = str(row_data.get("ABOGADO", "")).strip()
+
+                if not radicado or len(radicado) < 23:
+                    results[idx] = {
+                        "index": idx,
+                        "input_name1": radicado,
+                        "cedula": cedula,
+                        "abogado": abogado,
+                        "found_count": 0,
+                        "selected": None,
+                        "error": "Radicado inválido"
+                    }
+                    return False
+
+                # Consultar en Rama
+                from .rama import consulta_por_radicado
+                res = await asyncio.wait_for(consulta_por_radicado(radicado), timeout=45.0)
+                
+                found_for_row = []
+                if res and res.get("procesos"):
+                    found_for_row = res["procesos"]
+
+                # Si es búsqueda por radicado exacto, usualmente hay 1. Tomamos el más reciente si hay varios.
+                best_radicado = None
+                if found_for_row:
+                    def get_sort_key(p):
+                        f_ult = p.get("fechaUltimaActuacion") or p.get("FechaUltimaActuacion") or ""
+                        f_rad = p.get("fechaRadicacion") or p.get("FechaRadicacion") or ""
+                        return max(f_ult, f_rad)
+                    best_radicado = max(found_for_row, key=get_sort_key)
+
+                results[idx] = {
+                    "index": idx,
+                    "input_name1": radicado,
+                    "cedula": cedula,
+                    "abogado": abogado,
+                    "found_count": len(found_for_row),
+                    "selected": best_radicado,
+                }
+                return True if found_for_row else False
+            except Exception as e:
+                log_job(f"⚠️ [{idx}] Error en radicado: {e}")
+                results[idx] = {"index": idx, "input_name1": "Error", "error": str(e), "found_count": 0, "selected": None}
+                return False
+
+        # --- PROCESAMIENTO POR LOTES ---
+        batch_size = 3
+        for i in range(0, total, batch_size):
+            batch = df.iloc[i : i + batch_size]
+            tasks = []
+            for index, row in batch.iterrows():
+                tasks.append(process_row(index, row))
+            
+            await asyncio.gather(*tasks)
+            
+            processed_so_far = min(i + batch_size, total)
+            job.processed_items = processed_so_far
+            db.commit()
+            
+            log_job(f"📊 Progreso Radicados: {processed_so_far}/{total}")
+            await asyncio.sleep(1.0)
+
+        final_results = [results[i] for i in range(total) if i in results]
+        
+        log_job(f"🏁 Trabajo de radicado {job_id} completado")
+        job.status = "completed"
+        job.results_json = json.dumps(final_results)
+        db.commit()
+
+    except Exception as e:
+        log_job(f"🔥 ERROR CRÍTICO {job_id}: {e}")
+        job.status = "failed"
+        job.error_message = str(e)
+        db.commit()
+    finally:
+        db.close()
