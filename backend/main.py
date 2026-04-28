@@ -1401,6 +1401,23 @@ async def run_migration_task():
         print(f"[MIGRACION] ERROR: {e}")
 
 
+@app.get("/api/migrate/status")
+def get_migration_status(db: Session = Depends(get_db)):
+    """Permite ver el avance de la copia a juricob."""
+    try:
+        case_count = db.query(Case).count()
+        event_count = db.query(CaseEvent).count()
+        task_count = db.query(Task).count()
+        return {
+            "database": "juricob",
+            "cases": case_count,
+            "events": event_count,
+            "tasks": task_count,
+            "status": "COMPLETADA" if event_count >= 20000 else "EN PROCESO"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/")
 def home():
     return {"status": "ok", "app": "EMDECOB Consultas"}
