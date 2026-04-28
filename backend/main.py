@@ -628,6 +628,23 @@ async def lifespan(app: FastAPI):
     run_migrations()
     Base.metadata.create_all(bind=engine)
     _ensure_default_user()
+    
+    # DIAGNOSTICO DE DATOS
+    with SessionLocal() as db:
+        try:
+            total_cases = db.query(Case).count()
+            total_tasks = db.query(Task).count()
+            print(f"[DB] Casos en DB: {total_cases}, Tareas: {total_tasks}")
+            
+            for u in db.query(User).all():
+                c_count = db.query(Case).filter(Case.user_id == u.id).count()
+                print(f"[DB] Usuario '{u.username}' (ID: {u.id}) -> {c_count} casos")
+                
+            orphans = db.query(Case).filter(Case.user_id.is_(None)).count()
+            print(f"[DB] Casos sin dueo (NULL): {orphans}")
+        except Exception as e:
+            print(f"[DB] Error en diagnostico: {e}")
+
     asyncio.create_task(notification_flush_loop())
     print("[EMAIL] Flush loop de notificaciones iniciado")
 
@@ -2025,6 +2042,10 @@ def list_cases(
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
                 q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+            else:
+                # Si no existe jurico_emdecob, mostramos todo para evitar vacios
+                print("[DEBUG] No se encontr? el usuario jurico_emdecob, mostrando todos los casos.")
+                pass
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
