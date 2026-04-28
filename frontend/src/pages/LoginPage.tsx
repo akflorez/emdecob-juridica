@@ -173,6 +173,16 @@ export default function LoginPage() {
                   </div>
                 )}
 
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => toast({ title: "Recuperación de cuenta", description: "Por favor contacte al administrador para restablecer su contraseña." })}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    ¿Olvidó su contraseña?
+                  </button>
+                </div>
+
                 <Button 
                   type="submit" 
                   className="w-full h-11 font-semibold"
@@ -191,19 +201,21 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          <p className="text-center text-sm text-muted-foreground">
-            ¿No tiene una cuenta?{' '}
-            <Link to="/register" className="text-primary font-medium hover:underline">
-              Regístrese aquí
-            </Link>
-          </p>
+          <div className="space-y-4">
+            <p className="text-center text-sm text-muted-foreground">
+              ¿No tiene una cuenta?{' '}
+              <Link to="/register" className="text-primary font-bold hover:underline">
+                Regístrese aquí
+              </Link>
+            </p>
 
-          <p className="text-center text-xs text-muted-foreground mt-4">
-            ¿Problemas para acceder?{' '}
-            <a href="mailto:direccionanalitica@emdecob.com" className="text-primary hover:underline">
-              Contacte al administrador
-            </a>
-          </p>
+            <p className="text-center text-xs text-muted-foreground">
+              ¿Problemas para acceder?{' '}
+              <a href="mailto:direccionanalitica@emdecob.com" className="text-primary hover:underline">
+                Contacte al administrador
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </div>
