@@ -1321,7 +1321,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 # HOME
 # =========================
-@app.post("/api/admin/migrate-to-juricob")
+@app.get("/api/admin/migrate-to-juricob")
 def migrate_data_to_juricob(current_user: User = Depends(get_current_user)):
     if not current_user.is_admin and current_user.username != "akflorez":
         raise HTTPException(403, "No autorizado")
