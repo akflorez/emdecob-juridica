@@ -1332,9 +1332,11 @@ def migrate_data_to_juricob(db: Session = Depends(get_db)):
         
         s_engine = create_engine(s_url)
         d_engine = create_engine(d_url)
+    except Exception as e:
+        return {"ok": False, "error": f"Error configurando motores: {e}"}
     
-    SourceSession = sessionmaker(bind=source_engine)
-    DestSession = sessionmaker(bind=dest_engine)
+    SourceSession = sessionmaker(bind=s_engine)
+    DestSession = sessionmaker(bind=d_engine)
     
     s_db = SourceSession()
     d_db = DestSession()
