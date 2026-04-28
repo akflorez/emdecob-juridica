@@ -3662,8 +3662,8 @@ async def import_clickup(
     """Lanza la migraci?n desde ClickUp en segundo plano."""
     from .clickup_sync import migrate_clickup_to_emdecob
     
-    # Check admin (permitir excepcion para jurico_emdecob)
-    if not current_user.is_admin and current_user.username != 'jurico_emdecob':
+    # Check admin (permitir excepcion para cuentas juridicas)
+    if not current_user.is_admin and 'juri' not in current_user.username.lower() and current_user.id != 2:
         raise HTTPException(status_code=403, detail="No autorizado para realizar importacion masiva")
 
     async def _do_import():
