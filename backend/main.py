@@ -3730,13 +3730,13 @@ async def get_workspaces(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retorna la jerarqu?a completa de espacios para el usuario."""
+    """Retorna la jerarquia completa de espacios para el usuario."""
     if current_user.is_admin:
         workspaces = db.query(Workspace).all()
         
         # Solo para modo local: si no hay espacios, crear un flujo local m?nimo por defecto
         if not workspaces:
-            print("[PROJECTS] Creando estructura b?sica de proyectos local...")
+            print("[PROJECTS] Creando estructura basica de proyectos local...")
             ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
             db.add(ws)
             db.commit()
