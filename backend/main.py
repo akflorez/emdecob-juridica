@@ -2042,6 +2042,23 @@ def list_abogados(db: Session = Depends(get_db)):
 # =========================
 # CASES LIST
 # =========================
+@app.get("/api/cases/id/{case_id}")
+@app.get("/cases/id/{case_id}")
+def get_case_by_id_endpoint(case_id: int, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+    return c
+
+@app.get("/api/cases/by-radicado/{radicado}")
+@app.get("/cases/by-radicado/{radicado}")
+def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
+    r = clean_str(radicado)
+    c = db.query(Case).filter(Case.radicado == r).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+    return [c] # El frontend espera una lista para by-radicado
+
 @app.get("/api/cases")
 @app.get("/cases")
 def list_cases(
@@ -2732,23 +2749,28 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
         traceback.print_exc()
         raise HTTPException(500, f"Error interno buscando radicado: {str(e)}")
 
-@app.get("/api/cases/{radicado_or_id}/events")
-@app.get("/cases/{radicado_or_id}/events")
-async def get_events_unified(radicado_or_id: str, db: Session = Depends(get_db)):
-    """Ruta unificada que el frontend espera."""
-    # Intentar como ID primero
-    c = None
-    if radicado_or_id.isdigit():
-        c = db.query(Case).filter(Case.id == int(radicado_or_id)).first()
-    
-    if not c:
-        # Intentar como radicado
-        r = clean_str(radicado_or_id)
-        c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
-    
+@app.get("/api/cases/id/{case_id}/events")
+@app.get("/cases/id/{case_id}/events")
+async def get_events_by_id(case_id: int, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
-        
+    return await events_logic(c, db)
+
+@app.get("/api/cases/by-radicado/{radicado}/events")
+@app.get("/cases/by-radicado/{radicado}/events")
+@app.get("/api/cases/{radicado}/events")
+@app.get("/cases/{radicado}/events")
+async def get_events_by_radicado_unified(radicado: str, db: Session = Depends(get_db)):
+    r = clean_str(radicado)
+    # Si es un numero corto, intentarlo como ID por si acaso el frontend se equivoca
+    if r.isdigit() and len(r) < 10:
+        c = db.query(Case).filter(Case.id == int(r)).first()
+        if c: return await events_logic(c, db)
+    
+    c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
     return await events_logic(c, db)
 
 async def events_logic(c: Case, db: Session):
@@ -3934,6 +3956,12 @@ async def create_list(
     db.commit()
     db.refresh(l)
     return l
+
+@app.get("/api/cases/id/{case_id}/tasks")
+@app.get("/cases/id/{case_id}/tasks")
+async def get_tasks_by_case(case_id: int, db: Session = Depends(get_db)):
+    tasks = db.query(Task).filter(Task.case_id == case_id).all()
+    return tasks
 
 @app.get("/api/projects/tasks")
 @app.get("/projects/tasks")
