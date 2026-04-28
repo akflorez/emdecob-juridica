@@ -1321,6 +1321,28 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 # HOME
 # =========================
+@app.get("/api/debug/db-stats")
+def get_db_stats_diagnostic(db: Session = Depends(get_db)):
+    try:
+        case_count = db.query(Case).count()
+        task_count = db.query(Task).count()
+        user_count = db.query(User).count()
+        users = [{"id": u.id, "username": u.username} for u in db.query(User).all()]
+        
+        return {
+            "status": "connected",
+            "database": "juricob",
+            "counts": {
+                "cases": case_count,
+                "tasks": task_count,
+                "users": user_count
+            },
+            "users_list": users,
+            "engine": str(engine.url.render_as_string(hide_password=True))
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/")
 def home():
     return {"status": "ok", "app": "EMDECOB Consultas"}
