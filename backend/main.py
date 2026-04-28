@@ -18,7 +18,18 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine, or_, desc, and_, case as sql_case, func
-from backend.db import engine, SessionLocal, Base
+
+# IMPORTACION ADAPTATIVA (Expert Mode)
+try:
+    from backend.db import engine, SessionLocal, Base
+except ImportError:
+    try:
+        from .db import engine, SessionLocal, Base
+    except ImportError:
+        import db
+        engine = db.engine
+        SessionLocal = db.SessionLocal
+        Base = db.Base
 
 def get_db():
     db = SessionLocal()
