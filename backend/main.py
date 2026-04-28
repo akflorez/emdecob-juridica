@@ -1357,10 +1357,17 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_invalidos = db.query(InvalidRadicado)
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
-    # SEGURIDAD TEMPORALMENTE DESACTIVADA PARA RECUPERAR VISIBILIDAD
-    # if not current_user.is_admin:
-    #     ... lógica de filtros comentada ...
-    pass
+    if not current_user.is_admin:
+        if current_user.username == "jurico_emdecob":
+            q_validos = q_validos.filter(Case.user_id == current_user.id)
+            q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
+            q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+        else:
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+                q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
+                q_pendientes = q_pendientes.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1383,10 +1390,15 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         Case.ultima_actuacion == hoy,
     )
 
-    # SEGURIDAD TEMPORALMENTE DESACTIVADA
-    # if not current_user.is_admin:
-    #     ...
-    pass
+    if not current_user.is_admin:
+        if current_user.username == "jurico_emdecob":
+            q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
+            q_hoy = q_hoy.filter(Case.user_id == current_user.id)
+        else:
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+                q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -2042,10 +2054,14 @@ def list_cases(
 ):
     q = db.query(Case)
 
-    # SEGURIDAD TEMPORALMENTE DESACTIVADA
-    # if not current_user.is_admin:
-    #     ...
-    pass
+    # Multi-tenancy filter
+    if not current_user.is_admin:
+        if current_user.username == "jurico_emdecob":
+            q = q.filter(Case.user_id == current_user.id)
+        else:
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2708,33 +2724,23 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
         traceback.print_exc()
         raise HTTPException(500, f"Error interno buscando radicado: {str(e)}")
 
-@app.get("/cases/id/{case_id}/events")
-async def get_events_by_case_id(case_id: int, db: Session = Depends(get_db)):
-    """
-    Obtiene las actuaciones de un caso especfico usando su ID de base de datos.
-    Esto asegura que traemos el id_proceso correcto si hay mltiples radicados iguales.
-    """
-    c = db.query(Case).filter(Case.id == case_id).first()
+@app.get("/cases/{radicado_or_id}/events")
+async def get_events_unified(radicado_or_id: str, db: Session = Depends(get_db)):
+    """Ruta unificada que el frontend espera."""
+    # Intentar como ID primero
+    c = None
+    if radicado_or_id.isdigit():
+        c = db.query(Case).filter(Case.id == int(radicado_or_id)).first()
+    
+    if not c:
+        # Intentar como radicado
+        r = clean_str(radicado_or_id)
+        c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
+    
     if not c:
         raise HTTPException(404, "Caso no encontrado")
         
     return await events_logic(c, db)
-
-@app.get("/cases/by-radicado/{radicado}/events")
-async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
-    r = clean_str(radicado)
-    if not r:
-        raise HTTPException(400, "Radicado requerido")
-
-    # Si hay mltiples con este radicado, tomamos el ms reciente.
-    c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
-    if not c:
-        c = Case(radicado=r)
-        db.add(c)
-        db.flush()
-
-    return await events_logic(c, db)
-
 
 async def events_logic(c: Case, db: Session):
     """
@@ -2775,7 +2781,7 @@ async def events_logic(c: Case, db: Session):
                 "con_documentos": e.con_documentos,
             })
             
-        return {"items": result_items, "total": len(result_items), "cached": True}
+        return result_items
 
     except Exception as e:
         import traceback
@@ -3932,10 +3938,25 @@ async def get_tasks(
 ):
     query = db.query(Task)
     
-    # SEGURIDAD TEMPORALMENTE DESACTIVADA
-    # if not current_user.is_admin:
-    #     ...
-    pass
+    # Multi-tenancy filter
+    if not current_user.is_admin:
+        if current_user.username == "jurico_emdecob":
+            # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
+            query = query.join(Case, Task.case_id == Case.id, isouter=True)
+            query = query.filter(or_(
+                Task.assignee_id == current_user.id,
+                Case.user_id == current_user.id
+            ))
+        else:
+            # Rol compartido: No ve lo de jurico_emdecob
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                query = query.join(Case, Task.case_id == Case.id, isouter=True)
+                query = query.filter(or_(
+                    and_(Task.assignee_id != emdecob_user.id, Task.assignee_id.isnot(None)),
+                    and_(Case.user_id != emdecob_user.id, Case.user_id.isnot(None)),
+                    and_(Task.assignee_id.is_(None), Case.user_id.is_(None))
+                ))
 
     if list_id:
         query = query.filter(Task.list_id == list_id)
