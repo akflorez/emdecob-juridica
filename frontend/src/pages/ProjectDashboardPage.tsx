@@ -143,7 +143,7 @@ export default function ProjectDashboardPage() {
 
     // Filtro de fechas
     if (!dateRange.start && !dateRange.end) return true;
-    if (!t.due_date) return false;
+    if (!t.due_date) return true; // Keep dateless tasks so they show up
     const d = new Date(t.due_date);
     if (dateRange.start && d < new Date(dateRange.start)) return false;
     if (dateRange.end && d > new Date(dateRange.end)) return false;
@@ -160,13 +160,16 @@ export default function ProjectDashboardPage() {
     return acc;
   }, {} as Record<number, TaskType[]>);
 
-  const calendarEvents = filteredTasks.filter(t => t.due_date).map(t => ({
-    id: t.id,
-    title: t.title,
-    start: new Date(t.due_date!),
-    end: new Date(t.due_date!),
-    resource: t,
-  }));
+  const calendarEvents = filteredTasks.map(t => {
+    const d = t.due_date ? new Date(t.due_date) : new Date();
+    return {
+      id: t.id,
+      title: t.title + (!t.due_date ? ' (Sin Fecha)' : ''),
+      start: d,
+      end: d,
+      resource: t,
+    };
+  });
 
   return (
     <div className="flex flex-col h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative overflow-hidden">

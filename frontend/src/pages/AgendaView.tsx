@@ -36,14 +36,17 @@ export default function AgendaView() {
     }
   };
 
-  const events = tasks.filter(t => t.due_date).map(t => ({
-    id: t.id,
-    title: t.title,
-    start: new Date(t.due_date!),
-    end: new Date(t.due_date!),
-    resource: t.priority,
-    task: t
-  }));
+  const events = tasks.map(t => {
+    const d = t.due_date ? new Date(t.due_date) : new Date();
+    return {
+      id: t.id,
+      title: t.title + (!t.due_date ? ' (Sin Fecha)' : ''),
+      start: d,
+      end: d,
+      resource: t.priority,
+      task: t
+    };
+  });
 
   const todayTasks = tasks.filter(t => {
     if (!t.due_date) return false;
@@ -94,7 +97,7 @@ export default function AgendaView() {
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold px-2">Próximos Vencimientos</h3>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
-                    {tasks.filter(t => t.due_date).slice(0, 10).map((t) => (
+                    {tasks.slice(0, 10).map((t) => (
                         <div key={t.id} className="p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors text-xs">
                             <div className="flex justify-between items-start mb-1">
                                 <span className="font-bold truncate max-w-[150px]">{t.title}</span>
@@ -102,10 +105,10 @@ export default function AgendaView() {
                                   {t.priority || 'Normal'}
                                 </Badge>
                             </div>
-                            <p className="text-muted-foreground truncate">{new Date(t.due_date!).toLocaleDateString('es-CO')}</p>
+                            <p className="text-muted-foreground truncate">{t.due_date ? new Date(t.due_date).toLocaleDateString('es-CO') : 'Programado para Hoy'}</p>
                         </div>
                     ))}
-                    {tasks.filter(t => t.due_date).length === 0 && (
+                    {tasks.length === 0 && (
                         <p className="text-xs text-muted-foreground text-center py-4">No hay tareas programadas.</p>
                     )}
                 </div>
