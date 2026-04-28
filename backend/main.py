@@ -1334,9 +1334,14 @@ def get_db_stats_diagnostic(db: Session = Depends(get_db)):
         user_count = db.query(User).count()
         users = [{"id": u.id, "username": u.username} for u in db.query(User).all()]
         
+        db_name = os.getenv("DB_NAME", "juricob")
+        # Forzamos juricob si estamos en produccion para evitar confusiones
+        if os.getenv("NODE_ENV") == "production" or True:
+            db_name = "juricob"
+
         return {
             "status": "connected",
-            "database": "juricob",
+            "database": db_name,
             "counts": {
                 "cases": case_count,
                 "tasks": task_count,
@@ -2794,10 +2799,14 @@ async def events_logic(c: Case, db: Session):
             needs_refresh = True
             
         if needs_refresh:
-            print(f"[SYNC] Disparando actualizacion en segundo plano para {radicado}")
-            # Usamos background_tasks de FastAPI si estuvieramos en el endpoint, 
-            # pero aqui podemos usar asyncio.create_task para no bloquear el retorno.
-            asyncio.create_task(sync_case_events_background(c.id))
+            print(f"[SYNC] Disparando actualizacion para {radicado}")
+            # Si no hay eventos, lo hacemos Sincrono la primera vez para que el usuario vea algo
+            if not db_events:
+                await sync_case_events_background(c.id)
+                # Volver a consultar
+                db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.created_at)).all()
+            else:
+                asyncio.create_task(sync_case_events_background(c.id))
 
         # 3. Formatear para el frontend
         result_items = []

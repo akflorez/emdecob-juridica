@@ -12,7 +12,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     db_user = os.getenv("DB_USER", "emdecob")
     db_pass = os.getenv("DB_PASSWORD", "emdecob2026")
-    db_name = os.getenv("DB_NAME", "juricob")
+    db_name = "juricob" # FORZADO: Siempre juricob
     db_host = os.getenv("DB_HOST", "db")
     db_port = os.getenv("DB_PORT", "5432")
     
