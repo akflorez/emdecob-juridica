@@ -830,7 +830,7 @@ export type Task = {
 };
 
 export function getWorkspaces() {
-  return apiFetch<Workspace[]>("/projects/workspaces");
+  return apiFetch<Workspace[]>("/api/projects/workspaces");
 }
 
 export function getTasks(params: { list_id?: number; status?: string; assignee_id?: number; radicado?: string }) {
@@ -839,7 +839,7 @@ export function getTasks(params: { list_id?: number; status?: string; assignee_i
   if (params.status) qs.set("status", params.status);
   if (params.assignee_id) qs.set("assignee_id", String(params.assignee_id));
   if (params.radicado) qs.set("radicado", params.radicado);
-  return apiFetch<Task[]>(`/projects/tasks?${qs.toString()}`);
+  return apiFetch<Task[]>(`/api/projects/tasks?${qs.toString()}`);
 }
 
 export function getCaseTasks(caseId: number) {
@@ -847,26 +847,26 @@ export function getCaseTasks(caseId: number) {
 }
 
 export function createWorkspace(data: { name: string; description?: string; visibility?: string }) {
-  return apiFetch<Workspace>("/projects/workspaces", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<Workspace>("/api/projects/workspaces", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createFolder(data: { name: string; workspace_id: number }) {
-  return apiFetch<WorkspaceFolder>("/projects/folders", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<WorkspaceFolder>("/api/projects/folders", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createList(data: { name: string; folder_id?: number; workspace_id: number }) {
-  return apiFetch<WorkspaceList>("/projects/lists", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<WorkspaceList>("/api/projects/lists", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createTask(data: Partial<Task>) {
-  return apiFetch<Task>("/projects/tasks", {
+  return apiFetch<Task>("/api/projects/tasks", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function updateTask(taskId: number, data: Partial<Task>) {
-  return apiFetch<Task>(`/projects/tasks/${taskId}`, {
+  return apiFetch<Task>(`/api/projects/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
