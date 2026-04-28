@@ -1349,8 +1349,12 @@ def trigger_real_migration():
     return {"ok": True, "message": "MIGRACION INICIADA. Tus 21,000 actuaciones se estan moviendo a juricob. Revisa el Dashboard en 5 minutos."}
 
 async def run_migration_task():
-    print("[MIGRACION] Iniciando copia masiva a juricob...")
+    print("[MIGRACION] Iniciando proceso (Creacion de DB + Copia)...")
     try:
+        from backend.create_db import create_database
+        create_database()
+        
+        print("[MIGRACION] Iniciando copia masiva a juricob...")
         # Extraemos la URL completa
         base_url = engine.url.render_as_string(hide_password=False)
         s_url = base_url.replace("juricob", "emdecob_consultas")
