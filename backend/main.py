@@ -1330,13 +1330,10 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 # HOME
 # =========================
-@app.get("/migrate")
 @app.get("/api/migrate")
-@app.get("/api/admin/migrate-to-juricob")
-def migrate_data_to_juricob(db: Session = Depends(get_db)):
-    # Lanzamos en segundo plano para evitar 500 por timeout
-    asyncio.create_task(run_migration_task())
-    return {"ok": True, "message": "Migracion iniciada en segundo plano. Los datos estaran listos en unos minutos."}
+@app.get("/migrate")
+def test_migrate_endpoint():
+    return {"message": "ENDPOINT DETECTADO - EL SERVIDOR ESTA VIVO"}
 
 async def run_migration_task():
     print("[MIGRACION] Iniciando copia masiva a juricob...")
