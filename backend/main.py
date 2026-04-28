@@ -1685,7 +1685,8 @@ async def run_auto_refresh_now():
 # NOTIFICATIONS CONFIG
 # =========================
 @app.get("/config/notifications")
-def get_notification_config(db: Session = Depends(get_db)):
+def get_notification_config(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Los usuarios registrados pueden ver la config b?sica para que el dashboard no falle
     config = db.query(NotificationConfig).first()
 
     if not config:
@@ -1707,7 +1708,9 @@ def get_notification_config(db: Session = Depends(get_db)):
     }
 
 @app.put("/config/notifications")
-def update_notification_config(data: NotificationConfigUpdate, db: Session = Depends(get_db)):
+def update_notification_config(data: NotificationConfigUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Solo administradores pueden cambiar la configuraci?n")
     config = db.query(NotificationConfig).first()
     if not config:
         config = NotificationConfig()
@@ -2131,7 +2134,12 @@ def list_cases(
     )
 
     if not current_user.is_admin:
-        q_unread = q_unread.filter(Case.user_id == current_user.id)
+        if current_user.username == "jurico_emdecob":
+            q_unread = q_unread.filter(Case.user_id == current_user.id)
+        else:
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q_unread = q_unread.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
     
     unread_count = q_unread.count()
 
