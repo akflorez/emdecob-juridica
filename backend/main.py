@@ -1357,21 +1357,10 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_invalidos = db.query(InvalidRadicado)
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
-    if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
-            # Aislamiento total para jurico_emdecob
-            q_validos = q_validos.filter(Case.user_id == current_user.id)
-            q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
-            q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
-        else:
-            # Rol compartido (FNA y nuevos usuarios): Ven todo lo que NO sea de jurico_emdecob
-            # Primero buscamos el ID de jurico_emdecob para excluirlo
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
-            if emdecob_user:
-                # Incluir lo que no es de emdecob Y lo que no tiene dueo (NULL)
-                q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
-                q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
-                q_pendientes = q_pendientes.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+    # SEGURIDAD TEMPORALMENTE DESACTIVADA PARA RECUPERAR VISIBILIDAD
+    # if not current_user.is_admin:
+    #     ... lógica de filtros comentada ...
+    pass
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1394,15 +1383,10 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         Case.ultima_actuacion == hoy,
     )
 
-    if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
-            q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
-            q_hoy = q_hoy.filter(Case.user_id == current_user.id)
-        else:
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
-            if emdecob_user:
-                q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
-                q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+    # SEGURIDAD TEMPORALMENTE DESACTIVADA
+    # if not current_user.is_admin:
+    #     ...
+    pass
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -2058,19 +2042,10 @@ def list_cases(
 ):
     q = db.query(Case)
 
-    # Multi-tenancy filter
-    if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
-            q = q.filter(Case.user_id == current_user.id)
-        else:
-            # Rol compartido: No ve lo de jurico_emdecob
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
-            if emdecob_user:
-                q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
-            else:
-                # Si no existe jurico_emdecob, mostramos todo para evitar vacios
-                print("[DEBUG] No se encontr? el usuario jurico_emdecob, mostrando todos los casos.")
-                pass
+    # SEGURIDAD TEMPORALMENTE DESACTIVADA
+    # if not current_user.is_admin:
+    #     ...
+    pass
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -3957,25 +3932,10 @@ async def get_tasks(
 ):
     query = db.query(Task)
     
-    # Multi-tenancy filter
-    if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
-            # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
-            query = query.join(Case, Task.case_id == Case.id, isouter=True)
-            query = query.filter(or_(
-                Task.assignee_id == current_user.id,
-                Case.user_id == current_user.id
-            ))
-        else:
-            # Rol compartido: No ve lo de jurico_emdecob
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
-            if emdecob_user:
-                query = query.join(Case, Task.case_id == Case.id, isouter=True)
-                query = query.filter(or_(
-                    and_(Task.assignee_id != emdecob_user.id, Task.assignee_id.isnot(None)),
-                    and_(Case.user_id != emdecob_user.id, Case.user_id.isnot(None)),
-                    and_(Task.assignee_id.is_(None), Case.user_id.is_(None))
-                ))
+    # SEGURIDAD TEMPORALMENTE DESACTIVADA
+    # if not current_user.is_admin:
+    #     ...
+    pass
 
     if list_id:
         query = query.filter(Task.list_id == list_id)
