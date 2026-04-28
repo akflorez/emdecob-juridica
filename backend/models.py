@@ -12,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from .db import Base
+from backend.db import Base
 
 
 class Case(Base):
