@@ -69,12 +69,12 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-from .models import (
+from backend.models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
     ProjectList, Task, TaskComment, TaskAttachment, IntegrationConfig
 )
-from .service.rama import (
+from backend.service.rama import (
     consulta_por_radicado,
     detalle_proceso,
     actuaciones_proceso,
@@ -83,10 +83,10 @@ from .service.rama import (
     RamaError,
     RamaRateLimitError,
 )
-from .apply_robust_migrations import run_migrations
-from .service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
-from .service.bulk_orchestrator import run_name_search_job, log_job
-from .clickup_sync import migrate_clickup_to_emdecob
+from backend.apply_robust_migrations import run_migrations
+from backend.service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
+from backend.service.bulk_orchestrator import run_name_search_job, log_job
+from backend.clickup_sync import migrate_clickup_to_emdecob
 
 
 # =========================
