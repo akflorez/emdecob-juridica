@@ -107,6 +107,14 @@ def run_migrations():
             if 'telefono' not in columns_users:
                 print("+ [MIGRATION] users: agregando 'telefono'...")
                 conn.execute(text("ALTER TABLE users ADD COLUMN telefono VARCHAR(50)"))
+            
+            if 'email' not in columns_users:
+                print("+ [MIGRATION] users: agregando 'email'...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+                try:
+                    conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email)"))
+                except:
+                    pass
 
     print("[MIGRATION] Sincronizacion finalizada satisfactoriamente.")
 
