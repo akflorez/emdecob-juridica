@@ -1357,6 +1357,7 @@ def home():
 # =========================
 # STATS
 # =========================
+@app.get("/api/stats")
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     q_validos = db.query(Case).filter(Case.juzgado.isnot(None))
@@ -2041,6 +2042,7 @@ def list_abogados(db: Session = Depends(get_db)):
 # =========================
 # CASES LIST
 # =========================
+@app.get("/api/cases")
 @app.get("/cases")
 def list_cases(
     db: Session = Depends(get_db),
@@ -2730,6 +2732,7 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
         traceback.print_exc()
         raise HTTPException(500, f"Error interno buscando radicado: {str(e)}")
 
+@app.get("/api/cases/{radicado_or_id}/events")
 @app.get("/cases/{radicado_or_id}/events")
 async def get_events_unified(radicado_or_id: str, db: Session = Depends(get_db)):
     """Ruta unificada que el frontend espera."""
@@ -3932,6 +3935,7 @@ async def create_list(
     db.refresh(l)
     return l
 
+@app.get("/api/projects/tasks")
 @app.get("/projects/tasks")
 async def get_tasks(
     list_id: Optional[int] = None,
