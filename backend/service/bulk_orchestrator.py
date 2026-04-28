@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import traceback
 
-from .rama import consulta_por_nombre, RamaError
-from ..models import SearchJob, Case, CaseEvent
+from backend.service.rama import consulta_por_nombre, RamaError
+from backend.models import SearchJob, Case, CaseEvent
 
 def log_job(msg):
     with open("search_job.log", "a", encoding="utf-8") as f:
@@ -247,7 +247,7 @@ async def run_radicado_search_job(job_id: int, file_content: bytes, db_factory):
                     return False
 
                 # Consultar en Rama
-                from .rama import consulta_por_radicado
+                from backend.service.rama import consulta_por_radicado
                 res = await asyncio.wait_for(consulta_por_radicado(radicado), timeout=45.0)
                 
                 found_for_row = []

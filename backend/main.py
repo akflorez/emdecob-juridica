@@ -2666,7 +2666,7 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
 async def trigger_publications_sync(case: Case, item_act: dict, db_session: Session):
     """Tarea en segundo plano para sincronizar con el portal de Publicaciones."""
     try:
-        from .models import CasePublication
+        from backend.models import CasePublication
         radicado = case.radicado
         fecha_act = item_act.get("event_date") # "YYYY-MM-DD"
         
@@ -2738,7 +2738,7 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
             if id_p:
                 try:
                     # Detalle r?pido (1 reintento para velocidad)
-                    from .service.rama import _get
+                    from backend.service.rama import _get
                     det = await _get(f"/Proceso/Detalle/{id_p}", retries=1)
                 except:
                     pass
@@ -3617,7 +3617,7 @@ async def upload_radicados_search(
     # 2. Leer contenido y lanzar tarea en segundo plano
     content = await file.read()
     
-    from .service.bulk_orchestrator import run_radicado_search_job
+    from backend.service.bulk_orchestrator import run_radicado_search_job
     background_tasks.add_task(run_radicado_search_job, job.id, content, lambda: SessionLocal())
 
     return {"job_id": job.id, "status": "pending"}
@@ -3850,7 +3850,7 @@ async def import_clickup(
     current_user: User = Depends(get_current_user)
 ):
     """Lanza la migraci?n desde ClickUp en segundo plano."""
-    from .clickup_sync import migrate_clickup_to_emdecob
+    from backend.clickup_sync import migrate_clickup_to_emdecob
     
     # Check admin (permitir excepcion para cuentas juridicas)
     if not current_user.is_admin and 'juri' not in current_user.username.lower() and current_user.id != 2:
@@ -4306,7 +4306,7 @@ async def system_health_diagnostic(
     # Probar conexi?n Rama Judicial (petici?n m?nima)
     rama_status = "OK"
     try:
-        from .service.rama import _get
+        from backend.service.rama import _get
         await _get("/Procesos/Detalle/1") # ID ficticio pero v?lido para test
     except RamaRateLimitError:
         rama_status = "BLOQUEADO (403)"
