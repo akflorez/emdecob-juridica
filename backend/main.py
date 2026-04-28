@@ -1322,7 +1322,11 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # HOME
 # =========================
 @app.get("/api/debug/db-stats")
+@app.get("/api/debug/db-stats/")
+@app.get("/debug/db-stats")
+@app.get("/debug/db-stats/")
 def get_db_stats_diagnostic(db: Session = Depends(get_db)):
+    # ... misma logica ...
     try:
         case_count = db.query(Case).count()
         task_count = db.query(Task).count()
