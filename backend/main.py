@@ -16,8 +16,9 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine, or_, desc, and_, case as sql_case, func
+from db import engine, get_db
 from pydantic import BaseModel
 from io import BytesIO
 import pandas as pd
