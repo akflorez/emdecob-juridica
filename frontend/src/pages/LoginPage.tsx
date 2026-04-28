@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -191,7 +191,14 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-sm text-muted-foreground">
+            ¿No tiene una cuenta?{' '}
+            <Link to="/register" className="text-primary font-medium hover:underline">
+              Regístrese aquí
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-muted-foreground mt-4">
             ¿Problemas para acceder?{' '}
             <a href="mailto:direccionanalitica@emdecob.com" className="text-primary hover:underline">
               Contacte al administrador

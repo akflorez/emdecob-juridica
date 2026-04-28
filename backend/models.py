@@ -138,6 +138,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, index=True, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=True) # Permitir nulo inicialmente para migracion
     hashed_password = Column(String(255), nullable=False)
     nombre = Column(String(255), nullable=True)       # nombre visible
     telefono = Column(String(50), nullable=True)     # contacto para reportes

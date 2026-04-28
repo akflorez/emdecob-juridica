@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 import AccesoDenegadoPage from "./pages/AccesoDenegadoPage";
 import ImportarPage from "./pages/ImportarPage";
 import ConsultarPage from "./pages/ConsultarPage";
@@ -33,6 +34,7 @@ const App = () => (
             <Routes>
               {/* Rutas públicas */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
               
               {/* Rutas protegidas */}

@@ -40,9 +40,24 @@ from contextlib import asynccontextmanager
 class UserOut(BaseModel):
     id: int
     username: str
+    email: Optional[str] = None
     nombre: Optional[str] = None
     is_active: bool
     is_admin: bool
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    nombre: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 from .db import SessionLocal, engine, Base
 from .models import (
@@ -622,7 +637,7 @@ async def lifespan(app: FastAPI):
     print(f"[RELOJ] Auto-refresh iniciado (cada {auto_refresh_stats['interval_minutes']} minutos)")
 
     asyncio.create_task(_pending_validation_loop())
-    print("[SYNC] Validacin continua de pendientes iniciada")
+    print("[SYNC] Validacion continua de pendientes iniciada")
 
     yield
 
@@ -842,6 +857,7 @@ def _ensure_default_user():
     try:
         u1 = db.query(User).filter(User.username == "fna_juridica").first()
         if not u1:
+            print("[DB] Creando usuario fna_juridica por defecto...")
             db.add(User(
                 username="fna_juridica",
                 hashed_password=_hash_password("juridicaEmdecob2026$"),
@@ -849,15 +865,11 @@ def _ensure_default_user():
                 is_active=True,
                 is_admin=False,
             ))
-        else:
-            # Force update password to current hashing scheme
-            u1.hashed_password = _hash_password("juridicaEmdecob2026$")
-            u1.nombre = "FNA Juridica"
+            db.commit()
         
-        db.commit()
-
         u2 = db.query(User).filter(User.username == "jurico_emdecob").first()
         if not u2:
+            print("[DB] Creando usuario jurico_emdecob por defecto...")
             db.add(User(
                 username="jurico_emdecob",
                 hashed_password=_hash_password("emdecob2027$"),
@@ -865,12 +877,7 @@ def _ensure_default_user():
                 is_active=True,
                 is_admin=False,
             ))
-        else:
-            # Force update password to current hashing scheme
-            u2.hashed_password = _hash_password("emdecob2027$")
-            u2.nombre = "Juridico Emdecob"
-        
-        db.commit()
+            db.commit()
 
         # Automate assignment of orphan cases to fna_juridica
         fna_user = db.query(User).filter(User.username == "fna_juridica").first()
@@ -1312,9 +1319,19 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
     if not current_user.is_admin:
-        q_validos = q_validos.filter(Case.user_id == current_user.id)
-        q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
-        q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+        if current_user.username == "jurico_emdecob":
+            # Aislamiento total para jurico_emdecob
+            q_validos = q_validos.filter(Case.user_id == current_user.id)
+            q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
+            q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+        else:
+            # Rol compartido (FNA y nuevos usuarios): Ven todo lo que NO sea de jurico_emdecob
+            # Primero buscamos el ID de jurico_emdecob para excluirlo
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q_validos = q_validos.filter(Case.user_id != emdecob_user.id)
+                q_invalidos = q_invalidos.filter(InvalidRadicado.user_id != emdecob_user.id)
+                q_pendientes = q_pendientes.filter(Case.user_id != emdecob_user.id)
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1338,8 +1355,14 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
     if not current_user.is_admin:
-        q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
-        q_hoy = q_hoy.filter(Case.user_id == current_user.id)
+        if current_user.username == "jurico_emdecob":
+            q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
+            q_hoy = q_hoy.filter(Case.user_id == current_user.id)
+        else:
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q_no_leidos = q_no_leidos.filter(Case.user_id != emdecob_user.id)
+                q_hoy = q_hoy.filter(Case.user_id != emdecob_user.id)
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -1422,6 +1445,46 @@ def login(data: LoginRequest):
 @app.post("/auth/logout")
 def logout():
     return {"ok": True, "message": "Sesin cerrada"}
+
+@app.post("/auth/register")
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    # 1. Verificar si ya existe
+    existing = db.query(User).filter(
+        or_(User.username == data.username, User.email == data.email)
+    ).first()
+    if existing:
+        raise HTTPException(400, "El nombre de usuario o correo ya estan registrados")
+
+    # 2. Crear usuario
+    new_user = User(
+        username=data.username,
+        email=data.email,
+        nombre=data.nombre,
+        hashed_password=_hash_password(data.password),
+        is_active=True,
+        is_admin=False
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {"ok": True, "message": "Usuario registrado exitosamente", "user_id": new_user.id}
+
+@app.post("/auth/change-password")
+def change_password(
+    data: ChangePasswordRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Verificar password actual
+    if not _verify_password(data.old_password, current_user.hashed_password):
+        raise HTTPException(401, "La contraseña actual es incorrecta")
+
+    # 2. Actualizar
+    current_user.hashed_password = _hash_password(data.new_password)
+    db.commit()
+
+    return {"ok": True, "message": "Contraseña actualizada correctamente"}
 
 
 @app.get("/auth/me")
@@ -1954,7 +2017,13 @@ def list_cases(
 
     # Multi-tenancy filter
     if not current_user.is_admin:
-        q = q.filter(Case.user_id == current_user.id)
+        if current_user.username == "jurico_emdecob":
+            q = q.filter(Case.user_id == current_user.id)
+        else:
+            # Rol compartido: No ve lo de jurico_emdecob
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                q = q.filter(Case.user_id != emdecob_user.id)
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2631,98 +2700,104 @@ async def get_events_by_radicado(radicado: str, db: Session = Depends(get_db)):
 
 
 async def events_logic(c: Case, db: Session):
+    """
+    LOGICA OPTIMIZADA: 
+    1. Retorna datos de la BD local inmediatamente (Ultra-rapido).
+    2. Si los datos son viejos (>12h) o no hay, dispara sync en segundo plano.
+    """
     try:
         radicado = c.radicado
-        id_proceso = c.id_proceso
         
-        # Si no tiene id_proceso, intentamos obtenerlo de la Rama
-        if not id_proceso:
-            try:
-                id_proceso = await obtener_id_proceso(radicado)
-                if id_proceso:
-                    c.id_proceso = str(id_proceso)
-                    db.commit()
-            except Exception:
-                id_proceso = c.id_proceso
-        if not id_proceso:
-            return {
-                "items": [], 
-                "total": 0, 
-                "error": "ID de Proceso no encontrado. Por favor, ingr?salo manualmente si lo conoces.", 
-                "id_proceso": None,
-                "status": "missing_id"
-            }
+        # 1. Obtener datos locales actuales
+        db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.created_at)).all()
+        
+        # 2. Decidir si necesitamos refrescar (en segundo plano)
+        # Si no hay eventos o el ultimo check fue hace mas de 12 horas
+        needs_refresh = False
+        if not db_events:
+            needs_refresh = True
+        elif not c.last_check_at or (now_colombia() - c.last_check_at).total_seconds() > 43200:
+            needs_refresh = True
+            
+        if needs_refresh:
+            print(f"[SYNC] Disparando actualizacion en segundo plano para {radicado}")
+            # Usamos background_tasks de FastAPI si estuvieramos en el endpoint, 
+            # pero aqui podemos usar asyncio.create_task para no bloquear el retorno.
+            asyncio.create_task(sync_case_events_background(c.id))
 
-        try:
-            acts_resp = await actuaciones_proceso(int(id_proceso))
-        except RamaRateLimitError as e:
-            return {
-                "items": [],
-                "total": 0,
-                "error": "BLOQUEO TEMPORAL (403/429): La Rama Judicial ha limitado nuestra IP. Reintenta en 15-30 minutos.",
-                "status": "rate_limited"
-            }
-        except RamaError as e:
-            raise HTTPException(502, f"Error de comunicaci?n con la Rama: {str(e)}")
-        except RamaError as e:
-            raise HTTPException(502, f"Error obteniendo actuaciones: {str(e)}")
+        # 3. Formatear para el frontend
+        result_items = []
+        for e in db_events:
+            result_items.append({
+                "id_reg_actuacion": None, # No lo tenemos si solo es local
+                "cons_actuacion": None,
+                "llave_proceso": radicado,
+                "event_date": e.event_date,
+                "title": e.title,
+                "detail": e.detail,
+                "con_documentos": e.con_documentos,
+            })
+            
+        return {"items": result_items, "total": len(result_items), "cached": True}
 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Error procesando actuaciones: {str(e)}")
+
+async def sync_case_events_background(case_id: int):
+    """Tarea asincrona para actualizar un caso sin bloquear al usuario."""
+    db = SessionLocal()
+    try:
+        c = db.query(Case).filter(Case.id == case_id).first()
+        if not c: return
+        
+        id_proceso = c.id_proceso
+        if not id_proceso:
+            id_proceso = await obtener_id_proceso(c.radicado)
+            if id_proceso:
+                c.id_proceso = str(id_proceso)
+                db.flush()
+        
+        if not id_proceso: return
+
+        acts_resp = await actuaciones_proceso(int(id_proceso))
         acts = []
         if isinstance(acts_resp, dict):
             acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
         elif isinstance(acts_resp, list):
             acts = acts_resp
 
-        result_items = []
+        new_count = 0
         for a in acts:
-            con_docs = bool(a.get("conDocumentos")) if a.get("conDocumentos") is not None else False
             it = {
-                "id_reg_actuacion": a.get("idRegActuacion"),
-                "cons_actuacion": a.get("consActuacion"),
-                "llave_proceso": a.get("llaveProceso"),
                 "event_date": a.get("fechaActuacion"),
                 "title": (a.get("actuacion") or "").strip(),
                 "detail": a.get("anotacion"),
-                "fecha_inicio": a.get("fechaInicial"),
-                "fecha_fin": a.get("fechaFinal"),
-                "fecha_registro": a.get("fechaRegistro"),
-                "con_documentos": con_docs,
-                "cant": a.get("cant"),
             }
-            result_items.append(it)
-
-        # Guardar en DB para historial/notificaciones
-        for it in result_items:
             event_hash = sha256_obj(it)
             exists = db.query(CaseEvent).filter(CaseEvent.case_id == c.id, CaseEvent.event_hash == event_hash).first()
             if not exists:
-                con_docs = it.get("con_documentos", False)
+                con_docs = bool(a.get("conDocumentos"))
                 db.add(CaseEvent(
                     case_id=c.id,
-                    event_date=parse_fecha(it.get("event_date")),
-                    title=it.get("title"),
-                    detail=it.get("detail"),
+                    event_date=it["event_date"],
+                    title=it["title"],
+                    detail=it["detail"],
                     event_hash=event_hash,
                     con_documentos=con_docs,
                 ))
-                if con_docs:
-                    c.has_documents = True
-                
-                # --- NUEVO: Disparo automtico a Publicaciones Procesales ---
-                if is_relevant_actuacion(it.get("title") or ""):
-                    print(f"[events] Actuacin relevante encontrada: {it.get('title')}. Disparando bsqueda a Publicaciones.")
-                    asyncio.create_task(trigger_publications_sync(c, it, db))
+                if con_docs: c.has_documents = True
+                new_count += 1
         
+        c.last_check_at = now_colombia()
         db.commit()
-        return {"items": result_items, "total": len(result_items)}
-
-    except HTTPException:
-        raise
+        if new_count > 0:
+            print(f"[BG-SYNC] {new_count} nuevas actuaciones encontradas para {c.radicado}")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Error procesando actuaciones: {str(e)}")
-
+        print(f"[BG-SYNC] Error sincronizando {case_id}: {e}")
+    finally:
+        db.close()
 
 # =========================
 # DOWNLOAD EVENTS EXCEL
@@ -3819,6 +3894,26 @@ async def get_tasks(
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Task)
+    
+    # Multi-tenancy filter
+    if not current_user.is_admin:
+        if current_user.username == "jurico_emdecob":
+            # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
+            query = query.join(Case, Task.case_id == Case.id, isouter=True)
+            query = query.filter(or_(
+                Task.assignee_id == current_user.id,
+                Case.user_id == current_user.id
+            ))
+        else:
+            # Rol compartido: No ve lo de jurico_emdecob
+            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            if emdecob_user:
+                query = query.join(Case, Task.case_id == Case.id, isouter=True)
+                query = query.filter(or_(
+                    Task.assignee_id != emdecob_user.id,
+                    Case.user_id != emdecob_user.id
+                ))
+
     if list_id:
         query = query.filter(Task.list_id == list_id)
     if status:
@@ -3856,8 +3951,17 @@ async def get_case_tasks_endpoint(
     current_user: User = Depends(get_current_user)
 ):
     """Retorna las tareas vinculadas a un radicado espec?fico."""
-    tasks = db.query(Task).filter(Task.case_id == case_id).order_by(desc(Task.created_at)).all()
-    return tasks
+    q = db.query(Task).filter(Task.case_id == case_id)
+    
+    # Seguridad: Si no es admin, verificar que el caso le pertenezca o esté asignado
+    if not current_user.is_admin:
+        q = q.join(Case, Task.case_id == Case.id)
+        q = q.filter(or_(
+            Case.user_id == current_user.id,
+            Task.assignee_id == current_user.id
+        ))
+
+    return q.order_by(desc(Task.created_at)).all()
 
 @app.post("/projects/tasks")
 async def create_task(

@@ -97,13 +97,13 @@ async def _get(path: str, params: dict | None = None, retries: int = MAX_RETRIES
                 if r.status_code in (403, 429):
                     if retry_count == MAX_RETRIES:
                         raise RamaRateLimitError(f"Bloqueo persistente (403/429) tras {MAX_RETRIES} intentos.")
-                    print(f"⚠️ Rate limit ({r.status_code}), reintentando... ({retry_count + 1}/{MAX_RETRIES})")
+                    print(f"[RATE-LIMIT] ({r.status_code}), reintentando... ({retry_count + 1}/{MAX_RETRIES})")
                 
                 # Otros errores de servidor
                 elif r.status_code >= 500:
                     if retry_count == MAX_RETRIES:
                         raise RamaError(f"Error persistente de servidor Rama ({r.status_code})")
-                    print(f"⚠️ Error servidor ({r.status_code}), reintentando...")
+                    print(f"[SERVER-ERROR] ({r.status_code}), reintentando...")
                 
                 # 404 - no encontrado
                 elif r.status_code == 404:
@@ -115,7 +115,7 @@ async def _get(path: str, params: dict | None = None, retries: int = MAX_RETRIES
             except (httpx.RequestError, asyncio.TimeoutError) as e:
                 if retry_count == MAX_RETRIES:
                     raise RamaError(f"Falla crítica de conexión/timeout: {e}")
-                print(f"⚠️ Error de red/timeout, reintentando...")
+                print(f"[NET-ERROR] Error de red/timeout, reintentando...")
 
         # FUERA del 'async with global_semaphore': dormimos para el backoff
         delay = min(BASE_DELAY * (2 ** retry_count) + random.uniform(0.5, 2.0), MAX_DELAY)
@@ -151,7 +151,7 @@ async def consulta_por_radicado(radicado: str, solo_activos: bool = False, pagin
     if len(radicado) >= 2:
         id_depto = radicado[:2]
         params["idDepartamento"] = id_depto
-        print(f"🌍 [rama.py] Intentando fallback con departamento {id_depto} para {radicado}")
+        print(f"[FALLBACK] [rama.py] Intentando fallback con departamento {id_depto} para {radicado}")
         try:
             return await _get("/Proceso/NumeroRadicacion", params=params)
         except RamaError:
@@ -307,25 +307,25 @@ async def documentos_actuacion(id_reg_actuacion: int, llave_proceso: str = "") -
     for path in candidate_paths:
         try:
             # La ruta primaria no necesita params; las de fallback pueden intentarlo también sin params
-            print(f"📄 [rama.py] Probando: GET {BASE_URL}{path}")
+            print(f"[DOCS] [rama.py] Probando: GET {BASE_URL}{path}")
             raw = await _get(path, params=None)
-            print(f"📄 [rama.py] Respuesta raw (tipo={type(raw).__name__}): {str(raw)[:400]}")
+            print(f"[DOCS] [rama.py] Respuesta raw (tipo={type(raw).__name__}): {str(raw)[:400]}")
 
             docs = _normalize_documentos(raw)
 
             if docs:
-                print(f"📄 [rama.py] ✅ {len(docs)} documentos encontrados con: {path}")
+                print(f"[DOCS] [rama.py] OK: {len(docs)} documentos encontrados con: {path}")
                 return docs
 
-            print(f"📄 [rama.py] {path} respondió vacío — probando siguiente...")
+            print(f"[DOCS] [rama.py] {path} respondió vacío — probando siguiente...")
 
         except RamaError as e:
-            print(f"📄 [rama.py] ⚠️ Error en {path}: {e}")
+            print(f"[DOCS] [rama.py] WARN: Error en {path}: {e}")
             last_error = e
             if isinstance(e, RamaRateLimitError):
                 raise
 
-    print(f"📄 [rama.py] ❌ Ninguna ruta devolvió documentos para idRegActuacion={iid}")
+    print(f"[DOCS] [rama.py] ERR: Ninguna ruta devolvió documentos para idRegActuacion={iid}")
     if last_error:
         raise last_error
 

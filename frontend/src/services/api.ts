@@ -79,6 +79,7 @@ export function login(username: string, password: string) {
 export type User = {
   id: number;
   username: string;
+  email?: string;
   nombre?: string;
   is_active: boolean;
   is_admin: boolean;

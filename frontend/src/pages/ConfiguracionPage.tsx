@@ -11,6 +11,7 @@ import {
   EyeOff,
   Bell,
   History,
+  Lock,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +51,15 @@ export default function ConfiguracionPage() {
 
   const [config, setConfig] = useState<NotificationConfigResponse | null>(null);
   const [logs, setLogs] = useState<NotificationLogItem[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Security state
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showOldPass, setShowOldPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
 
   // Form state
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
@@ -126,6 +136,33 @@ export default function ConfiguracionPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword || !confirmNewPassword) {
+      toast({ title: "Campos requeridos", description: "Completa todos los campos de contraseña", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast({ title: "Error", description: "Las nuevas contraseñas no coinciden", variant: "destructive" });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await apiFetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+      });
+      toast({ title: "Éxito", description: "Contraseña actualizada correctamente" });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "No se pudo cambiar la contraseña", variant: "destructive" });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -363,6 +400,74 @@ export default function ConfiguracionPage() {
           Guardar Configuración
         </Button>
       </div>
+
+      {/* Sección de Seguridad */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            Seguridad
+          </CardTitle>
+          <CardDescription>Cambia tu contraseña de acceso</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-2xl">
+          <div className="space-y-2">
+            <Label htmlFor="old_pass">Contraseña Actual</Label>
+            <div className="relative">
+              <Input
+                id="old_pass"
+                type={showOldPass ? "text" : "password"}
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3"
+                onClick={() => setShowOldPass(!showOldPass)}
+              >
+                {showOldPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="new_pass">Nueva Contraseña</Label>
+              <div className="relative">
+                <Input
+                  id="new_pass"
+                  type={showNewPass ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowNewPass(!showNewPass)}
+                >
+                  {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm_new_pass">Confirmar Nueva Contraseña</Label>
+              <Input
+                id="confirm_new_pass"
+                type={showNewPass ? "text" : "password"}
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+            {isChangingPassword && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Actualizar Contraseña
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Historial */}
       <Card>
