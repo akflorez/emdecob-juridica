@@ -4032,11 +4032,15 @@ async def get_tasks(
 ):
     query = db.query(Task)
     
+    # Track if we have already joined with Case
+    joined_case = False
+
     # Multi-tenancy filter
     if not current_user.is_admin:
         if current_user.username == "jurico_emdecob":
             # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
             query = query.join(Case, Task.case_id == Case.id, isouter=True)
+            joined_case = True
             query = query.filter(or_(
                 Task.assignee_id == current_user.id,
                 Case.user_id == current_user.id
@@ -4046,6 +4050,7 @@ async def get_tasks(
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
                 query = query.join(Case, Task.case_id == Case.id, isouter=True)
+                joined_case = True
                 query = query.filter(or_(
                     and_(Task.assignee_id != emdecob_user.id, Task.assignee_id.isnot(None)),
                     and_(Case.user_id != emdecob_user.id, Case.user_id.isnot(None)),
@@ -4062,19 +4067,22 @@ async def get_tasks(
         query = query.filter(Task.case_id == case_id)
     
     if radicado:
-        # B?squeda exacta primero, luego parcial
-        query = query.join(Case, Task.case_id == Case.id, isouter=True)
+        # Búsqueda exacta primero, luego parcial
+        if not joined_case:
+            query = query.join(Case, Task.case_id == Case.id, isouter=True)
+            joined_case = True
         query = query.filter(or_(
             Case.radicado == radicado,
             Task.title.contains(radicado),
             Task.description.contains(radicado)
         ))
     
-    # Nuevo: B?squeda por nombre de las partes (Demandante/Demandado)
+    # Nuevo: Búsqueda por nombre de las partes (Demandante/Demandado)
     name_filter = radicado if radicado and not radicado.isdigit() else None
     if name_filter:
-        if not radicado: # Si no join todav?a
+        if not joined_case:
              query = query.join(Case, Task.case_id == Case.id, isouter=True)
+             joined_case = True
         query = query.filter(or_(
             Case.demandante.ilike(f"%{name_filter}%"),
             Case.demandado.ilike(f"%{name_filter}%")
