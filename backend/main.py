@@ -1321,38 +1321,68 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 # HOME
 # =========================
-@app.get("/api/debug/db-stats")
-@app.get("/api/debug/db-stats/")
-@app.get("/debug/db-stats")
-@app.get("/debug/db-stats/")
-def get_db_stats_diagnostic(db: Session = Depends(get_db)):
-    # ... misma logica ...
+@app.post("/api/admin/migrate-to-juricob")
+def migrate_data_to_juricob(current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin and current_user.username != "akflorez":
+        raise HTTPException(403, "No autorizado")
+    
+    # Configuramos motores para ambas bases
+    source_engine = create_engine(engine.url.render_as_string().replace("emdecob_consultas", "emdecob_consultas"))
+    dest_engine = create_engine(engine.url.render_as_string().replace("emdecob_consultas", "juricob"))
+    
+    SourceSession = sessionmaker(bind=source_engine)
+    DestSession = sessionmaker(bind=dest_engine)
+    
+    s_db = SourceSession()
+    d_db = DestSession()
+    
     try:
-        case_count = db.query(Case).count()
-        task_count = db.query(Task).count()
-        event_count = db.query(CaseEvent).count()
-        user_count = db.query(User).count()
-        users = [{"id": u.id, "username": u.username} for u in db.query(User).all()]
+        # 1. Limpiar destino (opcional, pero mas seguro para evitar duplicados)
+        # d_db.query(CaseEvent).delete()
+        # d_db.query(Task).delete()
+        # d_db.query(Case).delete()
         
-        db_name = os.getenv("DB_NAME", "juricob")
-        # Forzamos juricob si estamos en produccion para evitar confusiones
-        if os.getenv("NODE_ENV") == "production" or True:
-            db_name = "juricob"
+        # 2. Migrar Usuarios (que no existan)
+        for u in s_db.query(User).all():
+            if not d_db.query(User).filter(User.username == u.username).first():
+                d_db.merge(u)
+        d_db.commit()
 
+        # 3. Migrar Casos
+        count = 0
+        for c in s_db.query(Case).all():
+            d_db.merge(c)
+            count += 1
+        d_db.commit()
+        
+        # 4. Migrar Actuaciones
+        ev_count = 0
+        for e in s_db.query(CaseEvent).all():
+            d_db.merge(e)
+            ev_count += 1
+        d_db.commit()
+        
+        # 5. Migrar Tareas
+        t_count = 0
+        for t in s_db.query(Task).all():
+            d_db.merge(t)
+            t_count += 1
+        d_db.commit()
+        
         return {
-            "status": "connected",
-            "database": db_name,
-            "counts": {
-                "cases": case_count,
-                "tasks": task_count,
-                "case_events": event_count,
-                "users": user_count
-            },
-            "users_list": users,
-            "engine": str(engine.url.render_as_string(hide_password=True))
+            "ok": True, 
+            "migrated": {
+                "cases": count, 
+                "events": ev_count, 
+                "tasks": t_count
+            }
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        d_db.rollback()
+        return {"ok": False, "error": str(e)}
+    finally:
+        s_db.close()
+        d_db.close()
 
 @app.get("/")
 def home():
