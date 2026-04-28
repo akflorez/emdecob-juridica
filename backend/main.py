@@ -1325,75 +1325,58 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 @app.get("/api/migrate")
 @app.get("/api/admin/migrate-to-juricob")
 def migrate_data_to_juricob(db: Session = Depends(get_db)):
-    # Configuramos motores para ambas bases (Hardcoded para evitar errores)
+    # Lanzamos en segundo plano para evitar 500 por timeout
+    asyncio.create_task(run_migration_task())
+    return {"ok": True, "message": "Migracion iniciada en segundo plano. Los datos estaran listos en unos minutos."}
+
+async def run_migration_task():
+    print("[MIGRACION] Iniciando copia masiva a juricob...")
     try:
-        # Extraemos la URL completa con contraseña para poder clonarla
+        # Extraemos la URL completa
         base_url = engine.url.render_as_string(hide_password=False)
-        s_url = base_url.replace("juricob", "emdecob_consultas").replace("emdecob_consultas", "emdecob_consultas")
+        s_url = base_url.replace("juricob", "emdecob_consultas")
         d_url = base_url.replace("emdecob_consultas", "juricob")
         
         s_engine = create_engine(s_url)
         d_engine = create_engine(d_url)
         
-        # CREAR TABLAS EN EL DESTINO SI NO EXISTEN
         from .models import Base
         Base.metadata.create_all(bind=d_engine)
-    except Exception as e:
-        return {"ok": False, "error": f"Error configurando motores: {e}"}
-    
-    SourceSession = sessionmaker(bind=s_engine)
-    DestSession = sessionmaker(bind=d_engine)
-    
-    s_db = SourceSession()
-    d_db = DestSession()
-    
-    try:
-        # 1. Limpiar destino (opcional, pero mas seguro para evitar duplicados)
-        # d_db.query(CaseEvent).delete()
-        # d_db.query(Task).delete()
-        # d_db.query(Case).delete()
         
-        # 2. Migrar Usuarios (que no existan)
-        for u in s_db.query(User).all():
-            if not d_db.query(User).filter(User.username == u.username).first():
-                d_db.merge(u)
-        d_db.commit()
+        SourceSession = sessionmaker(bind=s_engine)
+        DestSession = sessionmaker(bind=d_engine)
+        
+        with SourceSession() as s_db:
+            with DestSession() as d_db:
+                # 1. Usuarios
+                for u in s_db.query(User).all():
+                    if not d_db.query(User).filter(User.username == u.username).first():
+                        d_db.merge(u)
+                d_db.commit()
+                print("[MIGRACION] Usuarios copiados.")
 
-        # 3. Migrar Casos
-        count = 0
-        for c in s_db.query(Case).all():
-            d_db.merge(c)
-            count += 1
-        d_db.commit()
-        
-        # 4. Migrar Actuaciones
-        ev_count = 0
-        for e in s_db.query(CaseEvent).all():
-            d_db.merge(e)
-            ev_count += 1
-        d_db.commit()
-        
-        # 5. Migrar Tareas
-        t_count = 0
-        for t in s_db.query(Task).all():
-            d_db.merge(t)
-            t_count += 1
-        d_db.commit()
-        
-        return {
-            "ok": True, 
-            "migrated": {
-                "cases": count, 
-                "events": ev_count, 
-                "tasks": t_count
-            }
-        }
+                # 2. Casos
+                for c in s_db.query(Case).all():
+                    d_db.merge(c)
+                d_db.commit()
+                print("[MIGRACION] Casos copiados.")
+                
+                # 3. Actuaciones
+                for e in s_db.query(CaseEvent).all():
+                    d_db.merge(e)
+                d_db.commit()
+                print("[MIGRACION] Actuaciones copiadas.")
+                
+                # 4. Tareas
+                for t in s_db.query(Task).all():
+                    d_db.merge(t)
+                d_db.commit()
+                print("[MIGRACION] Tareas copiadas.")
+                
+        print("[MIGRACION] FINALIZADA CON EXITO.")
     except Exception as e:
-        d_db.rollback()
-        return {"ok": False, "error": str(e)}
-    finally:
-        s_db.close()
-        d_db.close()
+        print(f"[MIGRACION] ERROR: {e}")
+
 
 @app.get("/")
 def home():
