@@ -1326,6 +1326,7 @@ def get_db_stats_diagnostic(db: Session = Depends(get_db)):
     try:
         case_count = db.query(Case).count()
         task_count = db.query(Task).count()
+        event_count = db.query(CaseEvent).count()
         user_count = db.query(User).count()
         users = [{"id": u.id, "username": u.username} for u in db.query(User).all()]
         
@@ -1335,6 +1336,7 @@ def get_db_stats_diagnostic(db: Session = Depends(get_db)):
             "counts": {
                 "cases": case_count,
                 "tasks": task_count,
+                "case_events": event_count,
                 "users": user_count
             },
             "users_list": users,
