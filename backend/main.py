@@ -69,7 +69,6 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-from .db import SessionLocal, engine, Base
 from .models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
