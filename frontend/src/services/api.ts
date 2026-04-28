@@ -153,11 +153,11 @@ export type EventOut = {
 
 export function getCaseEvents(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/by-radicado/${r}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/api/cases/by-radicado/${r}/events`);
 }
 
 export function getCaseEventsById(id: number) {
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/id/${id}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/api/cases/id/${id}/events`);
 }
 
 /** ---------------------------
@@ -843,7 +843,7 @@ export function getTasks(params: { list_id?: number; status?: string; assignee_i
 }
 
 export function getCaseTasks(caseId: number) {
-  return apiFetch<Task[]>(`/cases/${caseId}/tasks`);
+  return apiFetch<Task[]>(`/api/cases/id/${caseId}/tasks`);
 }
 
 export function createWorkspace(data: { name: string; description?: string; visibility?: string }) {
