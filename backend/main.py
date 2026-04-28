@@ -1348,7 +1348,7 @@ async def run_migration_task():
         s_engine = create_engine(s_url)
         d_engine = create_engine(d_url)
         
-        from .models import Base
+        from backend.models import Base
         Base.metadata.create_all(bind=d_engine)
         
         SourceSession = sessionmaker(bind=s_engine)
