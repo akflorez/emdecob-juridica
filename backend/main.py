@@ -2144,26 +2144,7 @@ def list_cases(
     if solo_pendientes:
         q = q.filter(Case.juzgado.is_(None))
     elif solo_validos:
-        # Check if we should override default solo_validos=True
-        if not search and not current_user.is_admin:
-            # Si es jurico_emdecob, checar solo sus casos
-            if current_user.username == "jurico_emdecob":
-                valid_exists = db.query(Case).filter(Case.user_id == current_user.id, Case.juzgado.isnot(None)).first()
-            else:
-                # Si es rol compartido, checar si hay alg?n caso v?lido para el grupo
-                emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
-                if emdecob_user:
-                    valid_exists = db.query(Case).filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)), Case.juzgado.isnot(None)).first()
-                else:
-                    valid_exists = db.query(Case).filter(Case.juzgado.isnot(None)).first()
-            
-            if not valid_exists:
-                # User has no valid cases, show pending instead
-                q = q.filter(Case.juzgado.is_(None))
-            else:
-                q = q.filter(Case.juzgado.isnot(None))
-        else:
-            q = q.filter(Case.juzgado.isnot(None))
+        q = q.filter(Case.juzgado.isnot(None))
 
     if solo_no_leidos:
         hoy = today_colombia()
