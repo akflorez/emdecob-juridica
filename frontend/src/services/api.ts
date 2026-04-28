@@ -153,11 +153,11 @@ export type EventOut = {
 
 export function getCaseEvents(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/api/cases/by-radicado/${r}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/by-radicado/${r}/events`);
 }
 
 export function getCaseEventsById(id: number) {
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/api/cases/id/${id}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/id/${id}/events`);
 }
 
 /** ---------------------------
@@ -724,7 +724,7 @@ export function getCasePublications(radicado: string) {
 }
 
 export function getCasePublicationsById(id: number) {
-  return apiFetch<{ items: any[] }>(`/cases/id/${id}/publications`);
+  return apiFetch<{ items: any[] }>(`/cases/id/${id}/publicaciones`);
 }
 
 
@@ -830,7 +830,7 @@ export type Task = {
 };
 
 export function getWorkspaces() {
-  return apiFetch<Workspace[]>("/api/projects/workspaces");
+  return apiFetch<Workspace[]>("/projects/workspaces");
 }
 
 export function getTasks(params: { list_id?: number; status?: string; assignee_id?: number; radicado?: string }) {
@@ -839,34 +839,34 @@ export function getTasks(params: { list_id?: number; status?: string; assignee_i
   if (params.status) qs.set("status", params.status);
   if (params.assignee_id) qs.set("assignee_id", String(params.assignee_id));
   if (params.radicado) qs.set("radicado", params.radicado);
-  return apiFetch<Task[]>(`/api/projects/tasks?${qs.toString()}`);
+  return apiFetch<Task[]>(`/projects/tasks?${qs.toString()}`);
 }
 
 export function getCaseTasks(caseId: number) {
-  return apiFetch<Task[]>(`/api/cases/id/${caseId}/tasks`);
+  return apiFetch<Task[]>(`/cases/id/${caseId}/tasks`);
 }
 
 export function createWorkspace(data: { name: string; description?: string; visibility?: string }) {
-  return apiFetch<Workspace>("/api/projects/workspaces", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<Workspace>("/projects/workspaces", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createFolder(data: { name: string; workspace_id: number }) {
-  return apiFetch<WorkspaceFolder>("/api/projects/folders", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<WorkspaceFolder>("/projects/folders", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createList(data: { name: string; folder_id?: number; workspace_id: number }) {
-  return apiFetch<WorkspaceList>("/api/projects/lists", { method: "POST", body: JSON.stringify(data) });
+  return apiFetch<WorkspaceList>("/projects/lists", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createTask(data: Partial<Task>) {
-  return apiFetch<Task>("/api/projects/tasks", {
+  return apiFetch<Task>("/projects/tasks", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function updateTask(taskId: number, data: Partial<Task>) {
-  return apiFetch<Task>(`/api/projects/tasks/${taskId}`, {
+  return apiFetch<Task>(`/projects/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });

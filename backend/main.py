@@ -2868,7 +2868,7 @@ async def events_logic(c: Case, db: Session):
                 "con_documentos": e.con_documentos,
             })
             
-        return result_items
+        return {"items": result_items, "total": len(result_items)}
 
     except Exception as e:
         import traceback

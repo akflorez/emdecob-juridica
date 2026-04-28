@@ -6,18 +6,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
 
-# Database Connection
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    db_user = os.getenv("DB_USER", "emdecob")
-    db_pass = os.getenv("DB_PASSWORD", "emdecob2026")
-    db_name = "juricob" # BASE DE DATOS OFICIAL DEFINITIVA (MIGRACION EN CURSO)
-    db_host = os.getenv("DB_HOST", "db")
-    db_port = os.getenv("DB_PORT", "5432")
-    
-    DATABASE_URL = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-    print(f"[DB] URL construida: postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}")
+# Database Connection - Prioritize environment variable (84.247.130.122 for remote server)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://emdecob:emdecob2026@84.247.130.122:5432/juricob")
 
 # Configuración optimizada para multi-usuario y alto rendimiento
 engine = create_engine(

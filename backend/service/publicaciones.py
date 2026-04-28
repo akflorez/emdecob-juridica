@@ -149,7 +149,11 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     
     # Patrones de búsqueda
     pattern = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
-    search_queries = [rad_digits, pattern, demandado.split()[0]]
+    search_queries = [rad_digits, pattern]
+    if demandado and demandado.strip():
+        parts = demandado.split()
+        if parts:
+            search_queries.append(parts[0])
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
         for q in search_queries:
