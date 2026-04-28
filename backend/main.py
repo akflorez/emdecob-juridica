@@ -1329,9 +1329,10 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             # Primero buscamos el ID de jurico_emdecob para excluirlo
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
-                q_validos = q_validos.filter(Case.user_id != emdecob_user.id)
-                q_invalidos = q_invalidos.filter(InvalidRadicado.user_id != emdecob_user.id)
-                q_pendientes = q_pendientes.filter(Case.user_id != emdecob_user.id)
+                # Incluir lo que no es de emdecob Y lo que no tiene dueo (NULL)
+                q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+                q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
+                q_pendientes = q_pendientes.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1361,8 +1362,8 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         else:
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
-                q_no_leidos = q_no_leidos.filter(Case.user_id != emdecob_user.id)
-                q_hoy = q_hoy.filter(Case.user_id != emdecob_user.id)
+                q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+                q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -2023,7 +2024,7 @@ def list_cases(
             # Rol compartido: No ve lo de jurico_emdecob
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
-                q = q.filter(Case.user_id != emdecob_user.id)
+                q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2035,7 +2036,17 @@ def list_cases(
     elif solo_validos:
         # Check if we should override default solo_validos=True
         if not search and not current_user.is_admin:
-            valid_exists = db.query(Case).filter(Case.user_id == current_user.id, Case.juzgado.isnot(None)).first()
+            # Si es jurico_emdecob, checar solo sus casos
+            if current_user.username == "jurico_emdecob":
+                valid_exists = db.query(Case).filter(Case.user_id == current_user.id, Case.juzgado.isnot(None)).first()
+            else:
+                # Si es rol compartido, checar si hay alg?n caso v?lido para el grupo
+                emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+                if emdecob_user:
+                    valid_exists = db.query(Case).filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)), Case.juzgado.isnot(None)).first()
+                else:
+                    valid_exists = db.query(Case).filter(Case.juzgado.isnot(None)).first()
+            
             if not valid_exists:
                 # User has no valid cases, show pending instead
                 q = q.filter(Case.juzgado.is_(None))
@@ -3910,8 +3921,9 @@ async def get_tasks(
             if emdecob_user:
                 query = query.join(Case, Task.case_id == Case.id, isouter=True)
                 query = query.filter(or_(
-                    Task.assignee_id != emdecob_user.id,
-                    Case.user_id != emdecob_user.id
+                    and_(Task.assignee_id != emdecob_user.id, Task.assignee_id.isnot(None)),
+                    and_(Case.user_id != emdecob_user.id, Case.user_id.isnot(None)),
+                    and_(Task.assignee_id.is_(None), Case.user_id.is_(None))
                 ))
 
     if list_id:
