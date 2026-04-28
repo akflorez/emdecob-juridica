@@ -1327,8 +1327,10 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 def migrate_data_to_juricob(db: Session = Depends(get_db)):
     # Configuramos motores para ambas bases (Hardcoded para evitar errores)
     try:
-        s_url = str(engine.url).replace("juricob", "emdecob_consultas").replace("emdecob_consultas", "emdecob_consultas")
-        d_url = str(engine.url).replace("emdecob_consultas", "juricob")
+        # Extraemos la URL completa con contraseña para poder clonarla
+        base_url = engine.url.render_as_string(hide_password=False)
+        s_url = base_url.replace("juricob", "emdecob_consultas").replace("emdecob_consultas", "emdecob_consultas")
+        d_url = base_url.replace("emdecob_consultas", "juricob")
         
         s_engine = create_engine(s_url)
         d_engine = create_engine(d_url)
