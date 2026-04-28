@@ -1435,12 +1435,12 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
     if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             q_validos = q_validos.filter(Case.user_id == current_user.id)
             q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
             q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
             if emdecob_user:
                 q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
                 q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
@@ -1468,11 +1468,11 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
     if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
             q_hoy = q_hoy.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
             if emdecob_user:
                 q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
                 q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
@@ -2151,11 +2151,11 @@ def list_cases(
 
     # Multi-tenancy filter
     if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             # EMDECOB solo ve sus casos VALIDOS (con juzgado)
             q = q.filter(Case.user_id == current_user.id, Case.juzgado.isnot(None))
         else:
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
             if emdecob_user:
                 q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
@@ -2224,10 +2224,10 @@ def list_cases(
     )
 
     if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             q_unread = q_unread.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
             if emdecob_user:
                 q_unread = q_unread.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
     
@@ -4044,7 +4044,7 @@ async def get_tasks(
 
     # Multi-tenancy filter
     if not current_user.is_admin:
-        if current_user.username == "jurico_emdecob":
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
             query = query.join(Case, Task.case_id == Case.id, isouter=True)
             joined_case = True
@@ -4054,7 +4054,7 @@ async def get_tasks(
             ))
         else:
             # Rol compartido: No ve lo de jurico_emdecob
-            emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
             if emdecob_user:
                 query = query.join(Case, Task.case_id == Case.id, isouter=True)
                 joined_case = True
