@@ -2134,7 +2134,8 @@ def list_cases(
     # Multi-tenancy filter
     if not current_user.is_admin:
         if current_user.username == "jurico_emdecob":
-            q = q.filter(Case.user_id == current_user.id)
+            # EMDECOB solo ve sus casos VALIDOS (con juzgado)
+            q = q.filter(Case.user_id == current_user.id, Case.juzgado.isnot(None))
         else:
             emdecob_user = db.query(User).filter(User.username == "jurico_emdecob").first()
             if emdecob_user:
