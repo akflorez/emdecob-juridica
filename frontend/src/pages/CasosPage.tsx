@@ -951,6 +951,7 @@ export default function CasosPage() {
                     <TableHead>Cédula</TableHead>
                     <TableHead className="hidden xl:table-cell">Juzgado</TableHead>
                     <TableHead className="w-24">Últ. Act.</TableHead>
+                    <TableHead className="w-20 text-center">Gestión</TableHead>
                     <TableHead className="w-28 text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -996,6 +997,15 @@ export default function CasosPage() {
                       <TableCell className="text-xs text-muted-foreground">{row.cedula || "—"}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{row.juzgado || "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(row.ultima_actuacion)}</TableCell>
+                      <TableCell className="text-center">
+                        {row.has_tasks ? (
+                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-200 dark:border-green-800">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> SÍ
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px]">Sin tarea</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
                           <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)}>

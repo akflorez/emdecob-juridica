@@ -267,6 +267,7 @@ export type CaseRow = {
   has_documents?: boolean;
   cedula?: string | null;
   abogado?: string | null;
+  has_tasks?: boolean;
 };
 
 export type CasesResponse = {

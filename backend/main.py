@@ -819,25 +819,25 @@ HARDCODED_USERS = {
     },
     "fna_juridica": {
         "password": "juridicaEmdecob2026$",
-        "id": 9998,
+        "id": 1,
         "nombre": "FNA Juridica",
         "is_admin": False,
     },
     "fna.juridica": {
         "password": "juridicaEmdecob2026$",
-        "id": 9998,
+        "id": 1,
         "nombre": "FNA Juridica",
         "is_admin": False,
     },
     "jurico_emdecob": {
         "password": "emdecob2027$",
-        "id": 9997,
+        "id": 2,
         "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
     "jurico.emdecob": {
         "password": "emdecob2027$",
-        "id": 9997,
+        "id": 2,
         "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
@@ -2267,6 +2267,7 @@ def list_cases(
             "has_documents": c.has_documents,
             "cedula": c.cedula,
             "abogado": c.abogado,
+            "has_tasks": len(c.tasks) > 0,
         }
 
     return {
@@ -3958,7 +3959,13 @@ async def get_workspaces(
             
             workspaces = [ws]
     else:
-        workspaces = db.query(Workspace).join(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).all()
+        # User sees workspaces where they are member OR owner
+        workspaces = db.query(Workspace).outerjoin(WorkspaceMember).filter(
+            or_(
+                Workspace.owner_id == current_user.id,
+                WorkspaceMember.user_id == current_user.id
+            )
+        ).all()
     
     results = []
     for ws in workspaces:
