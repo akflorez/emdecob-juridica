@@ -51,7 +51,6 @@ export default function ConfiguracionPage() {
 
   const [config, setConfig] = useState<NotificationConfigResponse | null>(null);
   const [logs, setLogs] = useState<NotificationLogItem[]>([]);
-  const [showPassword, setShowPassword] = useState(false);
 
   // Security state
   const [oldPassword, setOldPassword] = useState("");
