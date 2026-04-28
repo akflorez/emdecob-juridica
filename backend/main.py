@@ -1332,8 +1332,10 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 @app.get("/api/migrate")
 @app.get("/migrate")
-def test_migrate_endpoint():
-    return {"message": "ENDPOINT DETECTADO - EL SERVIDOR ESTA VIVO"}
+def trigger_real_migration():
+    # LANZAMOS LA COPIA REAL EN SEGUNDO PLANO
+    asyncio.create_task(run_migration_task())
+    return {"ok": True, "message": "MIGRACION INICIADA. Tus 21,000 actuaciones se estan moviendo a juricob. Revisa el Dashboard en 5 minutos."}
 
 async def run_migration_task():
     print("[MIGRACION] Iniciando copia masiva a juricob...")
