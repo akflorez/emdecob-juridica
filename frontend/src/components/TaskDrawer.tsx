@@ -171,26 +171,50 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
           {/* VINCULACIÓN DE PROCESO (RADICADO) */}
           <div className="space-y-3 pt-4 border-t border-border/50">
              <label className="text-sm font-semibold flex items-center gap-2">
-               <FileText className="h-4 w-4 text-primary" /> Vincular Proceso Judicial
+               <FileText className="h-4 w-4 text-primary" /> Proceso Judicial Vinculado
              </label>
              
              {linkedCase ? (
-               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex flex-col gap-2 relative group">
+               <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 flex flex-col gap-3 relative group shadow-sm">
                   <div className="flex justify-between items-start">
-                    <div className="text-xs font-bold font-mono text-primary truncate max-w-[80%]">{linkedCase.radicado}</div>
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider text-primary font-bold">Radicado</div>
+                      <div className="text-sm font-bold font-mono tracking-tight">{linkedCase.radicado}</div>
+                    </div>
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-8 w-8 rounded-full hover:bg-red-500/10 hover:text-red-600 transition-colors"
                       onClick={() => handleSave({ case_id: null as any })}
+                      title="Desvincular proceso"
                     >
-                      <Plus className="h-3 w-3 rotate-45" />
+                      <Plus className="h-4 w-4 rotate-45" />
                     </Button>
                   </div>
-                  <div className="text-[10px] text-muted-foreground uppercase font-medium">{linkedCase.demandante} vs {linkedCase.demandado}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="text-[9px] h-4 bg-background">En Línea</Badge>
-                    <span className="text-[9px] text-muted-foreground">{linkedCase.juzgado}</span>
+
+                  <div className="grid grid-cols-2 gap-4 py-2 border-y border-primary/10">
+                    <div className="space-y-0.5">
+                       <div className="text-[10px] uppercase text-muted-foreground font-bold">Demandante</div>
+                       <div className="text-xs font-semibold truncate">{linkedCase.demandante || 'No definido'}</div>
+                    </div>
+                    <div className="space-y-0.5">
+                       <div className="text-[10px] uppercase text-muted-foreground font-bold">Demandado</div>
+                       <div className="text-xs font-semibold truncate">{linkedCase.demandado || 'No definido'}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center gap-2">
+                       <Badge variant="outline" className="text-[9px] h-4 bg-background border-primary/20 text-primary">Sincronizado</Badge>
+                       <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">{linkedCase.juzgado}</span>
+                    </div>
+                    <Button 
+                      variant="link" 
+                      className="h-auto p-0 text-primary text-xs font-bold hover:no-underline hover:text-primary/80"
+                      onClick={() => window.open(`/casos/${linkedCase.id}`, '_blank')}
+                    >
+                      Ver Proceso Completo →
+                    </Button>
                   </div>
                </div>
              ) : (
