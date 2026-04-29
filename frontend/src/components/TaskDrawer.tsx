@@ -17,7 +17,6 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Search, FileText, CheckCircle } from 'lucide-react';
-const FileTextIcon = FileText;
 
 interface TaskDrawerProps {
   task: TaskType | null;
