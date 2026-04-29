@@ -883,9 +883,10 @@ export function createTask(data: Partial<Task>) {
   });
 }
 
-export async function getTaskDetail(taskId: number): Promise<Task> {
-  const response = await api.get(`/tasks/${taskId}`);
-  return response.data;
+export function getTaskDetail(taskId: number, token?: string) {
+  const headers: any = {};
+  if (token) headers["X-ClickUp-Token"] = token;
+  return apiFetch<Task>(`/tasks/${taskId}`, { headers });
 }
 
 export function updateTask(taskId: number, data: Partial<Task>) {

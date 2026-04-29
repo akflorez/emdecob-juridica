@@ -23,9 +23,10 @@ interface TaskDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTaskUpdate: (updatedTask: TaskType) => void;
+  clickupToken?: string;
 }
 
-export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken }: TaskDrawerProps) {
   const { toast } = useToast();
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
@@ -39,7 +40,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
   useEffect(() => {
     if (task && open) {
       setIsLoading(true);
-      getTaskDetail(task.id)
+      getTaskDetail(task.id, clickupToken)
         .then(res => setFullTask(res))
         .catch(err => {
           console.error("Error fetching task details", err);

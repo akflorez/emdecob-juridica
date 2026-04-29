@@ -11,6 +11,9 @@ async def fetch_clickup(endpoint: str, api_token: str):
     headers = {"Authorization": api_token}
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(f"{CLICKUP_API_URL}/{endpoint}", headers=headers)
+        if resp.status_code == 403:
+            print(f"[ClickUp API Forbidden] {endpoint}: Saltando por falta de permisos.")
+            return None
         if resp.status_code != 200:
             print(f"[ClickUp API Error] {endpoint}: {resp.status_code} - {resp.text}")
             resp.raise_for_status()
@@ -190,6 +193,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                         # 5. Tasks & Subtasks
                         tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true&include_closed=true", api_token)
                         for t_data in tasks_data['tasks']:
+                            await asyncio.sleep(0.1) # Pequeña pausa para evitar rate limits
                             await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
                         
                         db.commit() # Commit granular por lista

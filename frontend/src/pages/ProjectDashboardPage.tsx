@@ -66,6 +66,7 @@ export default function ProjectDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
+  const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
   const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
@@ -125,8 +126,10 @@ export default function ProjectDashboardPage() {
   }, [searchTerm]);
 
   const handleSync = async () => {
-    const token = prompt("Ingresa tu ClickUp API Token:");
+    const token = prompt("Ingresa tu ClickUp API Token:", clickupToken);
     if (!token) return;
+    setClickupToken(token);
+    localStorage.setItem('clickup_token', token);
     setIsSyncing(true);
     try {
       const res = await importClickUp(token);
@@ -619,8 +622,8 @@ export default function ProjectDashboardPage() {
       </div>
       
       <TaskDrawer 
-        task={selectedTask}
-        open={!!selectedTask}
+        task={selectedTask} 
+        open={!!selectedTask} 
         onOpenChange={(open) => !open && setSelectedTask(null)}
         onTaskUpdate={(t) => {
           setTasks(prev => {
@@ -630,6 +633,7 @@ export default function ProjectDashboardPage() {
           });
           setSelectedTask(t);
         }}
+        clickupToken={clickupToken}
       />
     </div>
   );
