@@ -402,13 +402,13 @@ export default function ProjectDashboardPage() {
                       <div className="flex items-center gap-2">
                         <div className={`h-2 w-2 rounded-full ${col.color}`} />
                         <span className="font-bold tracking-wide uppercase text-xs text-foreground/80">{col.label}</span>
-                        <Badge variant="secondary" className="ml-1 text-[10px] bg-background/50">{filteredTasks.filter(t => t.status?.trim().toLowerCase() === col.id.trim().toLowerCase()).length}</Badge>
+                        <Badge variant="secondary" className="ml-1 text-[10px] bg-background/50">{filteredTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).length}</Badge>
                       </div>
                       <Plus className="h-4 w-4 text-muted-foreground/50 cursor-pointer hover:text-primary transition-colors" />
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                      {filteredTasks.filter(t => t.status?.trim().toLowerCase() === col.id.trim().toLowerCase()).map(task => (
+                      {filteredTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).map(task => (
                         <div 
                           key={task.id}
                           draggable
