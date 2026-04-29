@@ -6,19 +6,31 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
 
+# =============================================================
+# CONFIGURACION DE BASE DE DATOS
+# El PostgreSQL NATIVO del servidor (84.247.130.122:5432)
+# tiene los 1034 tareas reales. El Docker 'db' interno está vacío.
+# =============================================================
+
 raw_url = os.getenv("DATABASE_URL", "")
 
 def get_connection_url(url_str):
+    # URL del PostgreSQL nativo en el servidor host
+    # Desde dentro de Docker en Linux, el host se accede con host-gateway
+    # o con la IP real del servidor
+    NATIVE_PG_URL = "postgresql://emdecob:emdecob2026@84.247.130.122:5432/juricob"
+
     if not url_str:
-        # Sin variable de entorno - usar Docker interno
-        return "postgresql://emdecob:emdecob2026@db:5432/juricob"
+        return NATIVE_PG_URL
 
     # Limpiar variables de shell literal si aparecen
     clean_url = url_str.replace("${DB_USER:-emdecob}", "emdecob")
     clean_url = clean_url.replace("${DB_PASSWORD:-emdecob2026}", "emdecob2026")
 
-    if "@localhost" in clean_url:
-        clean_url = clean_url.replace("@localhost", "@db")
+    # Si apunta al contenedor Docker interno 'db', redirigir al PostgreSQL nativo
+    # que tiene todos los datos reales del sistema
+    if "@db:" in clean_url or "@db/" in clean_url or "@localhost" in clean_url:
+        return NATIVE_PG_URL
 
     return clean_url
 
@@ -27,8 +39,8 @@ DATABASE_URL = get_connection_url(raw_url)
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=10,
+    max_overflow=5,
     pool_timeout=30,
     pool_recycle=1800,
     pool_pre_ping=True,
