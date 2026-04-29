@@ -31,6 +31,17 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 moment.locale('es');
 const localizer = momentLocalizer(moment);
 
+const safeFormatDate = (date: any, formatStr: string) => {
+  if (!date) return 'Sin fecha';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'Fecha inválida';
+    return format(d, formatStr, { locale: es });
+  } catch (e) {
+    return 'Fecha pendiente';
+  }
+};
+
 const BOARD_COLUMNS = [
   { id: 'to do', label: 'To Do', color: 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300', dot: 'bg-slate-400' },
   { id: 'in progress', label: 'En Progreso', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400', dot: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' },
@@ -323,8 +334,8 @@ export default function ProjectDashboardPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los responsables</SelectItem>
-                    {users.map(u => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.nombre || u.username}</SelectItem>
+                    {(users || []).map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.nombre || u.username || 'Usuario'}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -416,6 +427,16 @@ export default function ProjectDashboardPage() {
                           onClick={() => setSelectedTask(task)}
                           className="group bg-card/80 hover:bg-card p-4 rounded-xl border border-border/50 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 cursor-pointer relative overflow-hidden animate-in fade-in slide-in-from-bottom-2"
                         >
+                          <div className="flex justify-between items-start mb-3">
+                            <Badge variant="outline" className="text-[9px] uppercase tracking-wider bg-background/50 border-border/50">
+                              {task.priority || 'Normal'}
+                            </Badge>
+                            {subtasksMap[task.id] && (
+                               <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20">
+                                 <LayoutGrid className="h-3 w-3 mr-1" /> {subtasksMap[task.id].length}
+                               </Badge>
+                            )}
+                          </div>
                           <div className={`absolute left-0 top-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500/50' : 'bg-primary/30'}`} />
                           <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
                           <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">

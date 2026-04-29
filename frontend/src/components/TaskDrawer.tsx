@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid } from 'lucide-react';
+import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid, MessageSquare } from 'lucide-react';
 import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, type CaseRow } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -17,6 +17,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Search, FileText, CheckCircle } from 'lucide-react';
+const FileTextIcon = FileText;
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -168,7 +169,12 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> Vencimiento</label>
               <div className="text-sm font-medium">
-                {displayTask.due_date ? format(new Date(displayTask.due_date), "d 'de' MMMM, yyyy", { locale: es }) : 'No definida'}
+                {displayTask.due_date ? (() => {
+                  try {
+                    const d = new Date(displayTask.due_date);
+                    return isNaN(d.getTime()) ? 'No definida' : format(d, "d 'de' MMMM, yyyy", { locale: es });
+                  } catch(e) { return 'No definida'; }
+                })() : 'No definida'}
               </div>
             </div>
           </div>
@@ -326,7 +332,12 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-bold text-primary">Sistema / ClickUp</span>
                       <span className="text-[10px] text-muted-foreground">
-                        {comm.created_at ? format(new Date(comm.created_at), "d MMM, HH:mm", { locale: es }) : 'Reciente'}
+                        {comm.created_at ? (() => {
+                          try {
+                            const d = new Date(comm.created_at);
+                            return isNaN(d.getTime()) ? 'Reciente' : format(d, "d MMM, HH:mm", { locale: es });
+                          } catch(e) { return 'Reciente'; }
+                        })() : 'Reciente'}
                       </span>
                     </div>
                     <p className="text-foreground/80 leading-relaxed">{comm.content}</p>
