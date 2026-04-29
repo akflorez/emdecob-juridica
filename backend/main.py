@@ -1419,9 +1419,13 @@ def get_migration_status(db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/api/version")
+def get_version():
+    return {"version": "afc9789f5e68060483ce72910d7b73ab3cada7f0", "database": "juricob"}
+
 @app.get("/")
-def home():
-    return {"status": "ok", "app": "EMDECOB Consultas"}
+def read_root():
+    return {"status": "ok", "version": "afc9789f5e68060483ce72910d7b73ab3cada7f0", "app": "EMDECOB Consultas"}
 
 
 # =========================
