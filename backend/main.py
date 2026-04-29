@@ -4049,7 +4049,10 @@ async def get_tasks(
     joined_case = False
 
     # Multi-tenancy filter
-    if not current_user.is_admin:
+    if current_user.is_admin:
+        # Admins see everything, no filter needed here
+        pass
+    else:
         if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
             # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
             query = query.join(Case, Task.case_id == Case.id, isouter=True)
