@@ -423,7 +423,10 @@ export default function ProjectDashboardPage() {
                             {task.due_date && (
                               <span className="flex items-center gap-1 font-bold text-primary">
                                 <CalendarIcon className="h-3 w-3" />
-                                {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+                                {(() => {
+                                  const d = new Date(task.due_date);
+                                  return isNaN(d.getTime()) ? 'Pendiente' : d.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'});
+                                })()}
                               </span>
                             )}
                           </div>
@@ -528,7 +531,7 @@ export default function ProjectDashboardPage() {
                             <div className="flex justify-between items-start mb-4">
                               <div className="flex items-center gap-3">
                                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
-                                  {u.nombre?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??'}
+                                  {(u.nombre || u.username || '??').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                 </div>
                                 <div>
                                   <div className="font-bold text-foreground group-hover:text-primary transition-colors">{u.nombre || u.username}</div>
@@ -653,7 +656,10 @@ function TaskRow({ task, onClick, index, isSubtask }: { task: TaskType; onClick:
           <div className="hidden sm:flex flex-col items-end">
             <span className="text-xs font-semibold text-foreground/70">Vencimiento</span>
             <span className="flex items-center gap-1.5 text-sm font-medium">
-              {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+              {(() => {
+                const d = new Date(task.due_date);
+                return isNaN(d.getTime()) ? 'Pendiente' : d.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'});
+              })()}
             </span>
           </div>
         ) : (

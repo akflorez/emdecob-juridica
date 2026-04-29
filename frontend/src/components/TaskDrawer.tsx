@@ -308,7 +308,9 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
                   <div key={comm.id} className="p-3 rounded-xl bg-muted/20 border border-border/30 text-xs">
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-bold text-primary">Sistema / ClickUp</span>
-                      <span className="text-[10px] text-muted-foreground">{format(new Date(comm.created_at), "d MMM, HH:mm", { locale: es })}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {comm.created_at ? format(new Date(comm.created_at), "d MMM, HH:mm", { locale: es }) : 'Reciente'}
+                      </span>
                     </div>
                     <p className="text-foreground/80 leading-relaxed">{comm.content}</p>
                   </div>
