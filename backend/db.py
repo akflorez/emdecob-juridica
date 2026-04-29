@@ -8,7 +8,7 @@ load_dotenv()
 
 # ============================================================
 # CONEXION A BASE DE DATOS
-# URL externa Contabo (donde estan TODOS los datos reales)
+# Los datos REALES están en Contabo. El Docker interno está vacío.
 # ============================================================
 CONTABO_URL = "postgresql://emdecob:emdecob2026@84.247.130.122:5432/juricob"
 
@@ -23,30 +23,21 @@ def get_connection_url(url_str):
     clean_url = url_str.replace("${DB_USER:-emdecob}", "emdecob")
     clean_url = clean_url.replace("${DB_PASSWORD:-emdecob2026}", "emdecob2026")
 
-    if "@localhost" in clean_url:
-        clean_url = clean_url.replace("@localhost", "@db")
-
-    # Si apunta al contenedor Docker interno, verificar si tiene datos.
-    # Si no tiene datos, usar Contabo que tiene los datos reales.
+    # Si apunta al contenedor Docker interno ('db'), los datos están en Contabo
+    # Redireccionar automáticamente a la base de datos real
     if "@db:" in clean_url or "@db/" in clean_url:
-        try:
-            test_engine = create_engine(clean_url, connect_args={"connect_timeout": 5})
-            with test_engine.connect() as conn:
-                count = conn.execute(text("SELECT count(*) FROM tasks")).scalar()
-                if count == 0:
-                    print(f"[DB] Docker interno tiene 0 tareas -> cambiando a Contabo externo")
-                    return CONTABO_URL
-                else:
-                    print(f"[DB] Docker interno tiene {count} tareas -> OK")
-                    return clean_url
-        except Exception as e:
-            print(f"[DB] Error al conectar a Docker interno ({e}) -> usando Contabo externo")
-            return CONTABO_URL
+        print("[DB] DATABASE_URL apunta a Docker interno (vacio) -> redirigiendo a Contabo externo")
+        return CONTABO_URL
 
+    if "@localhost" in clean_url:
+        print("[DB] DATABASE_URL apunta a localhost -> redirigiendo a Contabo externo")
+        return CONTABO_URL
+
+    print(f"[DB] Usando DATABASE_URL del entorno: {clean_url[:40]}...")
     return clean_url
 
 DATABASE_URL = get_connection_url(raw_url)
-print(f"[DB] Conectando a: {DATABASE_URL[:50]}...")
+print(f"[DB] URL final: {DATABASE_URL[:50]}...")
 
 engine = create_engine(
     DATABASE_URL,
