@@ -459,6 +459,8 @@ export default function ProjectDashboardPage() {
                     messages={{ today: "Hoy", previous: "Volver", next: "Avanzar", month: "Mes", week: "Semana", day: "Día" }}
                   />
                 </div>
+              </TabsContent>
+
               {/* TAB: STATS (DASHBOARD PREMIUM) */}
               <TabsContent value="stats" className="h-full m-0 overflow-y-auto p-4 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 custom-scrollbar">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
