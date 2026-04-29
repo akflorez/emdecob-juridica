@@ -663,6 +663,9 @@ async def lifespan(app: FastAPI):
             if 'clickup_id' not in cols:
                 conn.execute(text("ALTER TABLE tasks ADD COLUMN clickup_id VARCHAR(100)"))
                 print("Migración: Columna clickup_id añadida")
+            if 'assignee_name' not in cols:
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_name VARCHAR(200)"))
+                print("Migración: Columna assignee_name añadida")
             conn.commit()
     except Exception as e:
         print(f"Error en migración rápida: {e}")
