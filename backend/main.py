@@ -702,7 +702,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -4021,12 +4021,25 @@ async def get_tasks_by_case(case_id: int, db: Session = Depends(get_db)):
     tasks = db.query(Task).filter(Task.case_id == case_id).all()
     return tasks
 
+# Endpoint de diagnóstico público (sin auth) para verificar que el backend responde
+@app.get("/debug/tasks")
+async def debug_tasks(db: Session = Depends(get_db)):
+    """Endpoint público sin auth para diagnóstico. NO usar en producción final."""
+    try:
+        tasks = db.query(Task).limit(5).all()
+        total = db.query(Task).count()
+        return {
+            "ok": True,
+            "total_tasks_in_db": total,
+            "sample": [{"id": t.id, "title": t.title, "list_id": t.list_id, "status": t.status} for t in tasks]
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @app.get("/api/projects/tasks")
 @app.get("/projects/tasks")
-@app.get("/api/api/tasks")
 @app.get("/api/tasks")
 @app.get("/tasks")
-@app.get("/api/v1/tasks")
 async def get_tasks(
     list_id: Optional[int] = None,
     status: Optional[str] = None,
