@@ -324,6 +324,7 @@ class Task(Base):
     
     # Colecciones de checklist y tags
     checklists = relationship("TaskChecklistItem", back_populates="task", cascade="all, delete-orphan")
+    comments = relationship("TaskComment", cascade="all, delete-orphan")
     tags = relationship("Tag", secondary=task_tags, back_populates="tasks")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

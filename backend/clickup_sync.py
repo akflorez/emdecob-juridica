@@ -3,7 +3,7 @@ import asyncio
 import httpx
 from sqlalchemy.orm import Session
 from datetime import datetime
-from backend.models import Workspace, Folder, ProjectList, Task, User, Case
+from backend.models import Workspace, Folder, ProjectList, Task, User, Case, TaskChecklistItem, TaskComment
 
 CLICKUP_API_URL = "https://api.clickup.com/api/v2"
 
@@ -31,7 +31,7 @@ def extract_radicado(text: str) -> str:
     match = re.search(r'\d{21,23}', normalized)
     return match.group(0) if match else None
 
-async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, parent_id: int = None):
+async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, api_token: str, parent_id: int = None):
     """Procesa una tarea de ClickUp y sus subtareas recursivamente."""
     
     # 1. Mapear responsable
@@ -123,10 +123,23 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                 )
                 db.add(new_cl)
 
-    # 6. Procesar Subtareas (ClickUp las envía en el mismo objeto si se pide /subtasks=true)
+    # 6. Procesar Comentarios (Solo si ClickUp indica que hay comentarios)
+    if task_data.get('comment_count', 0) > 0:
+        try:
+            comments_data = await fetch_clickup(f"task/{task_data['id']}/comment", api_token)
+            for comm in comments_data.get('comments', []):
+                text_comm = comm.get('comment_text', '')
+                if not text_comm: continue
+                existing_comm = db.query(TaskComment).filter(TaskComment.task_id == db_task.id, TaskComment.content == text_comm).first()
+                if not existing_comm:
+                    new_comm = TaskComment(task_id=db_task.id, content=text_comm, user_id=owner_id)
+                    db.add(new_comm)
+        except: pass
+
+    # 7. Procesar Subtareas
     subtasks = task_data.get('subtasks', [])
     for sub in subtasks:
-        await process_task(sub, list_id, db, owner_id, user_map, parent_id=db_task.id)
+        await process_task(sub, list_id, db, owner_id, user_map, api_token, parent_id=db_task.id)
 
 async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int):
     """Sincronización Maestra Juricob v2: Importación total y jerárquica."""
@@ -173,7 +186,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                         # 5. Tasks & Subtasks
                         tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
                         for t_data in tasks_data['tasks']:
-                            await process_task(t_data, db_list.id, db, owner_id, user_map)
+                            await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
                         
                         db.commit() # Commit granular por lista
                         print(f"[Master Sync] Lista '{lst['name']}' procesada.")
@@ -196,7 +209,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                     
                     tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
                     for t_data in tasks_data['tasks']:
-                        await process_task(t_data, db_list.id, db, owner_id, user_map)
+                        await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
                     db.commit()
 
         return {"status": "success", "message": "Importación maestra completada con éxito en Juricob."}

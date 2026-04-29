@@ -821,6 +821,13 @@ export type ChecklistItem = {
   is_completed: boolean;
 };
 
+export type TaskComment = {
+  id: number;
+  content: string;
+  user_id?: number;
+  created_at: string;
+};
+
 export type Task = {
   id: number;
   title: string;
@@ -836,6 +843,7 @@ export type Task = {
   clickup_id?: string;
   checklists?: ChecklistItem[];
   subtasks?: Task[];
+  comments?: TaskComment[];
 };
 
 export function getWorkspaces() {

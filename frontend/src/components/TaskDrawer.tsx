@@ -296,6 +296,36 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             </div>
           </div>
 
+          {/* COMENTARIOS / ACTIVIDAD */}
+          <div className="space-y-4 pt-4 border-t border-border/50">
+            <label className="text-sm font-semibold flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" /> Comentarios y Actividad
+            </label>
+            
+            <div className="space-y-3">
+              {task.comments && task.comments.length > 0 ? (
+                task.comments.map(comm => (
+                  <div key={comm.id} className="p-3 rounded-xl bg-muted/20 border border-border/30 text-xs">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-primary">Sistema / ClickUp</span>
+                      <span className="text-[10px] text-muted-foreground">{format(new Date(comm.created_at), "d MMM, HH:mm", { locale: es })}</span>
+                    </div>
+                    <p className="text-foreground/80 leading-relaxed">{comm.content}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 border border-dashed rounded-xl bg-muted/10">
+                  <p className="text-xs text-muted-foreground">No hay comentarios en esta tarea.</p>
+                </div>
+              )}
+              
+              <div className="flex gap-2 pt-2">
+                <Input placeholder="Escribe un comentario..." className="h-9 text-xs bg-muted/20" />
+                <Button size="sm" className="h-9 px-3"><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </SheetContent>
     </Sheet>

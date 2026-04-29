@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { 
   getWorkspaces, getTasks, importClickUp, updateTask,
@@ -47,6 +54,12 @@ export default function ProjectDashboardPage() {
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [responsibleFilter, setResponsibleFilter] = useState<number | "all">("all");
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    getUsers().then(setUsers).catch(console.error);
+  }, []);
 
   useEffect(() => {
     fetchInitialData();
@@ -149,6 +162,11 @@ export default function ProjectDashboardPage() {
       const matchTitle = t.title.toLowerCase().includes(search);
       const matchDesc = t.description?.toLowerCase().includes(search);
       if (!matchTitle && !matchDesc) return false;
+    }
+
+    // Filtro de responsable
+    if (responsibleFilter !== "all" && t.assignee_id !== responsibleFilter) {
+        return false;
     }
 
     // Filtro de fechas
@@ -294,18 +312,33 @@ export default function ProjectDashboardPage() {
               </div>
 
               <div className="flex gap-2 items-center">
+                <Select 
+                  value={String(responsibleFilter)} 
+                  onValueChange={(val) => setResponsibleFilter(val === "all" ? "all" : Number(val))}
+                >
+                  <SelectTrigger className="h-9 w-[180px] text-xs bg-background/50 rounded-lg">
+                    <SelectValue placeholder="Responsable: Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los responsables</SelectItem>
+                    {users.map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.nombre || u.username}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <Input 
                   type="date" 
                   value={dateRange.start} 
                   onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                  className="h-9 w-32 text-xs rounded-lg"
+                  className="h-9 w-32 text-xs rounded-lg bg-background/50"
                 />
                 <span className="text-muted-foreground">→</span>
                 <Input 
                   type="date" 
                   value={dateRange.end} 
                   onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                  className="h-9 w-32 text-xs rounded-lg"
+                  className="h-9 w-32 text-xs rounded-lg bg-background/50"
                 />
               </div>
               
@@ -318,7 +351,10 @@ export default function ProjectDashboardPage() {
                     <LayoutGrid className="h-4 w-4 mr-2" /> Tablero
                   </TabsTrigger>
                   <TabsTrigger value="calendar" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
-                    <CalendarDays className="h-4 w-4 mr-2" /> Calendario
+                    <CalendarDays className="h-4 w-4 mr-2" /> Agenda
+                  </TabsTrigger>
+                  <TabsTrigger value="stats" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
+                    <Zap className="h-4 w-4 mr-2" /> Dashboard
                   </TabsTrigger>
                 </TabsList>
                 <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
@@ -423,8 +459,133 @@ export default function ProjectDashboardPage() {
                     messages={{ today: "Hoy", previous: "Volver", next: "Avanzar", month: "Mes", week: "Semana", day: "Día" }}
                   />
                 </div>
-              </TabsContent>
+              {/* TAB: STATS (DASHBOARD PREMIUM) */}
+              <TabsContent value="stats" className="h-full m-0 overflow-y-auto p-4 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card className="bg-gradient-to-br from-primary/10 to-transparent border-primary/20 shadow-lg">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-primary uppercase tracking-tighter">Total Tareas</span>
+                        <Zap className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="text-4xl font-black mt-2">{tasks.length}</div>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Sincronizadas desde ClickUp</p>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20 shadow-lg">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-green-600 uppercase tracking-tighter">Completadas</span>
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      </div>
+                      <div className="text-4xl font-black mt-2 text-green-600">{tasks.filter(t => t.status === 'complete').length}</div>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Éxito operativo</p>
+                    </CardContent>
+                  </Card>
 
+                  <Card className="bg-gradient-to-br from-blue-500/10 to-transparent border-blue-500/20 shadow-lg">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-blue-600 uppercase tracking-tighter">En Proceso</span>
+                        <RefreshCw className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div className="text-4xl font-black mt-2 text-blue-600">{tasks.filter(t => t.status === 'in progress').length}</div>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Gestión activa</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-orange-500/10 to-transparent border-orange-500/20 shadow-lg">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-orange-600 uppercase tracking-tighter">Pendientes</span>
+                        <Clock className="h-5 w-5 text-orange-500" />
+                      </div>
+                      <div className="text-4xl font-black mt-2 text-orange-600">{tasks.filter(t => t.status === 'to do').length}</div>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Por iniciar</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 space-y-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2 px-2">
+                      <UserIcon className="h-5 w-5 text-primary" /> Rendimiento por Responsable
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {users.map(u => {
+                        const userTasks = tasks.filter(t => t.assignee_id === u.id);
+                        if (userTasks.length === 0) return null;
+                        const completed = userTasks.filter(t => t.status === 'complete').length;
+                        const total = userTasks.length;
+                        const pct = Math.round((completed / total) * 100);
+                        
+                        return (
+                          <div key={u.id} className="p-5 rounded-2xl bg-card border border-border/40 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${pct > 80 ? 'bg-green-500' : pct > 40 ? 'bg-blue-500' : 'bg-orange-500'}`} />
+                            <div className="flex justify-between items-start mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
+                                  {u.nombre?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??'}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-foreground group-hover:text-primary transition-colors">{u.nombre || u.username}</div>
+                                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Abogado / Gestor</div>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="font-black text-lg h-9 px-3">{pct}%</Badge>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs font-bold">
+                                <span>Progreso</span>
+                                <span>{completed} / {total} Completadas</span>
+                              </div>
+                              <div className="h-3 w-full bg-muted/50 rounded-full overflow-hidden border border-border/20">
+                                <div 
+                                  className={`h-full transition-all duration-1000 ${pct > 80 ? 'bg-green-500' : pct > 40 ? 'bg-blue-500' : 'bg-orange-500'}`} 
+                                  style={{ width: `${pct}%` }} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2 px-2">
+                      <ListIcon className="h-5 w-5 text-primary" /> Distribución de Estados
+                    </h3>
+                    <Card className="p-6 bg-card/50 backdrop-blur border-border/40">
+                      <div className="space-y-5">
+                        {BOARD_COLUMNS.map(col => {
+                          const count = tasks.filter(t => t.status === col.id).length;
+                          const pct = tasks.length > 0 ? Math.round((count / tasks.length) * 100) : 0;
+                          return (
+                            <div key={col.id} className="space-y-1.5">
+                              <div className="flex justify-between text-xs">
+                                <span className="font-bold flex items-center gap-2">
+                                  <div className={`h-2 w-2 rounded-full ${col.dot}`} />
+                                  {col.label}
+                                </span>
+                                <span className="text-muted-foreground font-bold">{count} ({pct}%)</span>
+                              </div>
+                              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full ${col.color.split(' ')[0].replace('-100', '-500')}`} 
+                                  style={{ width: `${pct}%` }} 
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </TabsContent>
             </div>
           </Tabs>
         </div>

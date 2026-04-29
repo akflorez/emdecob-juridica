@@ -4117,7 +4117,8 @@ async def get_tasks(
 ):
     query = db.query(Task).options(
         joinedload(Task.checklists),
-        joinedload(Task.subtasks)
+        joinedload(Task.subtasks),
+        joinedload(Task.comments)
     )
     
     # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
