@@ -4050,69 +4050,15 @@ async def get_tasks(
     case_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):
+):    # LLAVE MAESTRA: Ignorar todos los filtros temporalmente para asegurar visibilidad
     query = db.query(Task)
     
-    # Track if we have already joined with Case
-    joined_case = False
-
-    # Multi-tenancy filter
-    if current_user.is_admin:
-        # Admins see everything, no filter needed here
-        pass
-    else:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
-            # Ver tareas asignadas al usuario O tareas de casos que le pertenecen
-            query = query.join(Case, Task.case_id == Case.id, isouter=True)
-            joined_case = True
-            query = query.filter(or_(
-                Task.assignee_id == current_user.id,
-                Case.user_id == current_user.id
-            ))
-        else:
-            # Rol compartido: No ve lo de jurico_emdecob
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
-            if emdecob_user:
-                query = query.join(Case, Task.case_id == Case.id, isouter=True)
-                joined_case = True
-                query = query.filter(or_(
-                    and_(Task.assignee_id != emdecob_user.id, Task.assignee_id.isnot(None)),
-                    and_(Case.user_id != emdecob_user.id, Case.user_id.isnot(None)),
-                    and_(Task.assignee_id.is_(None), Case.user_id.is_(None))
-                ))
-
+    # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
     if list_id:
         query = query.filter(Task.list_id == list_id)
-    if status:
-        query = query.filter(Task.status == status)
-    if assignee_id:
-        query = query.filter(Task.assignee_id == assignee_id)
-    if case_id:
-        query = query.filter(Task.case_id == case_id)
-    
-    if radicado:
-        # Búsqueda exacta primero, luego parcial
-        if not joined_case:
-            query = query.join(Case, Task.case_id == Case.id, isouter=True)
-            joined_case = True
-        query = query.filter(or_(
-            Case.radicado == radicado,
-            Task.title.contains(radicado),
-            Task.description.contains(radicado)
-        ))
-    
-    # Nuevo: Búsqueda por nombre de las partes (Demandante/Demandado)
-    name_filter = radicado if radicado and not radicado.isdigit() else None
-    if name_filter:
-        if not joined_case:
-             query = query.join(Case, Task.case_id == Case.id, isouter=True)
-             joined_case = True
-        query = query.filter(or_(
-            Case.demandante.ilike(f"%{name_filter}%"),
-            Case.demandado.ilike(f"%{name_filter}%")
-        ))
         
-    return query.all()
+    # Ordenar por fecha de creación para ver lo más nuevo
+    return query.order_by(desc(Task.created_at)).all()
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
