@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid } from 'lucide-react';
-import { Task as TaskType, updateTask, createTask, getUsers, User } from '@/services/api';
+import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, type CaseRow } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -17,7 +17,6 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Search, FileText, CheckCircle } from 'lucide-react';
-import { getCases, type CaseRow } from '@/services/api';
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -32,9 +31,25 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
   const [editedDesc, setEditedDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [fullTask, setFullTask] = useState<TaskType | null>(null);
   const [caseSearch, setCaseSearch] = useState('');
   const [caseResults, setCaseResults] = useState<CaseRow[]>([]);
   const [linkedCase, setLinkedCase] = useState<CaseRow | null>(null);
+
+  useEffect(() => {
+    if (task && open) {
+      setIsLoading(true);
+      getTaskDetail(task.id)
+        .then(res => setFullTask(res))
+        .catch(err => {
+          console.error("Error fetching task details", err);
+          setFullTask(task);
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setFullTask(null);
+    }
+  }, [task?.id, open]);
 
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
@@ -64,11 +79,12 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
   }, [caseSearch]);
 
   useEffect(() => {
-    if (task) {
-      setEditedTitle(task.title || '');
-      setEditedDesc(task.description || '');
+    if (fullTask || task) {
+      const t = fullTask || task!;
+      setEditedTitle(t.title || '');
+      setEditedDesc(t.description || '');
     }
-  }, [task]);
+  }, [fullTask, task]);
 
   const handleSave = async (field: Partial<TaskType>) => {
     if (!task) return;
@@ -93,7 +109,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
     }
   };
 
-  if (!task) return null;
+  const displayTask = fullTask || task;
+  if (!displayTask) return null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -101,11 +118,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
         <SheetHeader className="mb-6">
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="outline" className="uppercase text-[10px] h-5 tracking-wider bg-primary/10 text-primary border-primary/20">
-              {task.status}
+              {displayTask.status}
             </Badge>
-            {task.priority && (
+            {displayTask.priority && (
               <Badge variant="secondary" className="uppercase text-[10px] h-5">
-                {task.priority}
+                {displayTask.priority}
               </Badge>
             )}
           </div>
@@ -113,7 +130,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             className="text-2xl font-bold px-0 bg-transparent border-0 focus-visible:ring-0 shadow-none h-auto py-1"
             value={editedTitle}
             onChange={(e) => setEditedTitle(e.target.value)}
-            onBlur={() => (editedTitle && editedTitle !== task.title) && handleSave({ title: editedTitle })}
+            onBlur={() => (editedTitle && editedTitle !== displayTask.title) && handleSave({ title: editedTitle })}
             disabled={isLoading}
             placeholder="Nombra esta tarea..."
           />
@@ -125,7 +142,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3"/> Asignado</label>
               <Select 
-                value={task.assignee_id ? String(task.assignee_id) : "unassigned"} 
+                value={displayTask.assignee_id ? String(displayTask.assignee_id) : "unassigned"} 
                 onValueChange={(val) => handleSave({ assignee_id: val === "unassigned" ? undefined : Number(val) })}
                 disabled={isLoading}
               >
@@ -151,7 +168,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> Vencimiento</label>
               <div className="text-sm font-medium">
-                {task.due_date ? format(new Date(task.due_date), "d 'de' MMMM, yyyy", { locale: es }) : 'No definida'}
+                {displayTask.due_date ? format(new Date(displayTask.due_date), "d 'de' MMMM, yyyy", { locale: es }) : 'No definida'}
               </div>
             </div>
           </div>
@@ -163,7 +180,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
               className="resize-none min-h-[120px] bg-muted/40 border-border/50 focus-visible:bg-background"
               value={editedDesc}
               onChange={(e) => setEditedDesc(e.target.value)}
-              onBlur={() => editedDesc !== task.description && handleSave({ description: editedDesc })}
+              onBlur={() => editedDesc !== displayTask.description && handleSave({ description: editedDesc })}
               disabled={isLoading}
             />
           </div>
@@ -252,13 +269,13 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
           </div>
 
           {/* SUBTAREAS */}
-          {task.subtasks && task.subtasks.length > 0 && (
+          {displayTask.subtasks && displayTask.subtasks.length > 0 && (
             <div className="space-y-3 pt-4 border-t border-border/50">
               <label className="text-sm font-semibold flex items-center gap-2">
-                <LayoutGrid className="h-4 w-4 text-primary" /> Subtareas ({task.subtasks.length})
+                <LayoutGrid className="h-4 w-4 text-primary" /> Subtareas ({displayTask.subtasks.length})
               </label>
               <div className="space-y-2">
-                {task.subtasks.map(sub => (
+                {displayTask.subtasks.map(sub => (
                   <div key={sub.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer">
                     <CheckCircle2 className={`h-4 w-4 ${sub.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
                     <span className="text-xs font-medium truncate flex-1">{sub.title}</span>
@@ -277,8 +294,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             </label>
             
             <div className="space-y-2">
-              {task.checklists && task.checklists.length > 0 ? (
-                task.checklists.map(item => (
+              {displayTask.checklists && displayTask.checklists.length > 0 ? (
+                displayTask.checklists.map(item => (
                   <div key={item.id} className="flex items-center gap-3 group">
                     <div className={`h-5 w-5 rounded border flex items-center justify-center transition-colors ${item.is_completed ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
                       {item.is_completed && <CheckCircle className="h-3.5 w-3.5" />}
@@ -303,8 +320,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
             </label>
             
             <div className="space-y-3">
-              {task.comments && task.comments.length > 0 ? (
-                task.comments.map(comm => (
+              {displayTask.comments && displayTask.comments.length > 0 ? (
+                displayTask.comments.map(comm => (
                   <div key={comm.id} className="p-3 rounded-xl bg-muted/20 border border-border/30 text-xs">
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-bold text-primary">Sistema / ClickUp</span>

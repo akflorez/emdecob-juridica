@@ -4116,9 +4116,7 @@ async def get_tasks(
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Task).options(
-        joinedload(Task.checklists),
-        joinedload(Task.subtasks),
-        joinedload(Task.comments)
+        joinedload(Task.subtasks)
     )
     
     # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
@@ -4127,6 +4125,23 @@ async def get_tasks(
         
     # Ordenar por fecha de creación para ver lo más nuevo
     return query.order_by(desc(Task.created_at)).all()
+
+@app.get("/api/tasks/{task_id}")
+@app.get("/tasks/{task_id}")
+async def get_task_detail(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).options(
+        joinedload(Task.checklists),
+        joinedload(Task.subtasks),
+        joinedload(Task.comments)
+    ).filter(Task.id == task_id).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    return task
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(

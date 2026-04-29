@@ -882,6 +882,11 @@ export function createTask(data: Partial<Task>) {
   });
 }
 
+export async function getTaskDetail(taskId: number): Promise<Task> {
+  const response = await api.get(`/tasks/${taskId}`);
+  return response.data;
+}
+
 export function updateTask(taskId: number, data: Partial<Task>) {
   return apiFetch<Task>(`/projects/tasks/${taskId}`, {
     method: "PATCH",
