@@ -81,10 +81,14 @@ export default function ProjectDashboardPage() {
 
   const fetchTasks = async (listId?: number) => {
     try {
+      console.log('[DASHBOARD] Fetching tasks for list:', listId, 'Search:', searchTerm);
       const taskData = await getTasks({ list_id: listId, radicado: searchTerm || undefined });
-      setTasks(taskData);
+      console.log('[DASHBOARD] Received:', taskData?.length || 0, 'tasks');
+      setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
+      console.error('[DASHBOARD] Error fetching tasks:', error);
       toast.error("Error al cargar tareas");
+      setTasks([]);
     }
   };
 

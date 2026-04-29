@@ -4038,8 +4038,10 @@ async def get_tasks_by_case(case_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/projects/tasks")
 @app.get("/projects/tasks")
+@app.get("/api/api/tasks")
 @app.get("/api/tasks")
 @app.get("/tasks")
+@app.get("/api/v1/tasks")
 async def get_tasks(
     list_id: Optional[int] = None,
     status: Optional[str] = None,

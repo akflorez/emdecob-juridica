@@ -29,10 +29,14 @@ export default function AgendaView() {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
+      console.log('[AGENDA] Fetching tasks globally...');
       const data = await getTasks({});
-      setTasks(data);
+      console.log('[AGENDA] Received:', data?.length || 0, 'tasks');
+      setTasks(Array.isArray(data) ? data : []);
     } catch (error) {
+      console.error('[AGENDA] Error:', error);
       toast.error("No se pudo cargar la agenda.");
+      setTasks([]);
     } finally {
       setIsLoading(false);
     }
