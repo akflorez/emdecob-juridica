@@ -4038,6 +4038,8 @@ async def get_tasks_by_case(case_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/projects/tasks")
 @app.get("/projects/tasks")
+@app.get("/api/tasks")
+@app.get("/tasks")
 async def get_tasks(
     list_id: Optional[int] = None,
     status: Optional[str] = None,
@@ -4129,7 +4131,10 @@ async def get_case_tasks_endpoint(
 
     return q.order_by(desc(Task.created_at)).all()
 
+@app.post("/api/projects/tasks")
 @app.post("/projects/tasks")
+@app.post("/api/tasks")
+@app.post("/tasks")
 async def create_task(
     t_data: TaskCreate,
     db: Session = Depends(get_db),
@@ -4164,7 +4169,10 @@ async def create_task(
     db.refresh(task)
     return task
 
+@app.patch("/api/projects/tasks/{task_id}")
 @app.patch("/projects/tasks/{task_id}")
+@app.patch("/api/tasks/{task_id}")
+@app.patch("/tasks/{task_id}")
 async def update_task(
     task_id: int,
     t_data: TaskUpdate,
