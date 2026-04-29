@@ -19,9 +19,9 @@ async def fetch_clickup(endpoint: str, api_token: str):
 def normalize_status(clickup_status: str) -> str:
     s = clickup_status.lower().strip()
     if s in ['to do', 'todo', 'abierto', 'open', 'new', 'nueva']: return 'to do'
-    if s in ['in progress', 'doing', 'en proceso', 'pendiente', 'en curso']: return 'in progress'
-    if s in ['review', 'revisión', 'revisada', 'waiting']: return 'review'
-    if s in ['complete', 'completado', 'closed', 'finalizado']: return 'complete'
+    if s in ['in progress', 'doing', 'en proceso', 'pendiente', 'en curso', 'desarrollo']: return 'in progress'
+    if s in ['review', 'revisión', 'revisada', 'waiting', 'validación']: return 'review'
+    if s in ['complete', 'completado', 'completada', 'closed', 'finalizado', 'finalizada', 'terminado', 'terminada']: return 'complete'
     return 'to do'
 
 def extract_radicado(text: str) -> str:
@@ -36,14 +36,15 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     
     # 1. Mapear responsable
     assignee_id = None
+    assignee_name = None
     if task_data.get('assignees'):
-        # Intentamos por username o por email
         main_assignee = task_data['assignees'][0]
-        name = main_assignee.get('username', '').lower().strip()
-        assignee_id = user_map.get(name)
+        assignee_name = main_assignee.get('username')
+        name_clean = (assignee_name or '').lower().strip()
+        assignee_id = user_map.get(name_clean)
         
-        # --- Lógica específica solicitada: Juan Jose Escobar -> jurico_emdecob ---
-        if "juan" in name and "escobar" in name:
+        # --- Lógica específica: Juan Jose Escobar -> jurico_emdecob ---
+        if "juan" in name_clean and "escobar" in name_clean:
             juridico_user = db.query(User).filter(User.username == 'jurico_emdecob').first()
             if juridico_user:
                 assignee_id = juridico_user.id
@@ -87,6 +88,8 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         existing_task.due_date = due_date
         existing_task.case_id = case_id or existing_task.case_id
         existing_task.assignee_id = assignee_id or existing_task.assignee_id
+        existing_task.assignee_name = assignee_name or existing_task.assignee_name
+        existing_task.parent_id = parent_id or existing_task.parent_id
         db_task = existing_task
     else:
         db_task = Task(
@@ -99,6 +102,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             list_id=list_id,
             case_id=case_id,
             assignee_id=assignee_id,
+            assignee_name=assignee_name,
             creator_id=owner_id,
             parent_id=parent_id
         )
@@ -184,7 +188,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                             db.flush()
                         
                         # 5. Tasks & Subtasks
-                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
+                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true&include_closed=true", api_token)
                         for t_data in tasks_data['tasks']:
                             await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
                         

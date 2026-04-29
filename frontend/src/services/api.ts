@@ -844,6 +844,7 @@ export type Task = {
   checklists?: ChecklistItem[];
   subtasks?: Task[];
   comments?: TaskComment[];
+  assignee_name?: string;
 };
 
 export function getWorkspaces() {

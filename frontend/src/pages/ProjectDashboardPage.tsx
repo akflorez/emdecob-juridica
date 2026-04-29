@@ -65,7 +65,7 @@ export default function ProjectDashboardPage() {
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
-  const [responsibleFilter, setResponsibleFilter] = useState<number | "all">("all");
+  const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export default function ProjectDashboardPage() {
     }
 
     // Filtro de responsable
-    if (responsibleFilter !== "all" && t.assignee_id !== responsibleFilter) {
+    if (responsibleFilter !== "all" && t.assignee_name !== responsibleFilter) {
         return false;
     }
 
@@ -326,16 +326,16 @@ export default function ProjectDashboardPage() {
 
               <div className="flex gap-2 items-center">
                 <Select 
-                  value={String(responsibleFilter)} 
-                  onValueChange={(val) => setResponsibleFilter(val === "all" ? "all" : Number(val))}
+                  value={responsibleFilter} 
+                  onValueChange={setResponsibleFilter}
                 >
                   <SelectTrigger className="h-9 w-[180px] text-xs bg-background/50 rounded-lg">
                     <SelectValue placeholder="Responsable: Todos" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los responsables</SelectItem>
-                    {(users || []).map(u => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.nombre || u.username || 'Usuario'}</SelectItem>
+                    {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => (
+                      <SelectItem key={name} value={name!}>{name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -541,23 +541,22 @@ export default function ProjectDashboardPage() {
                       <UserIcon className="h-5 w-5 text-primary" /> Rendimiento por Responsable
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(users || []).map(u => {
-                        const userTasks = (tasks || []).filter(t => t.assignee_id === u.id);
-                        if (userTasks.length === 0) return null;
+                      {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => {
+                        const userTasks = (tasks || []).filter(t => t.assignee_name === name);
                         const completed = userTasks.filter(t => t.status === 'complete').length;
                         const total = userTasks.length;
                         const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
                         
                         return (
-                          <div key={u.id} className="p-5 rounded-2xl bg-card border border-border/40 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+                          <div key={name!} className="p-5 rounded-2xl bg-card border border-border/40 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
                             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${pct > 80 ? 'bg-green-500' : pct > 40 ? 'bg-blue-500' : 'bg-orange-500'}`} />
                             <div className="flex justify-between items-start mb-4">
                               <div className="flex items-center gap-3">
                                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
-                                  {(u.nombre || u.username || '??').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  {(name || '??').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="font-bold text-foreground group-hover:text-primary transition-colors">{u.nombre || u.username}</div>
+                                  <div className="font-bold text-foreground group-hover:text-primary transition-colors">{name}</div>
                                   <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Abogado / Gestor</div>
                                 </div>
                               </div>

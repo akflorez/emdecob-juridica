@@ -318,6 +318,7 @@ class Task(Base):
     
     # Referencia a ClickUp para evitar duplicados en importación
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
+    assignee_name = Column(String(200), nullable=True) # Nombre real de ClickUp
     
     project_list = relationship("ProjectList", back_populates="tasks")
     case = relationship("Case", back_populates="tasks")
