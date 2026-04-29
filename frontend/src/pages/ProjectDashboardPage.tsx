@@ -53,8 +53,13 @@ export default function ProjectDashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedListId) fetchTasks(selectedListId);
-  }, [selectedListId]);
+    if (selectedListId) {
+      fetchTasks(selectedListId);
+    } else if (workspaces.length > 0) {
+      // Cargar todas las tareas del primer workspace por defecto para que el calendario no salga vacio
+      fetchTasks(); 
+    }
+  }, [selectedListId, workspaces]);
 
   const fetchInitialData = async () => {
     setIsLoading(true);
@@ -74,7 +79,7 @@ export default function ProjectDashboardPage() {
     }
   };
 
-  const fetchTasks = async (listId: number) => {
+  const fetchTasks = async (listId?: number) => {
     try {
       const taskData = await getTasks({ list_id: listId, radicado: searchTerm || undefined });
       setTasks(taskData);

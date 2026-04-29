@@ -12,12 +12,15 @@ moment.locale('es');
 const localizer = momentLocalizer(moment);
 
 import { useState, useEffect } from 'react';
-import { getTasks, type Task as TaskType } from '@/services/api';
+import { getTasks, type Task as TaskType, createTask, updateTask } from '@/services/api';
 import { toast } from "sonner";
+import { RefreshCw } from 'lucide-react';
+import { TaskDrawer } from '@/components/TaskDrawer';
 
 export default function AgendaView() {
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -26,14 +29,23 @@ export default function AgendaView() {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      // Traer todas las tareas (sin filtrar por lista para tener panorama completo)
       const data = await getTasks({});
       setTasks(data);
     } catch (error) {
-      toast.error("No se pudo cargar la agenda real.");
+      toast.error("No se pudo cargar la agenda.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleTaskUpdate = (t: TaskType) => {
+    setTasks(prev => {
+      const exists = prev.some(x => x.id === t.id);
+      if (exists) return prev.map(x => x.id === t.id ? t : x);
+      return [t, ...prev];
+    });
+    setSelectedTask(t);
+    fetchTasks(); // Refrescar para asegurar orden
   };
 
   const events = tasks.map(t => {
@@ -71,7 +83,7 @@ export default function AgendaView() {
             <Button variant="outline" size="sm" onClick={fetchTasks} disabled={isLoading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setSelectedTask({ title: '', status: 'to do', priority: 'normal' } as any)}>
                 <Plus className="mr-2 h-4 w-4" /> Programar Tarea
             </Button>
         </div>
@@ -98,7 +110,11 @@ export default function AgendaView() {
                 <h3 className="text-sm font-semibold px-2">Próximos Vencimientos</h3>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
                     {tasks.slice(0, 10).map((t) => (
-                        <div key={t.id} className="p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors text-xs">
+                        <div 
+                          key={t.id} 
+                          className="p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors text-xs"
+                          onClick={() => setSelectedTask(t)}
+                        >
                             <div className="flex justify-between items-start mb-1">
                                 <span className="font-bold truncate max-w-[150px]">{t.title}</span>
                                 <Badge variant="outline" className={`text-[9px] h-4 ${t.priority === 'urgent' ? 'text-red-500 border-red-500' : ''}`}>
@@ -136,6 +152,7 @@ export default function AgendaView() {
                             time: "Hora",
                             event: "Evento"
                         }}
+                        onSelectEvent={(e: any) => setSelectedTask(e.task)}
                         style={{ height: '100%' }}
                         eventPropGetter={(event) => {
                             let backgroundColor = '#3b82f6';
@@ -149,6 +166,13 @@ export default function AgendaView() {
             </CardContent>
         </Card>
       </div>
+
+      <TaskDrawer 
+        task={selectedTask}
+        open={!!selectedTask}
+        onOpenChange={(open) => !open && setSelectedTask(null)}
+        onTaskUpdate={handleTaskUpdate}
+      />
     </div>
   );
 }

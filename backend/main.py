@@ -3909,13 +3909,16 @@ class ListCreate(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    list_id: int
+    list_id: Optional[int] = None
     assignee_id: Optional[int] = None
     priority: Optional[str] = None
-    status: str = "open"
+    status: str = "to do"
     due_date: Optional[datetime] = None
     case_id: Optional[int] = None
     parent_id: Optional[int] = None
+    
+    class Config:
+        extra = "ignore"
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -3925,6 +3928,9 @@ class TaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     assignee_id: Optional[int] = None
     case_id: Optional[int] = None
+    
+    class Config:
+        extra = "ignore"
 
 
 class CommentCreate(BaseModel):
@@ -4122,10 +4128,22 @@ async def create_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    lid = t_data.list_id
+    if lid is None:
+        # Intentar buscar una lista por defecto o crear una
+        default_list = db.query(ProjectList).filter(ProjectList.name == "BANDEJA DE ENTRADA").first()
+        if not default_list:
+            # Buscar la primera lista disponible
+            default_list = db.query(ProjectList).first()
+        
+        if default_list:
+            lid = default_list.id
+            print(f" [TASK] Asignando lista por defecto ID {lid}")
+
     task = Task(
         title=t_data.title,
         description=t_data.description,
-        list_id=t_data.list_id,
+        list_id=lid,
         assignee_id=t_data.assignee_id,
         priority=t_data.priority,
         status=t_data.status,
