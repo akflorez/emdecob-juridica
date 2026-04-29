@@ -382,7 +382,7 @@ export default function ProjectDashboardPage() {
                           <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
                           <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
                             <span className="text-muted-foreground font-medium flex items-center gap-1">
-                              <User className="h-3 w-3" /> US
+                              <UserIcon className="h-3 w-3" /> US
                             </span>
                             {task.due_date && (
                               <span className="flex items-center gap-1 font-bold text-primary">
