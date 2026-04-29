@@ -645,8 +645,28 @@ async def lifespan(app: FastAPI):
     global auto_refresh_task, auto_refresh_running, auto_refresh_stats
 
     print("[START] Iniciando EMDECOB Consultas...")
-    run_migrations()
+    # Garantizar que las tablas existan
     Base.metadata.create_all(bind=engine)
+    
+    # Reparación manual de columnas faltantes para evitar errores 500
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        cols = [c['name'] for c in inspector.get_columns('tasks')]
+        with engine.connect() as conn:
+            if 'assignee_id' not in cols:
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_id INTEGER REFERENCES users(id)"))
+                print("Migración: Columna assignee_id añadida")
+            if 'parent_id' not in cols:
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE"))
+                print("Migración: Columna parent_id añadida")
+            if 'clickup_id' not in cols:
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN clickup_id VARCHAR(100)"))
+                print("Migración: Columna clickup_id añadida")
+            conn.commit()
+    except Exception as e:
+        print(f"Error en migración rápida: {e}")
+        
     _ensure_default_user()
     
     # DIAGNOSTICO DE DATOS

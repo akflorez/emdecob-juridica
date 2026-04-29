@@ -188,16 +188,18 @@ export default function ProjectDashboardPage() {
     return acc;
   }, {} as Record<number, TaskType[]>);
 
-  const calendarEvents = filteredTasks.map(t => {
-    const d = t.due_date ? new Date(t.due_date) : new Date();
-    return {
-      id: t.id,
-      title: t.title + (!t.due_date ? ' (Sin Fecha)' : ''),
-      start: d,
-      end: d,
-      resource: t,
-    };
-  });
+  const calendarEvents = (filteredTasks || [])
+    .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
+    .map(t => {
+      const d = new Date(t.due_date!);
+      return {
+        id: t.id,
+        title: (t.title || 'Sin Título') + (t.status === 'complete' ? ' ✅' : ''),
+        start: d,
+        end: d,
+        resource: t,
+      };
+    });
 
   return (
     <div className="flex flex-col h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative overflow-hidden">
@@ -518,12 +520,12 @@ export default function ProjectDashboardPage() {
                       <UserIcon className="h-5 w-5 text-primary" /> Rendimiento por Responsable
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {users.map(u => {
-                        const userTasks = tasks.filter(t => t.assignee_id === u.id);
+                      {(users || []).map(u => {
+                        const userTasks = (tasks || []).filter(t => t.assignee_id === u.id);
                         if (userTasks.length === 0) return null;
                         const completed = userTasks.filter(t => t.status === 'complete').length;
                         const total = userTasks.length;
-                        const pct = Math.round((completed / total) * 100);
+                        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
                         
                         return (
                           <div key={u.id} className="p-5 rounded-2xl bg-card border border-border/40 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
