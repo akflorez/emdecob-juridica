@@ -1,38 +1,31 @@
-import os
+
 from sqlalchemy import create_engine, text
+import os
+from dotenv import load_dotenv
 
-DATABASE_URL = "postgresql://emdecob:emdecob2026@localhost:5432/juricob"
+load_dotenv()
 
-engine = create_engine(DATABASE_URL)
+# Use 127.0.0.1 as in db.py
+DATABASE_URL = "postgresql://emdecob:emdecob2026@127.0.0.1:5432/juricob"
 
-def check_counts():
-    try:
-        with engine.connect() as conn:
-            # Get list of tables
-            tables_res = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
-            tables = [row[0] for row in tables_res]
-            print(f"Total tables found: {len(tables)}")
-
-            for table in tables:
-                try:
-                    res = conn.execute(text(f"SELECT count(*) FROM {table}"))
-                    count = res.scalar()
-                    print(f"Table '{table}' count: {count}")
-                except Exception as table_err:
-                    print(f"Could not read table {table}: {table_err}")
+try:
+    engine = create_engine(DATABASE_URL)
+    with engine.connect() as conn:
+        print("Connected successfully to Postgres")
+        
+        cases = conn.execute(text("SELECT COUNT(*) FROM cases")).scalar()
+        events = conn.execute(text("SELECT COUNT(*) FROM case_events")).scalar()
+        tasks = conn.execute(text("SELECT COUNT(*) FROM tasks")).scalar()
+        
+        print(f"Cases: {cases}")
+        print(f"Events: {events}")
+        print(f"Tasks: {tasks}")
+        
+        if cases > 0:
+            print("\nSample Cases:")
+            res = conn.execute(text("SELECT radicado, demandado FROM cases LIMIT 5"))
+            for row in res:
+                print(f"- {row[0]}: {row[1]}")
                 
-            # If actuaciones table exists, check if any have content
-            if 'actuaciones' in tables:
-                res = conn.execute(text("SELECT count(*) FROM actuaciones WHERE description IS NOT NULL AND description != ''"))
-                print(f"Actuaciones with description: {res.scalar()}")
-                
-            # If tasks table exists, check it
-            if 'tasks' in tables:
-                res = conn.execute(text("SELECT count(*) FROM tasks"))
-                print(f"Tasks count: {res.scalar()}")
-
-    except Exception as e:
-        print(f"Global Error: {e}")
-
-if __name__ == "__main__":
-    check_counts()
+except Exception as e:
+    print(f"Error: {e}")
