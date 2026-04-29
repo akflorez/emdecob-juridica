@@ -4036,91 +4036,67 @@ async def debug_tasks(db: Session = Depends(get_db)):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-@app.get("/admin/migrate-from-native")
-async def migrate_from_native_pg(db: Session = Depends(get_db)):
+@app.post("/admin/bulk-import")
+async def bulk_import(payload: dict, db: Session = Depends(get_db)):
     """
-    Endpoint de migración ONE-TIME.
-    Copia workspaces, folders, listas y tareas del PostgreSQL nativo
-    (que tiene los datos reales) al Docker interno.
-    Prueba múltiples IPs hasta encontrar el PostgreSQL con datos.
+    Endpoint de importación masiva ONE-TIME.
+    Recibe JSON con workspaces, folders, lists y tasks.
+    Lo llama un script local que tiene acceso al PostgreSQL nativo.
     """
     import sqlalchemy as sa
-
-    CANDIDATE_URLS = [
-        "postgresql://emdecob:emdecob2026@84.247.130.122:5432/juricob",
-        "postgresql://emdecob:emdecob2026@172.17.0.1:5432/juricob",
-        "postgresql://emdecob:emdecob2026@host-gateway:5432/juricob",
-    ]
-
-    src_engine = None
-    used_url = None
-    for url in CANDIDATE_URLS:
-        try:
-            e = sa.create_engine(url, connect_args={"connect_timeout": 5})
-            with e.connect() as c:
-                count = c.execute(sa.text("SELECT count(*) FROM tasks")).scalar()
-                if count > 0:
-                    src_engine = e
-                    used_url = url
-                    break
-        except Exception:
-            continue
-
-    if not src_engine:
-        return {"ok": False, "error": "No se pudo encontrar PostgreSQL con datos. Intenta el método manual."}
-
     results = {}
     try:
-        with src_engine.connect() as src:
-            # 1. Migrar Workspaces
-            ws_rows = src.execute(sa.text("SELECT id, name, visibility, owner_id, clickup_id FROM workspaces")).fetchall()
-            for row in ws_rows:
-                existing = db.query(Workspace).filter(Workspace.id == row[0]).first()
-                if not existing:
-                    db.execute(sa.text(
-                        "INSERT INTO workspaces (id, name, visibility, owner_id, clickup_id) VALUES (:id, :name, :vis, :oid, :cid) ON CONFLICT (id) DO NOTHING"
-                    ), {"id": row[0], "name": row[1], "vis": row[2], "oid": row[3], "cid": row[4]})
-            db.commit()
-            results["workspaces"] = len(ws_rows)
+        # 1. Workspaces
+        for ws in payload.get("workspaces", []):
+            db.execute(sa.text("""
+                INSERT INTO workspaces (id, name, visibility, owner_id, clickup_id)
+                VALUES (:id, :name, :vis, :oid, :cid)
+                ON CONFLICT (id) DO NOTHING
+            """), {"id": ws["id"], "name": ws["name"], "vis": ws.get("visibility","TEAM_COLLABORATION"),
+                   "oid": ws.get("owner_id", 2), "cid": ws.get("clickup_id")})
+        db.commit()
+        results["workspaces"] = len(payload.get("workspaces", []))
 
-            # 2. Migrar Folders
-            f_rows = src.execute(sa.text("SELECT id, name, workspace_id, clickup_id FROM folders")).fetchall()
-            for row in f_rows:
-                db.execute(sa.text(
-                    "INSERT INTO folders (id, name, workspace_id, clickup_id) VALUES (:id, :name, :wid, :cid) ON CONFLICT (id) DO NOTHING"
-                ), {"id": row[0], "name": row[1], "wid": row[2], "cid": row[3]})
-            db.commit()
-            results["folders"] = len(f_rows)
+        # 2. Folders
+        for f in payload.get("folders", []):
+            db.execute(sa.text("""
+                INSERT INTO folders (id, name, workspace_id, clickup_id)
+                VALUES (:id, :name, :wid, :cid)
+                ON CONFLICT (id) DO NOTHING
+            """), {"id": f["id"], "name": f["name"], "wid": f["workspace_id"], "cid": f.get("clickup_id")})
+        db.commit()
+        results["folders"] = len(payload.get("folders", []))
 
-            # 3. Migrar Listas
-            l_rows = src.execute(sa.text("SELECT id, name, folder_id, workspace_id, clickup_id FROM project_lists")).fetchall()
-            for row in l_rows:
-                db.execute(sa.text(
-                    "INSERT INTO project_lists (id, name, folder_id, workspace_id, clickup_id) VALUES (:id, :name, :fid, :wid, :cid) ON CONFLICT (id) DO NOTHING"
-                ), {"id": row[0], "name": row[1], "fid": row[2], "wid": row[3], "cid": row[4]})
-            db.commit()
-            results["lists"] = len(l_rows)
+        # 3. Lists
+        for l in payload.get("lists", []):
+            db.execute(sa.text("""
+                INSERT INTO project_lists (id, name, folder_id, workspace_id, clickup_id)
+                VALUES (:id, :name, :fid, :wid, :cid)
+                ON CONFLICT (id) DO NOTHING
+            """), {"id": l["id"], "name": l["name"], "fid": l.get("folder_id"),
+                   "wid": l.get("workspace_id"), "cid": l.get("clickup_id")})
+        db.commit()
+        results["lists"] = len(payload.get("lists", []))
 
-            # 4. Migrar Tareas (en lotes de 100)
-            t_rows = src.execute(sa.text("SELECT id, title, description, status, priority, assignee_id, list_id, due_date, case_id, parent_id, created_at, clickup_id FROM tasks")).fetchall()
-            batch_size = 100
-            for i in range(0, len(t_rows), batch_size):
-                batch = t_rows[i:i+batch_size]
-                for row in batch:
-                    db.execute(sa.text("""
-                        INSERT INTO tasks (id, title, description, status, priority, assignee_id, list_id, due_date, case_id, parent_id, created_at, clickup_id)
-                        VALUES (:id, :title, :desc, :status, :priority, :aid, :lid, :due, :cid, :pid, :cat, :clickup)
-                        ON CONFLICT (id) DO NOTHING
-                    """), {
-                        "id": row[0], "title": row[1], "desc": row[2], "status": row[3],
-                        "priority": row[4], "aid": row[5], "lid": row[6], "due": row[7],
-                        "cid": row[8], "pid": row[9], "cat": row[10], "clickup": row[11]
-                    })
-                db.commit()
-            results["tasks"] = len(t_rows)
+        # 4. Tasks
+        for t in payload.get("tasks", []):
+            db.execute(sa.text("""
+                INSERT INTO tasks (id, title, description, status, priority, assignee_id,
+                                   list_id, due_date, case_id, parent_id, created_at, clickup_id)
+                VALUES (:id, :title, :desc, :status, :priority, :aid,
+                        :lid, :due, :cid, :pid, :cat, :clickup)
+                ON CONFLICT (id) DO NOTHING
+            """), {
+                "id": t["id"], "title": t["title"], "desc": t.get("description"),
+                "status": t.get("status","to do"), "priority": t.get("priority"),
+                "aid": t.get("assignee_id"), "lid": t.get("list_id"),
+                "due": t.get("due_date"), "cid": t.get("case_id"),
+                "pid": t.get("parent_id"), "cat": t.get("created_at"), "clickup": t.get("clickup_id")
+            })
+        db.commit()
+        results["tasks"] = len(payload.get("tasks", []))
 
-        return {"ok": True, "source": used_url, "migrated": results}
-
+        return {"ok": True, "imported": results}
     except Exception as e:
         db.rollback()
         return {"ok": False, "error": str(e)}
