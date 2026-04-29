@@ -8,17 +8,16 @@ load_dotenv()
 
 # =============================================================
 # CONFIGURACION DE BASE DE DATOS
-# El PostgreSQL NATIVO del servidor (84.247.130.122:5432)
-# tiene los 1034 tareas reales. El Docker 'db' interno está vacío.
+# El PostgreSQL NATIVO del servidor tiene las 1034 tareas reales.
+# Desde Docker en Linux, el host nativo se accede via host.docker.internal
+# (habilitado con extra_hosts: host-gateway en docker-compose.yaml)
 # =============================================================
 
 raw_url = os.getenv("DATABASE_URL", "")
 
 def get_connection_url(url_str):
-    # URL del PostgreSQL nativo en el servidor host
-    # Desde dentro de Docker en Linux, el host se accede con host-gateway
-    # o con la IP real del servidor
-    NATIVE_PG_URL = "postgresql://emdecob:emdecob2026@84.247.130.122:5432/juricob"
+    # URL del PostgreSQL nativo via Docker host gateway
+    NATIVE_PG_URL = "postgresql://emdecob:emdecob2026@host.docker.internal:5432/juricob"
 
     if not url_str:
         return NATIVE_PG_URL
@@ -27,8 +26,7 @@ def get_connection_url(url_str):
     clean_url = url_str.replace("${DB_USER:-emdecob}", "emdecob")
     clean_url = clean_url.replace("${DB_PASSWORD:-emdecob2026}", "emdecob2026")
 
-    # Si apunta al contenedor Docker interno 'db', redirigir al PostgreSQL nativo
-    # que tiene todos los datos reales del sistema
+    # Si apunta al Docker interno vacío o localhost, usar el PostgreSQL nativo del host
     if "@db:" in clean_url or "@db/" in clean_url or "@localhost" in clean_url:
         return NATIVE_PG_URL
 

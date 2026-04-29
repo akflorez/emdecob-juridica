@@ -18,6 +18,8 @@ services:
       dockerfile: ./backend/Dockerfile
     container_name: emdecob-backend
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-emdecob}:${DB_PASSWORD:-emdecob2026}@db:5432/${DB_NAME:-juricob}
       - NEON_URL=${NEON_URL} # Keep temporarily for migration
