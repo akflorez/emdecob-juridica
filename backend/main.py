@@ -4078,23 +4078,24 @@ async def bulk_import(payload: dict, db: Session = Depends(get_db)):
         db.commit()
         results["lists"] = len(payload.get("lists", []))
 
-        # 4. Tasks
+        # 4. Tasks - insertamos sin case_id para evitar FK constraint con tabla cases vacía
         for t in payload.get("tasks", []):
             db.execute(sa.text("""
                 INSERT INTO tasks (id, title, description, status, priority, assignee_id,
                                    list_id, due_date, case_id, parent_id, created_at, clickup_id)
                 VALUES (:id, :title, :desc, :status, :priority, :aid,
-                        :lid, :due, :cid, :pid, :cat, :clickup)
+                        :lid, :due, NULL, :pid, :cat, :clickup)
                 ON CONFLICT (id) DO NOTHING
             """), {
                 "id": t["id"], "title": t["title"], "desc": t.get("description"),
                 "status": t.get("status","to do"), "priority": t.get("priority"),
                 "aid": t.get("assignee_id"), "lid": t.get("list_id"),
-                "due": t.get("due_date"), "cid": t.get("case_id"),
+                "due": t.get("due_date"),
                 "pid": t.get("parent_id"), "cat": t.get("created_at"), "clickup": t.get("clickup_id")
             })
         db.commit()
         results["tasks"] = len(payload.get("tasks", []))
+
 
         return {"ok": True, "imported": results}
     except Exception as e:
