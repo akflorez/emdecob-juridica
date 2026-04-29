@@ -16,7 +16,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker, joinedload
 from sqlalchemy import create_engine, or_, desc, and_, case as sql_case, func
 
 # IMPORTACION ADAPTATIVA (Expert Mode)
@@ -4114,8 +4114,11 @@ async def get_tasks(
     case_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):    # LLAVE MAESTRA: Ignorar todos los filtros temporalmente para asegurar visibilidad
-    query = db.query(Task)
+):
+    query = db.query(Task).options(
+        joinedload(Task.checklists),
+        joinedload(Task.subtasks)
+    )
     
     # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
     if list_id:

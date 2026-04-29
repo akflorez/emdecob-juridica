@@ -106,7 +106,24 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     
     db.flush() # Para tener el ID local de la tarea para las subtareas
 
-    # 5. Procesar Subtareas (ClickUp las envía en el mismo objeto si se pide /subtasks=true)
+    # 5. Procesar Checklists (Listas de control)
+    checklists = task_data.get('checklists', [])
+    for cl in checklists:
+        # Los items de checklist en ClickUp vienen en cl['items']
+        for item in cl.get('items', []):
+            existing_cl = db.query(TaskChecklistItem).filter(
+                TaskChecklistItem.task_id == db_task.id,
+                TaskChecklistItem.content == item['name']
+            ).first()
+            if not existing_cl:
+                new_cl = TaskChecklistItem(
+                    task_id=db_task.id,
+                    content=item['name'],
+                    is_completed=item.get('resolved', False)
+                )
+                db.add(new_cl)
+
+    # 6. Procesar Subtareas (ClickUp las envía en el mismo objeto si se pide /subtasks=true)
     subtasks = task_data.get('subtasks', [])
     for sub in subtasks:
         await process_task(sub, list_id, db, owner_id, user_map, parent_id=db_task.id)
@@ -154,7 +171,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                             db.flush()
                         
                         # 5. Tasks & Subtasks
-                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true", api_token)
+                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
                         for t_data in tasks_data['tasks']:
                             await process_task(t_data, db_list.id, db, owner_id, user_map)
                         
@@ -177,7 +194,7 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                         db.add(db_list)
                         db.flush()
                     
-                    tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true", api_token)
+                    tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
                     for t_data in tasks_data['tasks']:
                         await process_task(t_data, db_list.id, db, owner_id, user_map)
                     db.commit()

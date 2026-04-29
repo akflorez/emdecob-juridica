@@ -815,6 +815,12 @@ export type Workspace = {
   folders: WorkspaceFolder[];
 };
 
+export type ChecklistItem = {
+  id: number;
+  content: string;
+  is_completed: boolean;
+};
+
 export type Task = {
   id: number;
   title: string;
@@ -828,6 +834,8 @@ export type Task = {
   parent_id?: number;
   created_at: string;
   clickup_id?: string;
+  checklists?: ChecklistItem[];
+  subtasks?: Task[];
 };
 
 export function getWorkspaces() {

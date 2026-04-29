@@ -11,7 +11,7 @@ from sqlalchemy import (
     Table,
 )
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from backend.db import Base
 
 
@@ -314,6 +314,7 @@ class Task(Base):
     
     # Soporte para subtareas (recursivo)
     parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    subtasks = relationship("Task", backref=backref("parent", remote_side=[id]))
     
     # Referencia a ClickUp para evitar duplicados en importación
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)

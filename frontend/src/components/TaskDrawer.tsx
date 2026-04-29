@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus } from 'lucide-react';
+import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid } from 'lucide-react';
 import { Task as TaskType, updateTask, createTask, getUsers, User } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -251,14 +251,48 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate }: TaskDrawe
              )}
           </div>
 
-          {/* Subtasks / Checklists Stub */}
+          {/* SUBTAREAS */}
+          {task.subtasks && task.subtasks.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-border/50">
+              <label className="text-sm font-semibold flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-primary" /> Subtareas ({task.subtasks.length})
+              </label>
+              <div className="space-y-2">
+                {task.subtasks.map(sub => (
+                  <div key={sub.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer">
+                    <CheckCircle2 className={`h-4 w-4 ${sub.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
+                    <span className="text-xs font-medium truncate flex-1">{sub.title}</span>
+                    <Badge variant="outline" className="text-[9px] uppercase">{sub.status}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CHECKLISTS */}
           <div className="space-y-3 pt-4 border-t border-border/50">
             <label className="text-sm font-semibold flex items-center gap-2 justify-between">
-              <span className="flex items-center gap-2"><CheckSquare className="h-4 w-4"/> Checklists</span>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs"><Plus className="h-3 w-3 mr-1"/> Añadir</Button>
+              <span className="flex items-center gap-2"><CheckSquare className="h-4 w-4 text-primary"/> Listas de control</span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs hover:bg-primary/10 hover:text-primary"><Plus className="h-3 w-3 mr-1"/> Añadir</Button>
             </label>
-            <div className="text-center py-6 border border-dashed rounded-lg bg-muted/20">
-              <p className="text-xs text-muted-foreground">No hay items de checklist.</p>
+            
+            <div className="space-y-2">
+              {task.checklists && task.checklists.length > 0 ? (
+                task.checklists.map(item => (
+                  <div key={item.id} className="flex items-center gap-3 group">
+                    <div className={`h-5 w-5 rounded border flex items-center justify-center transition-colors ${item.is_completed ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                      {item.is_completed && <CheckCircle className="h-3.5 w-3.5" />}
+                    </div>
+                    <span className={`text-sm ${item.is_completed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                      {item.content}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 border border-dashed rounded-xl bg-muted/10">
+                  <p className="text-xs text-muted-foreground">No hay items en la lista de control.</p>
+                </div>
+              )}
             </div>
           </div>
 
