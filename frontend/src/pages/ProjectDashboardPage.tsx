@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { 
-  getWorkspaces, getTasks, importClickUp, updateTask,
-  type Workspace, type Task as TaskType
+  getWorkspaces, getTasks, importClickUp, updateTask, getUsers,
+  type Workspace, type Task as TaskType, type User
 } from "@/services/api";
 import { TaskDrawer } from "@/components/TaskDrawer";
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
