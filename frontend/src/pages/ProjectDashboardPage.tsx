@@ -52,26 +52,27 @@ export default function ProjectDashboardPage() {
     fetchInitialData();
   }, []);
 
+  // Cuando cambia selectedListId, recargar tareas de esa lista
+  // Si no hay lista seleccionada, cargar TODAS las tareas
   useEffect(() => {
-    if (selectedListId) {
-      fetchTasks(selectedListId);
-    } else if (workspaces.length > 0) {
-      // Cargar todas las tareas del primer workspace por defecto para que el calendario no salga vacio
-      fetchTasks(); 
-    }
-  }, [selectedListId, workspaces]);
+    fetchTasks(selectedListId ?? undefined);
+  }, [selectedListId]);
 
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
       const wsData = await getWorkspaces();
       setWorkspaces(wsData);
-      if (wsData.length > 0 && wsData[0].folders.length > 0 && wsData[0].folders[0].lists.length > 0) {
-        const firstList = wsData[0].folders[0].lists[0];
-        setSelectedListId(firstList.id);
+      // Expandir el primer workspace y carpeta para navegación visual
+      // pero NO pre-seleccionar ninguna lista: queremos ver todas las tareas al inicio
+      if (wsData.length > 0) {
         setExpandedWorkspaces(new Set([wsData[0].id]));
-        setExpandedFolders(new Set([wsData[0].folders[0].id]));
+        if (wsData[0].folders.length > 0) {
+          setExpandedFolders(new Set([wsData[0].folders[0].id]));
+        }
       }
+      // Cargar TODAS las tareas sin filtro al inicio
+      await fetchTasks(undefined);
     } catch (error) {
       toast.error("Error al cargar proyectos");
     } finally {
@@ -81,9 +82,9 @@ export default function ProjectDashboardPage() {
 
   const fetchTasks = async (listId?: number) => {
     try {
-      console.log('[DASHBOARD] Fetching tasks for list:', listId, 'Search:', searchTerm);
-      const taskData = await getTasks({ list_id: listId, radicado: searchTerm || undefined });
-      console.log('[DASHBOARD] Received:', taskData?.length || 0, 'tasks');
+      console.log('[DASHBOARD] Fetching tasks. list_id:', listId ?? 'ALL');
+      const taskData = await getTasks({ list_id: listId });
+      console.log('[DASHBOARD] Received:', taskData?.length ?? 0, 'tasks');
       setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
       console.error('[DASHBOARD] Error fetching tasks:', error);
