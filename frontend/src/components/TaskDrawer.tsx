@@ -84,6 +84,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   const displayTask = fullTask || task;
 
+  const COMMON_EMOJIS = ["👍", "❤️", "🔥", "✅", "🚀", "⏳", "⚠️", "⚖️", "📝", "👏"];
+
   useEffect(() => {
     if (task && open) {
       setEditedTitle(task.title || '');
@@ -218,6 +220,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     } catch (error) {
       toast({ title: "Error" });
     }
+  };
+
+  const addEmoji = (emoji: string) => {
+    setNewComment(prev => prev + emoji);
   };
 
   if (!displayTask) return null;
@@ -622,8 +628,42 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                             <AttachmentIcon className="h-5 w-5" />
                             <input type="file" className="hidden" onChange={(e) => toast({ title: "Archivo seleccionado", description: e.target.files?.[0]?.name })} />
                          </label>
-                         <Zap className="h-5 w-5 text-purple-600 hover:scale-125 cursor-pointer transition-all" onClick={() => toast({ title: "Slash commands activados" })} />
-                         <Smile className="h-5 w-5 hover:text-foreground cursor-pointer transition-all" onClick={() => toast({ title: "Selector de emojis" })} />
+                         
+                         <Popover>
+                            <PopoverTrigger asChild>
+                               <Zap className="h-5 w-5 text-purple-600 hover:scale-125 cursor-pointer transition-all" />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-4 bg-popover border-border text-popover-foreground rounded-2xl shadow-2xl">
+                               <div className="space-y-3">
+                                  <div className="text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em]">Comandos Rápidos (Slash)</div>
+                                  <div className="grid grid-cols-1 gap-1">
+                                     <div className="p-2 hover:bg-muted rounded-lg cursor-pointer text-[12px] font-bold flex items-center gap-3" onClick={() => addEmoji(" /firmar")}>🖋️ Firmar actuación</div>
+                                     <div className="p-2 hover:bg-muted rounded-lg cursor-pointer text-[12px] font-bold flex items-center gap-3" onClick={() => addEmoji(" /urgente")}>🚨 Marcar como Urgente</div>
+                                     <div className="p-2 hover:bg-muted rounded-lg cursor-pointer text-[12px] font-bold flex items-center gap-3" onClick={() => addEmoji(" /revisar")}>👀 Solicitar revisión</div>
+                                  </div>
+                               </div>
+                            </PopoverContent>
+                         </Popover>
+
+                         <Popover>
+                            <PopoverTrigger asChild>
+                               <Smile className="h-5 w-5 hover:text-foreground cursor-pointer transition-all" />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-4 bg-popover border-border text-popover-foreground rounded-2xl shadow-2xl">
+                               <div className="grid grid-cols-5 gap-3">
+                                  {COMMON_EMOJIS.map(emoji => (
+                                    <button 
+                                      key={emoji} 
+                                      onClick={() => addEmoji(emoji)}
+                                      className="text-2xl hover:scale-125 transition-transform p-1 rounded-lg hover:bg-muted"
+                                    >
+                                       {emoji}
+                                    </button>
+                                  ))}
+                               </div>
+                            </PopoverContent>
+                         </Popover>
+
                          <div 
                            onClick={() => setIsNote(!isNote)}
                            className={cn(
