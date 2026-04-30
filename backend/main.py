@@ -4160,6 +4160,13 @@ async def get_tasks(
     # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
     if list_id:
         query = query.filter(Task.list_id == list_id)
+    
+    if case_id:
+        query = query.filter(Task.case_id == case_id)
+    elif radicado:
+        # Buscamos el caso por radicado exacto o LIKE
+        case_subquery = db.query(Case.id).filter(Case.radicado.like(f"%{radicado}%")).scalar_subquery()
+        query = query.filter(Task.case_id == case_subquery)
         
     # Ordenar por fecha de creación para ver lo más nuevo
     return query.order_by(desc(Task.created_at)).all()

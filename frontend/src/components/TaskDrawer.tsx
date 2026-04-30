@@ -38,7 +38,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const [caseResults, setCaseResults] = useState<CaseRow[]>([]);
   const [linkedCase, setLinkedCase] = useState<CaseRow | null>(null);
   const [newComment, setNewComment] = useState('');
-  const [newChecklist, setNewChecklist] = useState('');
+  const [newChecklist, setNewChecklist] = useState("");
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
 
   useEffect(() => {
     if (task && open) {
@@ -146,6 +147,32 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const displayTask = fullTask || task;
+  const handleAddSubtask = async () => {
+    if (!newSubtaskTitle.trim() || !displayTask.id) return;
+    setIsLoading(true);
+    try {
+      const res = await createTask({
+        title: newSubtaskTitle,
+        parent_id: displayTask.id,
+        list_id: displayTask.list_id,
+        case_id: displayTask.case_id,
+        status: 'to do',
+        priority: 'normal'
+      });
+      setDisplayTask(prev => ({
+        ...prev!,
+        subtasks: [...(prev?.subtasks || []), res]
+      }));
+      setNewSubtaskTitle("");
+      toast({ title: "Subtarea creada", description: res.title });
+      onTaskUpdate?.({ ...displayTask, subtasks: [...(displayTask.subtasks || []), res] });
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo crear la subtarea", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!displayTask) return null;
 
   return (
@@ -309,22 +336,38 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
           </div>
 
           {/* SUBTAREAS */}
-          {displayTask.subtasks && displayTask.subtasks.length > 0 && (
-            <div className="space-y-3 pt-4 border-t border-border/50">
-              <label className="text-sm font-semibold flex items-center gap-2">
-                <LayoutGrid className="h-4 w-4 text-primary" /> Subtareas ({displayTask.subtasks.length})
-              </label>
-              <div className="space-y-2">
-                {displayTask.subtasks.map(sub => (
-                  <div key={sub.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer">
-                    <CheckCircle2 className={`h-4 w-4 ${sub.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
-                    <span className="text-xs font-medium truncate flex-1">{sub.title}</span>
-                    <Badge variant="outline" className="text-[9px] uppercase">{sub.status}</Badge>
-                  </div>
-                ))}
+          <div className="space-y-3 pt-4 border-t border-border/50">
+            <label className="text-sm font-semibold flex items-center gap-2 justify-between">
+              <span className="flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-primary" /> Subtareas</span>
+            </label>
+            
+            <div className="space-y-2">
+              <div className="flex gap-2 mb-2">
+                <Input 
+                  placeholder="Nueva subtarea..." 
+                  className="h-8 text-xs bg-muted/20" 
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                />
+                <Button size="sm" className="h-8 h-8 px-2" onClick={handleAddSubtask}><Plus className="h-3 w-3" /></Button>
               </div>
+
+              {displayTask.subtasks && displayTask.subtasks.length > 0 ? (
+                <div className="space-y-2">
+                  {displayTask.subtasks.map(sub => (
+                    <div key={sub.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer group/sub">
+                      <CheckCircle2 className={`h-4 w-4 ${sub.status === 'complete' ? 'text-green-500' : 'text-muted-foreground'}`} />
+                      <span className="text-xs font-medium truncate flex-1">{sub.title}</span>
+                      <Badge variant="outline" className="text-[9px] uppercase">{sub.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground text-center py-2 bg-muted/10 rounded-lg border border-dashed">No hay subtareas.</p>
+              )}
             </div>
-          )}
+          </div>
 
           {/* CHECKLISTS */}
           <div className="space-y-3 pt-4 border-t border-border/50">

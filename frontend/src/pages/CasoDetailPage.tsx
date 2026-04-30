@@ -868,7 +868,7 @@ export default function CasoDetailPage() {
               setSelectedTask(updated); // refrescar drawer data en vivo
             }}
             clickupToken={clickupToken || undefined}
-            allAssignees={Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))) as string[]}
+            allAssignees={Array.from(new Set([...tasks.map(t => t.assignee_name), ...systemUsers.map(u => u.nombre || u.username)].filter(Boolean))) as string[]}
           />
         </TabsContent>
       </Tabs>
