@@ -322,7 +322,7 @@ class Task(Base):
     
     # Soporte para subtareas (recursivo)
     parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
-    subtasks = relationship("Task", backref=backref("parent", remote_side=[id]))
+    subtasks = relationship("Task", backref=backref("parent", remote_side="Task.id"), cascade="all, delete-orphan")
     
     # Referencia a ClickUp para evitar duplicados en importación
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
