@@ -207,6 +207,33 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
         # 1. Teams (Workspaces)
         teams_data = await fetch_clickup("team", api_token)
         for team in teams_data['teams']:
+            # --- SINCRONIZACIÓN DE ABOGADOS (ClickUp Members) ---
+            for member in team.get('members', []):
+                m_user = member.get('user', {})
+                m_name = m_user.get('username')
+                if not m_name: continue
+                
+                m_name_clean = m_name.lower().strip()
+                if m_name_clean not in user_map:
+                    # Buscar si ya existe por nombre exacto para evitar duplicados
+                    existing = db.query(User).filter(User.nombre == m_name).first()
+                    if not existing:
+                        # Creamos el usuario abogado si no existe
+                        new_u = User(
+                            username=f"cu_{m_user.get('id')}", 
+                            nombre=m_name,
+                            email=m_user.get('email'),
+                            is_active=True,
+                            is_admin=False,
+                            hashed_password="clickup_placeholder"
+                        )
+                        db.add(new_u)
+                        db.flush()
+                        user_map[m_name_clean] = new_u.id
+                        print(f"[ClickUp Sync] Abogado '{m_name}' sincronizado.")
+                    else:
+                        user_map[m_name_clean] = existing.id
+
             db_ws = db.query(Workspace).filter(Workspace.clickup_id == team['id']).first()
             if not db_ws:
                 db_ws = Workspace(name=team['name'], clickup_id=team['id'], owner_id=owner_id)
