@@ -86,7 +86,7 @@ export type User = {
 };
 
 export function getUsers() {
-  return apiFetch<User[]>("/users");
+  return apiFetch<User[]>("/auth/users");
 }
 
 /** ---------------------------

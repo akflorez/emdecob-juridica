@@ -1636,8 +1636,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.get("/auth/users")
 def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not current_user.is_admin:
-        raise HTTPException(403, "Solo administradores pueden ver los usuarios")
+    # Permitir que cualquier usuario autenticado vea la lista para asignaciones
     users = db.query(User).order_by(User.created_at).all()
     return [
         {
@@ -3950,6 +3949,8 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
     case_id: Optional[int] = None
+    assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = None
     assignee_ids: Optional[List[int]] = None
     
     class Config:
