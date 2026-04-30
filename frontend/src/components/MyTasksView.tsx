@@ -4,7 +4,7 @@ import {
   Flag, AlertCircle, ChevronDown, ChevronRight, Activity, 
   Search, Filter, ListChecks, Hash, UserCheck, RefreshCw
 } from "lucide-react";
-import { getTasks, type Task } from "@/services/api";
+import { getTasks, type Task, importClickUp } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { format, isToday, isBefore, parseISO, startOfToday } from "date-fns";
@@ -22,6 +22,7 @@ export function MyTasksView() {
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -41,6 +42,27 @@ export function MyTasksView() {
       toast({ title: "Error al cargar tareas", variant: "destructive" });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSyncClickup = async () => {
+    const token = localStorage.getItem("clickup_token");
+    if (!token) {
+      toast({ title: "Token de ClickUp no encontrado", description: "Configúralo en tu perfil.", variant: "destructive" });
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      toast({ title: "Sincronización iniciada", description: "Importando abogados y gestiones desde ClickUp..." });
+      await importClickUp(token);
+      // Esperar un momento y recargar
+      setTimeout(loadTasks, 3000);
+      toast({ title: "Sincronización completada", description: "Tu equipo y tareas están actualizados." });
+    } catch (error) {
+      toast({ title: "Fallo en la sincronización", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -90,9 +112,9 @@ export function MyTasksView() {
                   Panel central de litigio y gestión de términos legales
                </p>
             </div>
-            <Button onClick={loadTasks} variant="outline" className="h-12 px-8 rounded-2xl bg-card border-border/50 hover:bg-muted text-foreground font-black text-[11px] uppercase tracking-widest transition-all shadow-xl gap-3">
-               <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
-               Sincronizar ClickUp
+            <Button onClick={handleSyncClickup} disabled={isSyncing} variant="outline" className="h-12 px-8 rounded-2xl bg-card border-border/50 hover:bg-muted text-foreground font-black text-[11px] uppercase tracking-widest transition-all shadow-xl gap-3">
+               <RefreshCw className={cn("h-4 w-4 text-primary", isSyncing && "animate-spin")} />
+               {isSyncing ? "Sincronizando..." : "Sincronizar ClickUp"}
             </Button>
           </div>
 
