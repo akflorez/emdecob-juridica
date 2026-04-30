@@ -4203,11 +4203,9 @@ async def get_task_detail(
             api_token = request.headers.get("X-ClickUp-Token") # Asumimos que el frontend lo enviará
             if api_token:
                 from backend.clickup_sync import fetch_clickup, process_task
-                t_data = await fetch_clickup(f"task/{task.clickup_id}", api_token)
+                # Traemos la tarea con subtareas y checklists en una sola llamada optimizada
+                t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
                 if t_data:
-                    # Traemos también subtareas y checklists para esta tarea específica
-                    t_data['subtasks'] = (await fetch_clickup(f"task/{task.clickup_id}?subtasks=true", api_token)).get('subtasks', [])
-                    
                     # Cache de usuarios para mapeo
                     all_users = db.query(User).all()
                     user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }

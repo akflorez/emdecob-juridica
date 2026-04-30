@@ -91,6 +91,12 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_parent FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL"))
                 except:
                     pass
+            if 'assignee_name' not in columns_tasks:
+                print("+ [MIGRATION] tasks: agregando 'assignee_name'...")
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_name VARCHAR(200)"))
+            if 'custom_fields' not in columns_tasks:
+                print("+ [MIGRATION] tasks: agregando 'custom_fields'...")
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN custom_fields TEXT"))
 
     # --- Tabla 'workspaces' ---
     columns_ws = [c['name'] for c in inspector.get_columns('workspaces')]

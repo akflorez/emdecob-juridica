@@ -120,7 +120,6 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const handleSave = async (updates: Partial<TaskType>) => {
     if (!displayTask) return;
     try {
-      // Convert dates to ISO format if present
       const cleanedUpdates = { ...updates };
       if (cleanedUpdates.due_date && typeof cleanedUpdates.due_date === 'string') {
         cleanedUpdates.due_date = new Date(cleanedUpdates.due_date).toISOString();
@@ -130,7 +129,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       onTaskUpdate(updated);
       setFullTask(updated);
     } catch (error) {
-      toast({ title: "Sincronización interrumpida", description: "Verifica tu conexión con el servidor judicial.", variant: "destructive" });
+      toast({ title: "Error de sincronización", description: "Verifica el estado del servidor judicial.", variant: "destructive" });
     }
   };
 
@@ -155,7 +154,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setNewComment('');
       refreshTask();
     } catch (error) {
-      toast({ title: "Error al publicar nota" });
+      toast({ title: "Error al publicar registro" });
     }
   };
 
@@ -171,7 +170,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleDeleteComment = async (id: number) => {
-    if (!confirm("¿Eliminar este registro de actividad?")) return;
+    if (!confirm("¿Eliminar registro definitivo de actividad?")) return;
     try {
       await deleteComment(id);
       refreshTask();
@@ -183,7 +182,6 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const handleCreateSubtask = async () => {
     if (!displayTask || !newSubtaskTitle.trim()) return;
     try {
-      // Ensure date is ISO
       const isoDate = newSubtaskDate ? new Date(newSubtaskDate).toISOString() : undefined;
       
       await createTask({
@@ -202,9 +200,9 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setNewSubtaskPriority("normal");
       setShowSubtaskForm(false);
       refreshTask();
-      toast({ title: "Gestión técnica creada" });
+      toast({ title: "Gestión técnica vinculada correctamente" });
     } catch (error) {
-      toast({ title: "Error al crear gestión", description: "Verifica que todos los campos sean válidos.", variant: "destructive" });
+      toast({ title: "Fallo en creación de gestión", variant: "destructive" });
     }
   };
 
@@ -235,107 +233,106 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[1350px] p-0 bg-[#111111] border-none text-[#d1d1d1] flex flex-col shadow-2xl font-sans outline-none">
-        <SheetHeader className="sr-only"><SheetTitle>Consola Judicial ClickUp V3</SheetTitle></SheetHeader>
+      <SheetContent className="sm:max-w-[1550px] p-0 bg-[#0a0a0a] border-none text-[#d1d1d1] flex flex-col shadow-2xl font-sans outline-none">
+        <SheetHeader className="sr-only"><SheetTitle>Consola Judicial Expert Mode</SheetTitle></SheetHeader>
         
         <div className="flex flex-1 overflow-hidden h-full">
-          {/* MAIN PANEL (50%) */}
-          <div className="flex-1 flex flex-col overflow-hidden bg-[#111111]">
-             <ScrollArea className="flex-1 px-12 pt-8 pb-20">
-                <div className="space-y-10 max-w-[900px] mx-auto">
+          {/* MAIN PANEL (EXPANDED 60%) */}
+          <div className="flex-[1.5] flex flex-col overflow-hidden bg-[#0a0a0a]">
+             <ScrollArea className="flex-1 px-16 pt-10 pb-24">
+                <div className="space-y-12 max-w-[1100px] mx-auto">
                    
-                   {/* Top Header */}
-                   <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-                      <div className="flex items-center gap-3">
-                         <div className="flex items-center gap-2 px-3 py-1 bg-white/[0.03] rounded border border-white/5">
-                            <Badge className="h-4 w-4 p-0 bg-[#2da44e] flex items-center justify-center rounded-sm"><Check className="h-3 w-3 text-white" /></Badge>
-                            <span className="text-gray-300">Expediente Judicial</span>
-                            <ChevronDown className="h-3.5 w-3.5" />
-                         </div>
-                         <span className="text-primary tracking-[0.3em] font-black">{displayTask.clickup_id || displayTask.id}</span>
-                      </div>
+                   {/* Advanced Header */}
+                   <div className="flex items-center justify-between text-[11px] font-black text-gray-600 uppercase tracking-[0.4em]">
                       <div className="flex items-center gap-4">
-                         <Button variant="ghost" size="sm" onClick={refreshTask} disabled={isLoading} className="text-gray-400 hover:text-white gap-2 font-black text-[10px] tracking-widest">
-                            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} /> SINCRONIZAR
+                         <div className="flex items-center gap-3 px-4 py-1.5 bg-white/[0.03] rounded-full border border-white/5 shadow-inner">
+                            <Badge className="h-4 w-4 p-0 bg-[#2da44e] flex items-center justify-center rounded-sm ring-4 ring-[#2da44e]/10"><Check className="h-3 w-3 text-white" /></Badge>
+                            <span className="text-gray-400">Carpeta Judicial Digital</span>
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-700" />
+                         </div>
+                         <span className="text-primary font-black tracking-[0.5em]">{displayTask.clickup_id || displayTask.id}</span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                         <Button variant="ghost" size="sm" onClick={refreshTask} disabled={isLoading} className="text-gray-500 hover:text-white gap-3 font-black text-[10px] tracking-[0.3em] transition-all">
+                            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} /> ACTUALIZAR DATOS
                          </Button>
-                         <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-10 w-10 text-gray-500 hover:text-white">
-                           <X className="h-7 w-7" />
+                         <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-10 w-10 text-gray-700 hover:text-white transition-all">
+                           <X className="h-8 w-8" />
                          </Button>
                       </div>
                    </div>
 
-                   {/* Title */}
+                   {/* Master Title */}
                    <input 
-                     className="w-full bg-transparent text-4xl font-black tracking-tight border-none focus:ring-0 p-0 text-white placeholder:text-gray-800"
+                     className="w-full bg-transparent text-5xl font-black tracking-tight border-none focus:ring-0 p-0 text-white placeholder:text-gray-900 transition-all"
                      value={editedTitle}
                      onChange={(e) => setEditedTitle(e.target.value)}
                      onBlur={() => handleSave({ title: editedTitle })}
                    />
 
-                   {/* Metadata Horizontal Strip */}
-                   <div className="flex flex-wrap items-center gap-x-12 gap-y-8 py-8 border-b border-white/5">
+                   {/* Expanded Metadata Grid */}
+                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 py-10 border-y border-white/5 bg-white/[0.01] px-10 rounded-[3rem] shadow-inner">
                       {/* Estado */}
-                      <div className="flex flex-col gap-3 min-w-[170px]">
-                         <span className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em] flex items-center gap-2"><Activity className="h-4 w-4" /> Estado Procesal</span>
+                      <div className="flex flex-col gap-4">
+                         <span className="text-[11px] text-gray-600 font-black uppercase tracking-[0.4em] flex items-center gap-3"><Activity className="h-4 w-4 text-primary" /> Estado Actual</span>
                          <Select value={statusOptions.includes(currentStatus) ? currentStatus : undefined} onValueChange={(v) => handleSave({ status: v })}>
-                            <SelectTrigger className="h-11 w-full bg-[#2da44e] hover:bg-[#34bc5a] text-white text-[12px] font-black uppercase rounded-xl border-none px-5 transition-all shadow-xl">
+                            <SelectTrigger className="h-14 w-full bg-[#2da44e] hover:bg-[#34bc5a] text-white text-[13px] font-black uppercase rounded-2xl border-none px-6 transition-all shadow-2xl shadow-[#2da44e]/20 ring-4 ring-[#2da44e]/10">
                                <SelectValue placeholder={currentStatus} />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#1e1e1e] border-white/10 text-white shadow-2xl rounded-xl">
+                            <SelectContent className="bg-[#1e1e1e] border-white/10 text-white shadow-2xl rounded-2xl">
                                {statusOptions.map(s => (
-                                 <SelectItem key={s} value={s} className="uppercase text-[12px] font-black py-3 tracking-widest">{s}</SelectItem>
+                                 <SelectItem key={s} value={s} className="uppercase text-[12px] font-black py-4 tracking-widest">{s}</SelectItem>
                                ))}
                             </SelectContent>
                          </Select>
                       </div>
 
                       {/* Abogados */}
-                      <div className="flex flex-col gap-3 min-w-[220px]">
-                         <span className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em] flex items-center gap-2"><UserIcon className="h-4 w-4" /> Abogado Responsable</span>
+                      <div className="flex flex-col gap-4">
+                         <span className="text-[11px] text-gray-600 font-black uppercase tracking-[0.4em] flex items-center gap-3"><UserIcon className="h-4 w-4 text-primary" /> Responsable</span>
                          <Popover>
                             <PopoverTrigger asChild>
-                               <Button variant="outline" className="h-11 w-full bg-white/[0.02] border-white/10 rounded-xl flex items-center justify-start gap-4 px-4 hover:bg-white/5 transition-all group shadow-inner">
-                                  <div className="flex -space-x-2.5">
+                               <Button variant="outline" className="h-14 w-full bg-white/[0.03] border-white/10 rounded-2xl flex items-center justify-start gap-4 px-5 hover:bg-white/5 transition-all group shadow-inner border-2 hover:border-primary/30">
+                                  <div className="flex -space-x-3">
                                      {displayTask.assignees?.length ? (
                                         displayTask.assignees.map(a => (
-                                          <div key={a.id} className="h-8 w-8 rounded-full bg-gradient-to-br from-[#ff7b72] to-[#f85149] border-2 border-[#111] flex items-center justify-center text-[12px] font-black text-white shadow-lg">{a.nombre?.[0] || a.username[0]}</div>
+                                          <div key={a.id} className="h-9 w-9 rounded-full bg-gradient-to-br from-[#ff7b72] to-[#f85149] border-2 border-[#111] flex items-center justify-center text-[13px] font-black text-white shadow-2xl ring-2 ring-white/5">{a.nombre?.[0] || a.username[0]}</div>
                                         ))
                                      ) : (
-                                        <div className="h-8 w-8 rounded-full border-2 border-dashed border-gray-700 bg-gray-900 flex items-center justify-center text-gray-700"><UserIcon className="h-4 w-4" /></div>
+                                        <div className="h-9 w-9 rounded-full border-2 border-dashed border-gray-800 bg-gray-900 flex items-center justify-center text-gray-700"><UserIcon className="h-5 w-5" /></div>
                                      )}
                                   </div>
-                                  <span className="text-[13px] font-black text-gray-200 truncate group-hover:text-primary transition-colors">
-                                     {displayTask.assignees?.length ? displayTask.assignees.map(a => a.nombre || a.username).join(', ') : (displayTask.assignee_name || 'Asignar Abogado')}
+                                  <span className="text-[14px] font-black text-gray-200 truncate group-hover:text-primary transition-colors tracking-tight">
+                                     {displayTask.assignees?.length ? displayTask.assignees.map(a => a.nombre || a.username).join(', ') : (displayTask.assignee_name || 'Sin Asignar')}
                                   </span>
                                </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 p-3 bg-[#1e1e1e] border-white/10 text-white rounded-2xl shadow-2xl">
-                               <ScrollArea className="h-[350px]">
-                                  <div className="p-3 border-b border-white/5 mb-3 text-[10px] font-black uppercase text-gray-500 tracking-widest text-center">Equipo de Despacho</div>
-                                  <div className="space-y-1">
+                            <PopoverContent className="w-96 p-4 bg-[#1e1e1e] border-white/10 text-white rounded-[2rem] shadow-2xl ring-1 ring-white/5">
+                               <ScrollArea className="h-[400px]">
+                                  <div className="p-4 border-b border-white/5 mb-4 text-[11px] font-black uppercase text-gray-600 tracking-[0.5em] text-center">Equipo de Litigio</div>
+                                  <div className="space-y-2">
                                     {users.map(u => (
-                                      <div key={u.id} className="flex items-center justify-between p-3.5 hover:bg-white/10 rounded-xl cursor-pointer transition-all border border-transparent hover:border-white/5" onClick={() => toggleAssignee(u.id)}>
+                                      <div key={u.id} className="flex items-center justify-between p-4 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent hover:border-white/10 group" onClick={() => toggleAssignee(u.id)}>
                                          <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-gray-200">{u.nombre || u.username}</span>
-                                            <span className="text-[10px] text-gray-500 font-black uppercase">Jurídico</span>
+                                            <span className="text-[15px] font-black text-gray-200 group-hover:text-primary">{u.nombre || u.username}</span>
+                                            <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Jurídico Especializado</span>
                                          </div>
-                                         <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-6 w-6 border-white/20 data-[state=checked]:bg-primary" />
+                                         <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-7 w-7 border-white/20 data-[state=checked]:bg-primary rounded-lg" />
                                       </div>
                                     ))}
-                                    {users.length === 0 && <div className="p-10 text-center italic text-gray-600 text-xs">No hay abogados registrados en el sistema.</div>}
                                   </div>
                                </ScrollArea>
                             </PopoverContent>
                          </Popover>
                       </div>
 
-                      {/* Fecha Límite */}
-                      <div className="flex flex-col gap-3 min-w-[190px]">
-                         <span className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em] flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Vencimiento</span>
-                         <div className="h-11 bg-white/[0.02] border border-white/10 rounded-xl flex items-center gap-4 px-5 hover:border-white/20 transition-all shadow-inner">
+                      {/* Fecha Vencimiento */}
+                      <div className="flex flex-col gap-4">
+                         <span className="text-[11px] text-gray-600 font-black uppercase tracking-[0.4em] flex items-center gap-3"><CalendarIcon className="h-4 w-4 text-primary" /> Término Legal</span>
+                         <div className="h-14 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center gap-5 px-6 hover:border-primary/40 transition-all shadow-inner border-2">
                             <input 
                               type="date" 
-                              className="bg-transparent border-none focus:ring-0 text-[13px] font-black uppercase text-gray-200 p-0 w-full cursor-pointer"
+                              className="bg-transparent border-none focus:ring-0 text-[14px] font-black uppercase text-gray-100 p-0 w-full cursor-pointer"
                               value={editedDueDate}
                               onChange={(e) => {
                                 setEditedDueDate(e.target.value);
@@ -345,34 +342,34 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          </div>
                       </div>
 
-                      {/* Etiquetas Strip */}
-                      <div className="flex flex-col gap-3 min-w-[220px]">
-                         <span className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em] flex items-center gap-2"><Tag className="h-4 w-4" /> Clasificación</span>
+                      {/* Clasificación Tags */}
+                      <div className="flex flex-col gap-4">
+                         <span className="text-[11px] text-gray-600 font-black uppercase tracking-[0.4em] flex items-center gap-3"><Tag className="h-4 w-4 text-primary" /> Clasificación</span>
                          <Popover>
                             <PopoverTrigger asChild>
-                               <Button variant="outline" className="h-11 w-full bg-white/[0.02] border-white/10 rounded-xl flex flex-wrap gap-2 px-4 hover:bg-white/5 transition-all justify-start overflow-hidden py-2 shadow-inner">
+                               <Button variant="outline" className="h-14 w-full bg-white/[0.03] border-white/10 rounded-2xl flex flex-wrap gap-2 px-5 hover:bg-white/5 transition-all justify-start overflow-hidden py-3 shadow-inner border-2 hover:border-primary/30">
                                   {displayTask.tags?.length ? (
                                     displayTask.tags.map(t => (
-                                      <Badge key={t.id} style={{ backgroundColor: t.color || '#3b82f6', color: '#fff' }} className="h-6 text-[10px] font-black px-3 rounded-md border-none shadow-lg">
+                                      <Badge key={t.id} style={{ backgroundColor: t.color || '#3b82f6', color: '#fff' }} className="h-7 text-[10px] font-black px-4 rounded-lg border-none shadow-2xl ring-2 ring-white/10">
                                          {t.name}
                                       </Badge>
                                     ))
                                   ) : (
-                                    <span className="text-[12px] text-gray-700 font-bold tracking-widest">+ ETIQUETAS</span>
+                                    <span className="text-[12px] text-gray-700 font-black tracking-[0.3em] uppercase">+ ETIQUETAS</span>
                                   )}
                                </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 p-4 bg-[#1e1e1e] border-white/10 text-white rounded-2xl shadow-2xl">
-                               <ScrollArea className="h-[300px]">
-                                  <div className="p-2 border-b border-white/5 mb-4 text-[10px] font-black uppercase text-gray-500 tracking-widest text-center">Tags Maestros</div>
-                                  <div className="grid grid-cols-1 gap-2">
+                            <PopoverContent className="w-96 p-5 bg-[#1e1e1e] border-white/10 text-white rounded-[2rem] shadow-2xl">
+                               <ScrollArea className="h-[350px]">
+                                  <div className="p-3 border-b border-white/5 mb-5 text-[11px] font-black uppercase text-gray-600 tracking-[0.5em] text-center">Filtros Maestros</div>
+                                  <div className="grid grid-cols-1 gap-3">
                                     {allTags.map(t => (
-                                      <div key={t.id} className="flex items-center justify-between p-3.5 hover:bg-white/10 rounded-xl cursor-pointer transition-all border border-transparent hover:border-white/5" onClick={() => toggleTag(t.name)}>
-                                         <div className="flex items-center gap-3">
-                                            <div className="h-4 w-4 rounded-full shadow-lg ring-2 ring-white/10" style={{ backgroundColor: t.color || '#3b82f6' }} />
-                                            <span className="text-sm font-bold text-gray-200">{t.name}</span>
+                                      <div key={t.id} className="flex items-center justify-between p-4 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent hover:border-white/10 group" onClick={() => toggleTag(t.name)}>
+                                         <div className="flex items-center gap-4">
+                                            <div className="h-5 w-5 rounded-full shadow-2xl ring-4 ring-white/5" style={{ backgroundColor: t.color || '#3b82f6' }} />
+                                            <span className="text-[15px] font-black text-gray-200 group-hover:text-primary transition-colors">{t.name}</span>
                                          </div>
-                                         {displayTask.tags?.some(gt => gt.name === t.name) && <CheckCircle2 className="h-5 w-5 text-[#2da44e]" />}
+                                         {displayTask.tags?.some(gt => gt.name === t.name) && <CheckCircle2 className="h-6 w-6 text-[#2da44e]" />}
                                       </div>
                                     ))}
                                   </div>
@@ -382,43 +379,46 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                       </div>
                    </div>
 
-                   {/* Description Area */}
-                   <div className="space-y-4 pt-4">
-                      <div className="flex items-center gap-3 text-gray-700 italic text-[12px] font-bold tracking-widest uppercase">
-                         <Activity className="h-4 w-4 text-primary opacity-50" /> Bitácora de Actuaciones Jurídicas
+                   {/* Wide Description Area */}
+                   <div className="space-y-6 pt-6">
+                      <div className="flex items-center gap-4 text-gray-600 italic text-[13px] font-black tracking-[0.4em] uppercase">
+                         <Activity className="h-5 w-5 text-primary opacity-70" /> Síntesis de Avance Procesal
                       </div>
-                      <Textarea 
-                        className="min-h-[220px] bg-white/[0.01] border-none p-8 text-[16px] leading-relaxed text-gray-200 focus:ring-0 placeholder:text-gray-800 transition-all shadow-inner font-medium"
-                        placeholder="Escribe los avances procesales aquí..."
-                        value={editedDesc}
-                        onChange={(e) => setEditedDesc(e.target.value)}
-                        onBlur={() => handleSave({ description: editedDesc })}
-                      />
+                      <div className="bg-white/[0.01] rounded-[3rem] p-10 border border-white/5 shadow-2xl relative group">
+                        <Textarea 
+                          className="min-h-[250px] bg-transparent border-none p-0 text-[18px] leading-relaxed text-gray-200 focus:ring-0 placeholder:text-gray-900 transition-all font-medium"
+                          placeholder="Describe el estado detallado de esta actuación judicial..."
+                          value={editedDesc}
+                          onChange={(e) => setEditedDesc(e.target.value)}
+                          onBlur={() => handleSave({ description: editedDesc })}
+                        />
+                        <div className="absolute bottom-6 right-8 opacity-0 group-hover:opacity-100 transition-all text-[10px] font-black text-gray-700 tracking-widest uppercase">Autoguardado inteligente activo</div>
+                      </div>
                    </div>
 
-                   {/* Subtasks (Gestiones) Section */}
-                   <div className="space-y-8 pt-10 border-t border-white/5">
+                   {/* Master Subtasks Table */}
+                   <div className="space-y-10 pt-16 border-t border-white/5">
                       <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-3 text-gray-400 font-black text-[15px] uppercase tracking-[0.3em]">
-                               <ChevronDown className="h-6 w-6" /> Gestiones Técnicas
+                         <div className="flex items-center gap-8">
+                            <div className="flex items-center gap-4 text-gray-300 font-black text-[18px] uppercase tracking-[0.4em]">
+                               <ChevronDown className="h-8 w-8 text-primary" /> Gestiones Técnicas
                             </div>
-                            <div className="flex items-center gap-4 text-[12px] text-gray-500 font-black tracking-widest bg-white/[0.03] px-5 py-2 rounded-full border border-white/5">
-                               <span>{doneSub}/{totalSub} FINALIZADAS</span>
-                               <Progress value={progressSub} className="w-40 h-2 bg-gray-900" />
+                            <div className="flex items-center gap-5 text-[13px] text-gray-400 font-black tracking-[0.2em] bg-white/[0.03] px-8 py-3 rounded-full border border-white/5 shadow-inner">
+                               <span>{doneSub}/{totalSub} COMPLETADAS</span>
+                               <Progress value={progressSub} className="w-60 h-2.5 bg-gray-950 ring-1 ring-white/5" />
                             </div>
                          </div>
-                         <div className="flex items-center gap-4">
-                            <Button variant="ghost" size="icon" onClick={refreshTask} className="text-gray-600 hover:text-white"><RefreshCw className={cn("h-5 w-5", isLoading && "animate-spin")} /></Button>
-                            <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="h-10 px-6 rounded-xl bg-primary/10 text-primary font-black text-[11px] tracking-widest border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-xl">
+                         <div className="flex items-center gap-6">
+                            <Button variant="outline" size="icon" onClick={refreshTask} className="h-12 w-12 rounded-2xl bg-white/5 border-white/10 hover:bg-white/10 hover:text-white transition-all shadow-xl"><RefreshCw className={cn("h-6 w-6", isLoading && "animate-spin")} /></Button>
+                            <Button size="lg" onClick={() => setShowSubtaskForm(true)} className="h-14 px-10 rounded-[1.5rem] bg-primary text-white font-black text-[12px] tracking-[0.3em] uppercase hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-primary/40 border-b-4 border-primary-foreground/20">
                                + NUEVA GESTIÓN
                             </Button>
                          </div>
                       </div>
 
-                      <div className="bg-white/[0.01] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                         <div className="grid grid-cols-[1fr_160px_100px_140px] gap-8 px-10 py-5 border-b border-white/5 text-[11px] font-black uppercase text-gray-600 tracking-[0.4em] bg-white/[0.02]">
-                            <div>Descripción de Gestión</div>
+                      <div className="bg-white/[0.01] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)]">
+                         <div className="grid grid-cols-[1fr_180px_120px_160px] gap-10 px-12 py-8 border-b border-white/10 text-[12px] font-black uppercase text-gray-500 tracking-[0.5em] bg-white/[0.02]">
+                            <div>Detalle de Actividad</div>
                             <div className="text-center">Responsable</div>
                             <div className="text-center">Prioridad</div>
                             <div className="text-right">Vencimiento</div>
@@ -426,48 +426,52 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          <div className="divide-y divide-white/5">
                             {displayTask.subtasks?.length ? (
                                displayTask.subtasks.map(st => (
-                                 <div key={st.id} className="grid grid-cols-[1fr_160px_100px_140px] gap-8 px-10 py-6 hover:bg-white/[0.04] transition-all cursor-pointer group text-[15px]">
-                                    <div className="flex items-center gap-5 text-gray-100">
-                                       <div className={cn("h-6 w-6 rounded-full border-2 border-gray-700 flex items-center justify-center transition-all", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}>
-                                          {['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3.5 w-3.5 text-white" />}
+                                 <div key={st.id} className="grid grid-cols-[1fr_180px_120px_160px] gap-10 px-12 py-8 hover:bg-white/[0.05] transition-all cursor-pointer group text-[17px] border-l-4 border-transparent hover:border-primary">
+                                    <div className="flex items-center gap-6 text-gray-100">
+                                       <div className={cn("h-7 w-7 rounded-lg border-2 border-gray-700 flex items-center justify-center transition-all group-hover:border-primary shadow-2xl", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}>
+                                          {['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-4 w-4 text-white" />}
                                        </div>
-                                       <span className={cn("font-bold tracking-tight", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-gray-600")}>{st.title}</span>
+                                       <span className={cn("font-black tracking-tight", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-gray-700 opacity-50")}>{st.title}</span>
                                     </div>
                                     <div className="flex justify-center items-center">
-                                       <div className="h-9 w-9 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-[12px] font-black text-primary shadow-xl">{st.assignee_name?.[0] || 'U'}</div>
+                                       <div className="h-11 w-11 rounded-2xl bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-[14px] font-black text-primary shadow-2xl group-hover:bg-primary group-hover:text-white transition-all">{st.assignee_name?.[0] || 'U'}</div>
                                     </div>
                                     <div className="flex justify-center items-center">
-                                       <Flag className={`h-6 w-6 ${st.priority === 'high' ? 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'text-gray-700'}`} />
+                                       <Flag className={`h-7 w-7 ${st.priority === 'high' ? 'text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.7)]' : 'text-gray-800 group-hover:text-gray-600'}`} />
                                     </div>
-                                    <div className="text-right text-[13px] font-black text-[#2da44e] tracking-tight uppercase">
+                                    <div className="text-right text-[14px] font-black text-[#2da44e] tracking-tighter uppercase drop-shadow-[0_0_5px_rgba(45,164,78,0.3)]">
                                        {st.due_date ? format(parseISO(st.due_date.toString()), 'd MMM, yyyy') : '-'}
                                     </div>
                                  </div>
                                ))
                             ) : (
-                               <div className="p-16 text-center text-gray-700 italic font-bold tracking-widest uppercase">No hay gestiones técnicas para este expediente en el sistema local.</div>
+                               <div className="p-24 text-center space-y-6">
+                                  <Activity className="h-20 w-20 mx-auto text-gray-900 animate-pulse" />
+                                  <p className="text-gray-800 italic font-black text-[14px] tracking-[0.5em] uppercase">No hay gestiones técnicas sincronizadas para este radicado</p>
+                                  <Button variant="link" onClick={refreshTask} className="text-primary font-black uppercase tracking-widest text-[11px] underline">Forzar sincronización con ClickUp</Button>
+                               </div>
                             )}
                          </div>
                       </div>
                       
                       {showSubtaskForm && (
-                        <div className="p-10 bg-primary/5 border-2 border-primary/20 rounded-[3rem] space-y-8 shadow-2xl animate-in fade-in zoom-in duration-300">
-                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                              <div className="lg:col-span-2 space-y-3">
-                                 <label className="text-[11px] font-black text-primary uppercase ml-4 tracking-widest">Actividad Procesal</label>
-                                 <Input placeholder="Ej: Radicar memorial..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/60 border-white/10 h-14 rounded-2xl px-6 text-[14px] font-bold text-white shadow-inner focus:border-primary/50" />
+                        <div className="p-12 bg-white/[0.02] border-2 border-primary/30 rounded-[4rem] space-y-10 shadow-[0_0_150px_rgba(0,188,212,0.1)] animate-in fade-in zoom-in-95 duration-500 ring-8 ring-primary/5">
+                           <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
+                              <div className="lg:col-span-2 space-y-4">
+                                 <label className="text-[12px] font-black text-primary uppercase ml-6 tracking-[0.4em]">Actividad Técnica</label>
+                                 <Input placeholder="Ej: Radicación de demanda ejecutiva..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/80 border-white/10 h-16 rounded-[2rem] px-8 text-[16px] font-black text-white shadow-2xl focus:border-primary/60 transition-all" />
                               </div>
-                              <div className="space-y-3">
-                                 <label className="text-[11px] font-black text-primary uppercase ml-4 tracking-widest">Fecha Límite</label>
-                                 <Input type="date" value={newSubtaskDate} onChange={(e) => setNewSubtaskDate(e.target.value)} className="bg-black/60 border-white/10 h-14 rounded-2xl px-6 text-[14px] font-bold text-white shadow-inner focus:border-primary/50" />
+                              <div className="space-y-4">
+                                 <label className="text-[12px] font-black text-primary uppercase ml-6 tracking-[0.4em]">Término</label>
+                                 <Input type="date" value={newSubtaskDate} onChange={(e) => setNewSubtaskDate(e.target.value)} className="bg-black/80 border-white/10 h-16 rounded-[2rem] px-8 text-[16px] font-black text-white shadow-2xl focus:border-primary/60 transition-all" />
                               </div>
-                              <div className="space-y-3">
-                                 <label className="text-[11px] font-black text-primary uppercase ml-4 tracking-widest">Prioridad</label>
+                              <div className="space-y-4">
+                                 <label className="text-[12px] font-black text-primary uppercase ml-6 tracking-[0.4em]">Prioridad</label>
                                  <Select value={newSubtaskPriority} onValueChange={setNewSubtaskPriority}>
-                                    <SelectTrigger className="bg-black/60 border-white/10 h-14 rounded-2xl px-6 text-[14px] font-bold text-white shadow-inner">
+                                    <SelectTrigger className="bg-black/80 border-white/10 h-16 rounded-[2rem] px-8 text-[16px] font-black text-white shadow-2xl border-2">
                                        <SelectValue placeholder="Normal" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e1e1e] border-white/10 text-white rounded-xl">
+                                    <SelectContent className="bg-[#1e1e1e] border-white/10 text-white rounded-2xl">
                                        <SelectItem value="low">Baja</SelectItem>
                                        <SelectItem value="normal">Normal</SelectItem>
                                        <SelectItem value="high">Alta</SelectItem>
@@ -476,108 +480,75 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                                  </Select>
                               </div>
                            </div>
-                           <div className="flex items-center gap-8 pt-4">
-                              <div className="flex-1 space-y-3">
-                                 <label className="text-[11px] font-black text-primary uppercase ml-4 tracking-widest">Abogado Responsable</label>
+                           <div className="flex items-center gap-10 pt-4">
+                              <div className="flex-1 space-y-4">
+                                 <label className="text-[12px] font-black text-primary uppercase ml-6 tracking-[0.4em]">Asignación de Abogado</label>
                                  <Select value={newSubtaskAssigneeId?.toString()} onValueChange={(v) => setNewSubtaskAssigneeId(parseInt(v))}>
-                                    <SelectTrigger className="bg-black/60 border-white/10 h-14 rounded-2xl px-6 text-[14px] font-bold text-white shadow-inner">
-                                       <SelectValue placeholder="Seleccionar de la lista..." />
+                                    <SelectTrigger className="bg-black/80 border-white/10 h-16 rounded-[2rem] px-8 text-[16px] font-black text-white shadow-2xl border-2">
+                                       <SelectValue placeholder="Seleccionar del despacho..." />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e1e1e] border-white/10 text-white rounded-xl">
+                                    <SelectContent className="bg-[#1e1e1e] border-white/10 text-white rounded-2xl">
                                        {users.map(u => <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>)}
                                     </SelectContent>
                                  </Select>
                               </div>
-                              <div className="flex items-end gap-5 pt-8 h-full">
-                                 <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="h-14 px-8 rounded-2xl text-[12px] font-black uppercase tracking-widest text-gray-500">Cancelar</Button>
-                                 <Button onClick={handleCreateSubtask} className="h-14 px-12 rounded-2xl bg-primary text-white font-black text-[12px] uppercase tracking-widest shadow-2xl shadow-primary/30">CREAR GESTIÓN</Button>
+                              <div className="flex items-end gap-6 pt-10 h-full">
+                                 <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="h-16 px-10 rounded-[2rem] text-[13px] font-black uppercase tracking-[0.3em] text-gray-600 hover:text-white transition-all">Descartar</Button>
+                                 <Button onClick={handleCreateSubtask} className="h-16 px-16 rounded-[2.5rem] bg-primary text-white font-black text-[14px] uppercase tracking-[0.4em] shadow-2xl shadow-primary/50 hover:scale-105 active:scale-95 transition-all">VINCULAR GESTIÓN</Button>
                               </div>
                            </div>
                         </div>
                       )}
                    </div>
-
-                   {/* Checklist Area */}
-                   <div className="space-y-8 pt-10 border-t border-white/5">
-                      <div className="flex items-center gap-3 text-gray-400 font-black text-[15px] uppercase tracking-[0.3em]">
-                         <ChevronDown className="h-6 w-6" /> Lista de Pasos Rápidos
-                      </div>
-                      <div className="px-10 space-y-4">
-                         {displayTask.checklists?.map(item => (
-                           <div key={item.id} className="flex items-center gap-6 py-4 group hover:bg-white/[0.03] px-6 rounded-[1.5rem] transition-all border border-transparent hover:border-white/5 shadow-xl">
-                              <Checkbox 
-                                checked={item.is_completed} 
-                                onCheckedChange={(v) => updateChecklistItem(item.id, { is_completed: !!v }).then(refreshTask)} 
-                                className="h-6 w-6 border-gray-600 data-[state=checked]:bg-primary" 
-                              />
-                              <span className={cn("text-[15px] flex-1 font-bold tracking-tight", item.is_completed ? "line-through text-gray-700 italic" : "text-gray-200")}>
-                                {item.content}
-                              </span>
-                              <Button variant="ghost" size="icon" onClick={() => deleteChecklistItem(item.id).then(refreshTask)} className="h-10 w-10 text-gray-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded-xl">
-                                 <Trash2 className="h-5 w-5" />
-                              </Button>
-                           </div>
-                         ))}
-                         <div className="flex items-center gap-6 py-5 px-6 bg-white/[0.01] border-2 border-dashed border-white/5 rounded-[1.5rem] group hover:border-primary/40 transition-all">
-                            <Plus className="h-6 w-6 text-gray-800 group-hover:text-primary" />
-                            <Input 
-                               placeholder="Añadir paso rápido..." 
-                               value={newChecklist} 
-                               onChange={(e) => setNewChecklist(e.target.value)} 
-                               onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()} 
-                               className="bg-transparent border-none p-0 text-[15px] font-bold focus:ring-0 text-gray-300"
-                            />
-                            <Button variant="ghost" onClick={handleAddChecklist} className="h-10 px-6 rounded-xl text-[11px] font-black uppercase text-primary tracking-widest hover:bg-primary/10 transition-all">AÑADIR</Button>
-                         </div>
-                      </div>
-                   </div>
                 </div>
              </ScrollArea>
           </div>
 
-          {/* RIGHT PANEL (ACTIVITY LOG - 50%) */}
-          <div className="flex-1 flex flex-col bg-[#111111] border-l border-white/5 shadow-[0_0_120px_rgba(0,0,0,0.8)] overflow-hidden">
-             <div className="h-20 flex items-center justify-between px-10 border-b border-white/5 bg-white/[0.02]">
-                <span className="text-[14px] font-black uppercase tracking-[0.4em] text-gray-500">Activity Log & Historial</span>
-                <div className="flex items-center gap-6 text-gray-600">
-                   <Search className="h-5 w-5 hover:text-white cursor-pointer" />
-                   <Settings className="h-5 w-5 hover:text-white cursor-pointer" />
+          {/* ACTIVITY PANEL (40%) */}
+          <div className="flex-1 flex flex-col bg-[#0a0a0a] border-l border-white/5 shadow-[0_0_150px_rgba(0,0,0,1)] overflow-hidden">
+             <div className="h-24 flex items-center justify-between px-12 border-b border-white/5 bg-white/[0.02]">
+                <div className="flex items-center gap-4">
+                   <Activity className="h-6 w-6 text-primary animate-pulse" />
+                   <span className="text-[15px] font-black uppercase tracking-[0.5em] text-gray-500">Activity & Timeline</span>
+                </div>
+                <div className="flex items-center gap-8 text-gray-600">
+                   <Settings className="h-6 w-6 hover:text-white cursor-pointer transition-all" />
                 </div>
              </div>
 
-             <ScrollArea className="flex-1 px-10 py-12">
-                <div className="space-y-12">
+             <ScrollArea className="flex-1 px-12 py-12">
+                <div className="space-y-16">
                    {displayTask.comments?.map(comment => (
                      <div key={comment.id} className="group relative">
-                        <div className="flex items-center gap-4 text-[13px] mb-4">
-                           <div className="h-9 w-9 rounded-2xl bg-primary/10 flex items-center justify-center text-[14px] font-black text-primary border border-primary/20 shadow-2xl">
+                        <div className="flex items-center gap-5 text-[14px] mb-5">
+                           <div className="h-11 w-11 rounded-[1.2rem] bg-primary/10 flex items-center justify-center text-[16px] font-black text-primary border-2 border-primary/20 shadow-2xl group-hover:bg-primary group-hover:text-white transition-all">
                               {comment.user_name?.[0] || 'U'}
                            </div>
                            <div className="flex flex-col">
-                              <span className="text-gray-200 font-black uppercase tracking-widest">{(comment.user_name || 'Personal Jurídico')}</span>
-                              <span className="text-gray-600 text-[11px] font-bold">{isValid(parseISO(comment.created_at.toString())) ? format(parseISO(comment.created_at.toString()), "d MMM 'a las' p", { locale: es }) : ''}</span>
+                              <span className="text-gray-200 font-black uppercase tracking-[0.2em] text-[13px]">{(comment.user_name || 'Personal EMDECOB')}</span>
+                              <span className="text-gray-700 text-[11px] font-bold tracking-widest">{isValid(parseISO(comment.created_at.toString())) ? format(parseISO(comment.created_at.toString()), "d MMM 'a las' p", { locale: es }) : ''}</span>
                            </div>
                         </div>
                         
-                        <div className="p-7 bg-white/[0.04] border border-white/5 rounded-[2.5rem] rounded-tl-none text-[16px] font-medium text-gray-300 leading-relaxed shadow-2xl group-hover:bg-white/[0.06] transition-all relative">
+                        <div className="p-9 bg-white/[0.03] border border-white/5 rounded-[3rem] rounded-tl-none text-[17px] font-medium text-gray-300 leading-relaxed shadow-2xl group-hover:bg-white/[0.05] transition-all relative border-l-4 border-l-primary/20 hover:border-l-primary">
                            {editingCommentId === comment.id ? (
-                             <div className="space-y-5">
-                                <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-black/60 border-primary/40 text-sm min-h-[120px] rounded-3xl p-5 shadow-inner" />
-                                <div className="flex justify-end gap-4">
-                                   <Button variant="ghost" onClick={() => setEditingCommentId(null)} className="h-10 px-6 rounded-2xl text-[12px] font-black uppercase text-gray-500 tracking-widest">Cancelar</Button>
-                                   <Button onClick={() => handleUpdateComment(comment.id)} className="h-10 px-8 rounded-2xl bg-primary text-white font-black text-[12px] uppercase tracking-widest">GUARDAR CAMBIOS</Button>
+                             <div className="space-y-6">
+                                <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-black/60 border-primary/50 text-base min-h-[150px] rounded-[2rem] p-7 shadow-inner font-medium text-white" />
+                                <div className="flex justify-end gap-5">
+                                   <Button variant="ghost" onClick={() => setEditingCommentId(null)} className="h-12 px-8 rounded-2xl text-[12px] font-black uppercase text-gray-600 tracking-widest">Cancelar</Button>
+                                   <Button onClick={() => handleUpdateComment(comment.id)} className="h-12 px-10 rounded-2xl bg-primary text-white font-black text-[12px] uppercase tracking-widest shadow-2xl shadow-primary/30">ACTUALIZAR REGISTRO</Button>
                                </div>
                              </div>
                            ) : (
                              <>
                                {comment.content}
-                               <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all flex gap-3">
-                                  <Button variant="ghost" size="icon" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="h-10 w-10 rounded-2xl bg-black/60 flex items-center justify-center hover:text-primary border border-white/5 shadow-2xl"><Edit3 className="h-5 w-5" /></Button>
-                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteComment(comment.id)} className="h-10 w-10 rounded-2xl bg-black/60 flex items-center justify-center hover:text-red-500 border border-white/5 shadow-2xl"><Trash2 className="h-5 w-5" /></Button>
+                               <div className="absolute top-6 right-8 opacity-0 group-hover:opacity-100 transition-all flex gap-4">
+                                  <Button variant="ghost" size="icon" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="h-10 w-10 rounded-2xl bg-black/80 flex items-center justify-center hover:text-primary border border-white/10 shadow-2xl"><Edit3 className="h-5 w-5" /></Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteComment(comment.id)} className="h-10 w-10 rounded-2xl bg-black/80 flex items-center justify-center hover:text-red-500 border border-white/10 shadow-2xl"><Trash2 className="h-5 w-5" /></Button>
                                </div>
-                               <div className="mt-6 pt-5 border-t border-white/5 flex items-center gap-8 text-gray-600 text-[12px] font-black uppercase tracking-widest">
-                                  <div className="flex items-center gap-3 hover:text-white cursor-pointer transition-all"><Smile className="h-5 w-5" /> Reaccionar</div>
-                                  <div className="hover:text-white cursor-pointer transition-all">Responder</div>
+                               <div className="mt-8 pt-6 border-t border-white/5 flex items-center gap-10 text-gray-600 text-[13px] font-black uppercase tracking-[0.3em]">
+                                  <div className="flex items-center gap-3 hover:text-white cursor-pointer transition-all"><Smile className="h-6 w-6" /> Reacción</div>
+                                  <div className="hover:text-white cursor-pointer transition-all">Hilo Judicial</div>
                                </div>
                              </>
                            )}
@@ -585,33 +556,33 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                      </div>
                    ))}
                    {(!displayTask.comments || displayTask.comments.length === 0) && (
-                      <div className="p-32 text-center space-y-6 opacity-10">
-                         <MessageSquare className="h-24 w-24 mx-auto text-gray-500" />
-                         <p className="text-[12px] font-black uppercase tracking-[0.5em]">Sin actividad técnica registrada</p>
+                      <div className="p-40 text-center space-y-8 opacity-5">
+                         <MessageSquare className="h-32 w-32 mx-auto text-gray-500" />
+                         <p className="text-[14px] font-black uppercase tracking-[0.8em]">Silencio Procesal</p>
                       </div>
                    )}
                 </div>
              </ScrollArea>
 
-             <div className="p-10 bg-[#111111] border-t border-white/5">
-                <div className="bg-[#1e1e1e] border-2 border-white/10 rounded-[3rem] p-8 space-y-6 shadow-2xl focus-within:border-primary/40 transition-all">
+             <div className="p-12 bg-[#0a0a0a] border-t border-white/10">
+                <div className="bg-[#111111] border-2 border-white/5 rounded-[3.5rem] p-10 space-y-8 shadow-[0_0_100px_rgba(0,0,0,0.5)] focus-within:border-primary/50 focus-within:shadow-[0_0_100px_rgba(0,188,212,0.1)] transition-all">
                    <Textarea 
                      value={newComment}
                      onChange={(e) => setNewComment(e.target.value)}
-                     placeholder="Añade un comentario al expediente..."
-                     className="bg-transparent border-none focus:ring-0 p-0 text-[16px] min-h-[100px] resize-none text-gray-200 font-medium placeholder:text-gray-800"
+                     placeholder="Añade una nota técnica al expediente..."
+                     className="bg-transparent border-none focus:ring-0 p-0 text-[18px] min-h-[120px] resize-none text-gray-100 font-medium placeholder:text-gray-900"
                    />
                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-6 text-gray-600">
-                         <AttachmentIcon className="h-6 w-6 hover:text-white cursor-pointer transition-all" />
-                         <Zap className="h-6 w-6 text-purple-400" />
-                         <Smile className="h-6 w-6 hover:text-white cursor-pointer transition-all" />
-                         <div className="flex items-center gap-3 px-5 py-2 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer text-[12px] font-black uppercase tracking-widest border border-white/5 transition-all">
-                            <MessageCircle className="h-5 w-5" /> Comentario
+                      <div className="flex items-center gap-8 text-gray-600">
+                         <AttachmentIcon className="h-7 w-7 hover:text-white cursor-pointer transition-all hover:scale-125" />
+                         <Zap className="h-7 w-7 text-purple-500 hover:scale-125 cursor-pointer" />
+                         <Smile className="h-7 w-7 hover:text-white cursor-pointer transition-all hover:scale-125" />
+                         <div className="flex items-center gap-4 px-6 py-3 bg-white/5 rounded-2xl hover:bg-white/10 cursor-pointer text-[13px] font-black uppercase tracking-[0.2em] border border-white/10 transition-all shadow-inner">
+                            <MessageCircle className="h-6 w-6 text-primary" /> NOTA TÉCNICA
                          </div>
                       </div>
-                      <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()} className={cn("h-14 w-14 rounded-3xl shadow-2xl shadow-primary/40 transition-all", newComment.trim() ? "bg-primary text-white scale-105" : "bg-gray-800 text-gray-700")}>
-                        <Send className="h-7 w-7" />
+                      <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()} className={cn("h-16 w-16 rounded-[2rem] shadow-[0_20px_50px_rgba(0,188,212,0.3)] transition-all transform hover:rotate-6", newComment.trim() ? "bg-primary text-white scale-110" : "bg-gray-950 text-gray-900 opacity-20")}>
+                        <Send className="h-8 w-8" />
                       </Button>
                    </div>
                 </div>
