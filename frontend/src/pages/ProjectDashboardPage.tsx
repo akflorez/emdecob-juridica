@@ -94,6 +94,7 @@ export default function ProjectDashboardPage() {
   const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
 
   useEffect(() => {
+    console.log("🚀 Judicial Dashboard Expert Engine v2.1 Loaded");
     fetchInitialData();
     getUsers().then(setUsers).catch(console.error);
   }, []);
@@ -639,7 +640,10 @@ export default function ProjectDashboardPage() {
                                   { id: 'porVencer', label: 'Por Vencer (7d)', count: dashboardMetrics.porVencer, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
                                   { id: 'completadas', label: 'Completadas', count: dashboardMetrics.completadas, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
                                 ].map((card, i) => (
-                                  <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group cursor-pointer hover:border-primary/40 transition-all" onClick={() => setDetailView(card.id)}>
+                                  <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group cursor-pointer hover:border-primary/60 hover:shadow-primary/10 transition-all duration-300" onClick={() => {
+                                    console.log("Switching to detail view:", card.id);
+                                    setDetailView(card.id);
+                                  }}>
                                      <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-150 transition-transform duration-500`} />
                                      <CardContent className="p-6">
                                         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
