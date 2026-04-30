@@ -106,7 +106,7 @@ export default function ProjectDashboardPage() {
   const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
 
   useEffect(() => {
-    console.log("🚀 Judicial Dashboard Expert Engine v2.2 Loaded");
+    console.log("🚀 Judicial Dashboard Expert Engine v2.3 Loaded");
     fetchInitialData();
     getUsers().then(setUsers).catch(console.error);
   }, []);
@@ -171,7 +171,6 @@ export default function ProjectDashboardPage() {
     setDateRange({ start, end });
   };
 
-  // Tareas filtradas por jerarquía y búsqueda (SIN FECHA para el calendario)
   const baseFilteredTasks = useMemo(() => {
     return (tasks || []).filter(t => {
       if (selectedListId && t.list_id !== selectedListId) return false;
@@ -203,14 +202,13 @@ export default function ProjectDashboardPage() {
     });
   }, [tasks, selectedListId, selectedFolderId, selectedWorkspaceId, workspaces, searchTerm, responsibleFilter]);
 
-  // Tareas filtradas por jerarquía, búsqueda Y FECHA (Para Tablero, Lista y Dashboard)
   const filteredTasks = useMemo(() => {
     return baseFilteredTasks.filter(t => {
-      if (dateFilterType !== "all" && t.due_date) {
+      if (dateFilterType !== "all" && dateFilterType !== "histórico" && t.due_date) {
         const d = new Date(t.due_date);
         if (dateRange.start && d < startOfDay(new Date(dateRange.start))) return false;
         if (dateRange.end && d > endOfDay(new Date(dateRange.end))) return false;
-      } else if (dateFilterType !== "all" && !t.due_date) {
+      } else if (dateFilterType !== "all" && dateFilterType !== "histórico" && !t.due_date) {
         return false;
       }
       return true;
@@ -272,7 +270,7 @@ export default function ProjectDashboardPage() {
   }, [filteredTasks, dynamicBoardColumns]);
 
   const calendarEvents = useMemo(() => {
-    return baseFilteredTasks // El calendario usa las tareas SIN el filtro de fecha del header
+    return baseFilteredTasks
       .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
       .map(t => ({
         id: t.id,
@@ -308,9 +306,7 @@ export default function ProjectDashboardPage() {
   };
 
   const handleCreateConfirm = () => {
-    toast.success(`${creationModal.title} "${newItemName}" creada con éxito`, {
-      description: "La estructura se actualizará tras la próxima sincronización."
-    });
+    toast.success(`${creationModal.title} "${newItemName}" creada con éxito`);
     setCreationModal({ open: false, mode: '', title: '' });
     setNewItemName('');
   };
@@ -506,15 +502,8 @@ export default function ProjectDashboardPage() {
               </div>
 
               <div className="flex-1 overflow-hidden relative">
-                 <AnimatePresence mode="wait">
                     {activeTab === "board" && (
-                      <motion.div 
-                        key="board"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className="h-full p-6 flex gap-6 overflow-x-auto custom-scrollbar"
-                      >
+                      <div className="h-full p-6 flex gap-6 overflow-x-auto custom-scrollbar">
                          {dynamicBoardColumns.map((col, colIdx) => (
                            <div key={col.id} className="min-w-[320px] flex flex-col bg-accent/5 border border-border/40 rounded-3xl p-4 shadow-xl">
                              <div className="flex items-center justify-between mb-6 px-2">
@@ -549,17 +538,11 @@ export default function ProjectDashboardPage() {
                              </div>
                            </div>
                          ))}
-                      </motion.div>
+                      </div>
                     )}
 
                     {activeTab === "list" && (
-                      <motion.div 
-                        key="list"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="h-full p-6 overflow-y-auto space-y-2 custom-scrollbar"
-                      >
+                      <div className="h-full p-6 overflow-y-auto space-y-2 custom-scrollbar">
                          {parentTasks.map(t => (
                            <div key={t.id} className="group flex items-center justify-between p-4 bg-accent/5 border border-border/40 rounded-2xl hover:bg-accent/10 transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
                               <div className="flex items-center gap-4">
@@ -575,17 +558,11 @@ export default function ProjectDashboardPage() {
                               <Badge variant="outline" className="text-[9px] font-black">{t.status}</Badge>
                            </div>
                          ))}
-                      </motion.div>
+                      </div>
                     )}
 
                     {activeTab === "calendar" && (
-                      <motion.div 
-                        key="calendar"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="h-full p-6"
-                      >
+                      <div className="h-full p-6">
                          <div className="h-full bg-card rounded-3xl border border-border/40 p-6 overflow-hidden shadow-2xl">
                             <BigCalendar
                               localizer={localizer}
@@ -603,19 +580,13 @@ export default function ProjectDashboardPage() {
                               culture="es"
                             />
                          </div>
-                      </motion.div>
+                      </div>
                     )}
 
                     {activeTab === "stats" && (
-                      <motion.div 
-                        key="stats"
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.02 }}
-                        className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5"
-                      >
+                      <div className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5">
                          {detailView ? (
-                           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                           <div className="space-y-6">
                               <Button variant="ghost" size="sm" onClick={() => setDetailView(null)} className="font-bold text-xs">
                                 <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Dashboard
                               </Button>
@@ -651,7 +622,7 @@ export default function ProjectDashboardPage() {
                                     </TableBody>
                                  </Table>
                               </Card>
-                           </motion.div>
+                           </div>
                          ) : (
                            <>
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
@@ -662,10 +633,7 @@ export default function ProjectDashboardPage() {
                                   { id: 'porVencer', label: 'Por Vencer (7d)', count: dashboardMetrics.porVencer, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
                                   { id: 'completadas', label: 'Completadas', count: dashboardMetrics.completadas, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
                                 ].map((card, i) => (
-                                  <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group cursor-pointer hover:border-primary/60 hover:shadow-primary/10 transition-all duration-300" onClick={() => {
-                                    console.log("Switching to detail view:", card.id);
-                                    setDetailView(card.id);
-                                  }}>
+                                  <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group cursor-pointer hover:border-primary/60 hover:shadow-primary/10 transition-all duration-300" onClick={() => setDetailView(card.id)}>
                                      <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-150 transition-transform duration-500`} />
                                      <CardContent className="p-6">
                                         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
@@ -683,22 +651,16 @@ export default function ProjectDashboardPage() {
                                    <CardHeader className="border-b border-border/40">
                                       <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Carga por Abogado</CardTitle>
                                    </CardHeader>
-                                   <CardContent className="p-4 flex-1 h-[450px]">
-                                      <ResponsiveContainer width="100%" height="100%" key={`pie-${activeTab}`}>
-                                         <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                   <CardContent className="p-4 flex-1 h-[450px] min-h-[450px]">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                         <PieChart>
                                             <Pie data={statsByAssignee} cx="50%" cy="45%" innerRadius={70} outerRadius={100} paddingAngle={2} dataKey="value" stroke="none">
                                                {statsByAssignee.map((entry, index) => (
                                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                ))}
                                             </Pie>
                                             <ChartTooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '10px' }} />
-                                            <Legend 
-                                              verticalAlign="bottom" 
-                                              align="center" 
-                                              wrapperStyle={{ paddingTop: '20px', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}
-                                              layout="horizontal"
-                                              iconType="circle"
-                                            />
+                                            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: '20px', fontSize: '9px', fontWeight: 'bold' }} layout="horizontal" iconType="circle" />
                                          </PieChart>
                                       </ResponsiveContainer>
                                    </CardContent>
@@ -708,19 +670,11 @@ export default function ProjectDashboardPage() {
                                    <CardHeader className="border-b border-border/40">
                                       <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Distribución de Estados</CardTitle>
                                    </CardHeader>
-                                   <CardContent className="p-4 flex-1 h-[450px]">
-                                      <ResponsiveContainer width="100%" height="100%" key={`bar-${activeTab}`}>
+                                   <CardContent className="p-4 flex-1 h-[450px] min-h-[450px]">
+                                      <ResponsiveContainer width="100%" height="100%">
                                          <BarChart data={statsByStatus} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
-                                            <XAxis 
-                                              dataKey="name" 
-                                              axisLine={false} 
-                                              tickLine={false} 
-                                              tick={{ fill: 'var(--muted-foreground)', fontSize: 8, fontWeight: 'bold' }} 
-                                              angle={-45}
-                                              textAnchor="end"
-                                              interval={0}
-                                            />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 8, fontWeight: 'bold' }} angle={-45} textAnchor="end" interval={0} />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
                                             <ChartTooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
                                             <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={35}>
@@ -735,9 +689,8 @@ export default function ProjectDashboardPage() {
                              </div>
                            </>
                          )}
-                      </motion.div>
+                      </div>
                     )}
-                 </AnimatePresence>
               </div>
            </Tabs>
         </div>
@@ -766,9 +719,6 @@ export default function ProjectDashboardPage() {
             <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
               <Zap className="h-5 w-5 text-primary" /> {creationModal.title}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Define los parámetros iniciales de tu nueva estructura operativa.
-            </DialogDescription>
           </DialogHeader>
           <div className="py-6 space-y-4">
              <div className="space-y-2">
@@ -780,21 +730,6 @@ export default function ProjectDashboardPage() {
                  className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
                />
              </div>
-             {(creationModal.mode === 'carpeta' || creationModal.mode === 'lista') && (
-               <div className="space-y-2">
-                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Ubicación</label>
-                 <Select>
-                    <SelectTrigger className="bg-accent/30 border-border/40 rounded-xl h-12 text-xs font-bold">
-                       <SelectValue placeholder="Seleccionar padre..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                       {workspaces.map(ws => (
-                         <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
-                       ))}
-                    </SelectContent>
-                 </Select>
-               </div>
-             )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreationModal({ ...creationModal, open: false })} className="rounded-xl font-bold">Cancelar</Button>
