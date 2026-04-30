@@ -3949,9 +3949,8 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
-    assignee_id: Optional[int] = None
-    assignee_name: Optional[str] = None
     case_id: Optional[int] = None
+    assignee_ids: Optional[List[int]] = None
     
     class Config:
         extra = "ignore"
@@ -4372,6 +4371,13 @@ async def update_task(
     if t_data.due_date is not None: task.due_date = t_data.due_date
     if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
     if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
+    
+    if hasattr(t_data, 'assignee_ids') and t_data.assignee_ids is not None:
+        db_users = db.query(User).filter(User.id.in_(t_data.assignee_ids)).all()
+        task.assignees = db_users
+        if db_users:
+            task.assignee_id = db_users[0].id
+            task.assignee_name = ", ".join([(u.nombre or u.username) for u in db_users])
     
     if hasattr(t_data, 'tags') and t_data.tags is not None:
         # t_data.tags es una lista de nombres de tags

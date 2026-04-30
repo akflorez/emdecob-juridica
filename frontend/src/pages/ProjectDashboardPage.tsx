@@ -5,7 +5,7 @@ import {
   Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock,
   LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
-  TrendingUp, Users, Activity
+  TrendingUp, Users, Activity, Flag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend 
 } from 'recharts';
+import { motion, AnimatePresence } from "framer-motion";
 
 // Español para el calendario
 moment.locale('es');
@@ -75,7 +76,6 @@ export default function ProjectDashboardPage() {
     try {
       const wsData = await getWorkspaces();
       setWorkspaces(wsData);
-      // Cargar TODAS las tareas inicialmente
       await fetchTasks();
     } catch (error) {
       toast.error("Error al cargar proyectos");
@@ -86,7 +86,6 @@ export default function ProjectDashboardPage() {
 
   const fetchTasks = async () => {
     try {
-      // Sin list_id para traer todo el universo de tareas
       const taskData = await getTasks({});
       setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
@@ -129,14 +128,10 @@ export default function ProjectDashboardPage() {
     setDateRange({ start, end });
   };
 
-  // Filtrado multinivel (Workspace -> Folder -> List) + Búsqueda + Fecha
   const filteredTasks = useMemo(() => {
     return (tasks || []).filter(t => {
-      // Filtro de Jerarquía
       if (selectedListId && t.list_id !== selectedListId) return false;
       
-      // Si no hay lista seleccionada pero sí folder, necesitamos saber si la tarea pertenece al folder
-      // Como el modelo Task no tiene folder_id directo, dependemos de la estructura cargada o de buscarlo
       if (selectedFolderId && !selectedListId) {
         const folder = workspaces.flatMap(ws => ws.folders).find(f => f.id === selectedFolderId);
         const listIds = folder?.lists.map(l => l.id) || [];
@@ -149,28 +144,31 @@ export default function ProjectDashboardPage() {
         if (!listIds.includes(t.list_id)) return false;
       }
 
-      // Otros filtros
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         if (!t.title.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search)) return false;
       }
-      if (responsibleFilter !== "all" && t.assignee_name !== responsibleFilter) return false;
+      
+      // Filtro de responsable (soporta múltiples)
+      if (responsibleFilter !== "all") {
+        const matchesName = t.assignee_name?.includes(responsibleFilter);
+        const matchesList = t.assignees?.some(a => (a.nombre || a.username) === responsibleFilter);
+        if (!matchesName && !matchesList) return false;
+      }
       
       if (dateFilterType !== "all" && t.due_date) {
         const d = new Date(t.due_date);
         if (dateRange.start && d < startOfDay(new Date(dateRange.start))) return false;
         if (dateRange.end && d > endOfDay(new Date(dateRange.end))) return false;
       } else if (dateFilterType !== "all" && !t.due_date) {
-        return false; // Si hay filtro de fecha activo, ocultamos las que no tienen fecha
+        return false;
       }
 
       return true;
     });
   }, [tasks, selectedListId, selectedFolderId, selectedWorkspaceId, workspaces, searchTerm, responsibleFilter, dateRange, dateFilterType]);
 
-  // Las columnas del tablero se basan en el UNIVERSO TOTAL de tareas para que siempre aparezcan
   const dynamicBoardColumns = useMemo(() => {
-    // Usar "tasks" (universo completo) en lugar de "filteredTasks" para determinar las columnas
     const allStatuses = Array.from(new Set(tasks.map(t => t.status || 'ABIERTO')));
     
     allStatuses.sort((a, b) => {
@@ -210,8 +208,15 @@ export default function ProjectDashboardPage() {
   const statsByAssignee = useMemo(() => {
     const map: Record<string, number> = {};
     filteredTasks.forEach(t => {
-      const name = t.assignee_name || "Sin Asignar";
-      map[name] = (map[name] || 0) + 1;
+      if (t.assignees && t.assignees.length > 0) {
+        t.assignees.forEach(a => {
+          const name = a.nombre || a.username;
+          map[name] = (map[name] || 0) + 1;
+        });
+      } else {
+        const name = t.assignee_name || "Sin Asignar";
+        map[name] = (map[name] || 0) + 1;
+      }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [filteredTasks]);
@@ -241,7 +246,11 @@ export default function ProjectDashboardPage() {
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
       
       {/* Header */}
-      <div className="flex items-center justify-between py-4 px-6 border-b border-white/5 bg-black/40 backdrop-blur-xl z-20">
+      <motion.div 
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="flex items-center justify-between py-4 px-6 border-b border-white/5 bg-black/40 backdrop-blur-xl z-20"
+      >
         <div className="flex items-center gap-4">
           <div className="p-2.5 bg-gradient-to-br from-primary to-blue-600 rounded-xl shadow-xl shadow-primary/20">
             <LayoutDashboard className="h-5 w-5 text-white" />
@@ -261,11 +270,15 @@ export default function ProjectDashboardPage() {
              <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
            </Button>
         </div>
-      </div>
+      </motion.div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar de Navegación Multicanal */}
-        <div className="w-72 flex flex-col border-r border-white/5 bg-black/40">
+        <motion.div 
+          initial={{ x: -280 }}
+          animate={{ x: 0 }}
+          className="w-72 flex flex-col border-r border-white/5 bg-black/40"
+        >
            <div className="p-4">
              <div className="relative group">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
@@ -283,52 +296,80 @@ export default function ProjectDashboardPage() {
                      setSelectedFolderId(null);
                      setSelectedListId(null);
                    }}>
-                     <ChevronDown className={`h-3.5 w-3.5 text-slate-600 transition-transform ${expandedWorkspaces.has(ws.id) ? "" : "-rotate-90"}`} />
+                     <motion.div animate={{ rotate: expandedWorkspaces.has(ws.id) ? 0 : -90 }}>
+                        <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
+                     </motion.div>
                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{ws.name}</span>
                    </div>
-                   {expandedWorkspaces.has(ws.id) && ws.folders.map(f => (
-                     <div key={f.id} className="ml-3">
-                        <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-white/5"}`} onClick={() => {
-                          const n = new Set(expandedFolders);
-                          if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
-                          setExpandedFolders(n);
-                          setSelectedFolderId(f.id);
-                          setSelectedListId(null);
-                        }}>
-                          <ChevronDown className={`h-3 w-3 text-slate-600 transition-transform ${expandedFolders.has(f.id) ? "" : "-rotate-90"}`} />
-                          <span className="text-[11px] font-bold text-slate-400">{f.name}</span>
-                        </div>
-                        {expandedFolders.has(f.id) && f.lists.map(list => (
-                          <div 
-                            key={list.id} 
-                            onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); }}
-                            className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-white font-bold" : "text-slate-500 hover:text-slate-300"}`}
-                          >
-                             {list.name}
-                             {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse" />}
-                          </div>
-                        ))}
-                     </div>
-                   ))}
+                   
+                   <AnimatePresence>
+                     {expandedWorkspaces.has(ws.id) && (
+                       <motion.div 
+                         initial={{ height: 0, opacity: 0 }}
+                         animate={{ height: "auto", opacity: 1 }}
+                         exit={{ height: 0, opacity: 0 }}
+                         className="overflow-hidden"
+                       >
+                         {ws.folders.map(f => (
+                           <div key={f.id} className="ml-3">
+                              <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-white/5"}`} onClick={() => {
+                                const n = new Set(expandedFolders);
+                                if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
+                                setExpandedFolders(n);
+                                setSelectedFolderId(f.id);
+                                setSelectedListId(null);
+                              }}>
+                                <motion.div animate={{ rotate: expandedFolders.has(f.id) ? 0 : -90 }}>
+                                  <ChevronDown className="h-3 w-3 text-slate-600" />
+                                </motion.div>
+                                <span className="text-[11px] font-bold text-slate-400">{f.name}</span>
+                              </div>
+                              <AnimatePresence>
+                                {expandedFolders.has(f.id) && (
+                                  <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    {f.lists.map(list => (
+                                      <motion.div 
+                                        key={list.id} 
+                                        whileHover={{ x: 5 }}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); }}
+                                        className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-white font-bold" : "text-slate-500 hover:text-slate-300"}`}
+                                      >
+                                         {list.name}
+                                         {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse" />}
+                                      </motion.div>
+                                    ))}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                           </div>
+                         ))}
+                       </motion.div>
+                     )}
+                   </AnimatePresence>
                 </div>
               ))}
            </div>
-        </div>
+        </motion.div>
 
         {/* Consola de Operaciones */}
         <div className="flex-1 flex flex-col overflow-hidden">
            <Tabs defaultValue="board" className="flex-1 flex flex-col overflow-hidden">
               <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-black/20">
                  <TabsList className="bg-white/5 p-1 rounded-xl h-10 border border-white/5">
-                   <TabsTrigger value="board" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-primary">Tablero</TabsTrigger>
-                   <TabsTrigger value="list" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Lista</TabsTrigger>
-                   <TabsTrigger value="calendar" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Agenda</TabsTrigger>
-                   <TabsTrigger value="stats" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Dashboard</TabsTrigger>
+                   <TabsTrigger value="board" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-primary transition-all duration-500">Tablero</TabsTrigger>
+                   <TabsTrigger value="list" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 transition-all duration-500">Lista</TabsTrigger>
+                   <TabsTrigger value="calendar" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 transition-all duration-500">Agenda</TabsTrigger>
+                   <TabsTrigger value="stats" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 transition-all duration-500">Dashboard</TabsTrigger>
                  </TabsList>
 
                  <div className="flex items-center gap-3">
                     <Select value={dateFilterType} onValueChange={handleDateFilterChange}>
-                      <SelectTrigger className="w-[140px] h-9 bg-white/5 border-white/10 rounded-xl text-[10px] font-black uppercase text-primary">
+                      <SelectTrigger className="w-[140px] h-9 bg-white/5 border-white/10 rounded-xl text-[10px] font-black uppercase text-primary transition-all hover:bg-primary/10">
                         <Calendar className="h-3.5 w-3.5 mr-2" />
                         <SelectValue />
                       </SelectTrigger>
@@ -343,7 +384,7 @@ export default function ProjectDashboardPage() {
                     </Select>
 
                     <Select value={responsibleFilter} onValueChange={setResponsibleFilter}>
-                       <SelectTrigger className="w-[160px] h-9 bg-white/5 border-white/10 rounded-xl text-[10px] font-black uppercase text-slate-400">
+                       <SelectTrigger className="w-[160px] h-9 bg-white/5 border-white/10 rounded-xl text-[10px] font-black uppercase text-slate-400 transition-all hover:bg-white/10">
                          <Users className="h-3.5 w-3.5 mr-2" />
                          <SelectValue placeholder="Abogado" />
                        </SelectTrigger>
@@ -358,138 +399,145 @@ export default function ProjectDashboardPage() {
               </div>
 
               <div className="flex-1 overflow-hidden relative">
-                 <TabsContent value="board" className="h-full m-0 p-6 flex gap-6 overflow-x-auto custom-scrollbar">
-                    {dynamicBoardColumns.map(col => (
-                      <div key={col.id} className="min-w-[320px] flex flex-col bg-white/[0.02] border border-white/5 rounded-3xl p-4 shadow-2xl relative">
-                        <div className="flex items-center justify-between mb-6 px-2">
-                           <div className="flex items-center gap-2">
-                              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.dot }} />
-                              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{col.label}</h3>
+                 <AnimatePresence mode="wait">
+                    <TabsContent value="board" className="h-full m-0 p-6 flex gap-6 overflow-x-auto custom-scrollbar focus-visible:outline-none">
+                       {dynamicBoardColumns.map((col, colIdx) => (
+                         <motion.div 
+                           key={col.id} 
+                           initial={{ x: 50, opacity: 0 }}
+                           animate={{ x: 0, opacity: 1 }}
+                           transition={{ delay: colIdx * 0.1 }}
+                           className="min-w-[320px] flex flex-col bg-white/[0.02] border border-white/5 rounded-3xl p-4 shadow-2xl relative"
+                         >
+                           <div className="flex items-center justify-between mb-6 px-2">
+                              <div className="flex items-center gap-2">
+                                 <div className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px] shadow-current" style={{ backgroundColor: col.dot, color: col.dot }} />
+                                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{col.label}</h3>
+                              </div>
+                              <Badge variant="outline" className="bg-white/5 border-white/10 text-[10px] font-mono text-slate-500">{filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length}</Badge>
                            </div>
-                           <Badge variant="outline" className="bg-white/5 border-white/10 text-[10px] font-mono text-slate-500">{filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length}</Badge>
-                        </div>
-                        <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
-                           {parentTasks.filter(t => (t.status || 'ABIERTO') === col.id).map(task => (
-                             <Card key={task.id} className="bg-[#1a1c23] border-white/5 hover:border-primary/40 hover:translate-y-[-2px] transition-all duration-300 cursor-pointer shadow-lg group overflow-hidden" onClick={() => setSelectedTask(task)}>
-                               <div className="p-4 relative">
-                                  <div className="flex justify-between items-start mb-3">
-                                     <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-white/5 border-white/10 text-slate-400">{task.priority || 'Normal'}</Badge>
-                                     {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length} Subtareas</div>}
-                                  </div>
-                                  <h4 className="text-[13px] font-bold text-slate-200 leading-snug line-clamp-2 mb-4 group-hover:text-primary transition-colors">{task.title}</h4>
-                                  <div className="flex items-center justify-between border-t border-white/5 pt-3">
-                                     <div className="flex items-center gap-2">
-                                        <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary border border-primary/20">{(task.assignee_name || 'US')[0]}</div>
-                                        <span className="text-[10px] font-bold text-slate-500">{task.assignee_name || 'Sin Asignar'}</span>
-                                     </div>
-                                     {task.due_date && <span className="text-[10px] font-black text-slate-400 flex items-center gap-1"><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
-                                  </div>
-                               </div>
-                             </Card>
-                           ))}
-                        </div>
-                      </div>
-                    ))}
-                 </TabsContent>
-
-                 <TabsContent value="stats" className="h-full m-0 p-8 overflow-y-auto space-y-8 custom-scrollbar bg-black/40">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                       {[
-                         { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
-                         { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                         { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
-                       ].map((card, i) => (
-                         <Card key={i} className="bg-white/[0.02] border-white/5 shadow-2xl overflow-hidden relative group">
-                            <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
-                            <CardContent className="p-8">
-                               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{card.label}</div>
-                               <div className="flex items-center justify-between">
-                                  <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
-                                  <card.icon className={`h-10 w-10 ${card.color} opacity-20 group-hover:opacity-100 transition-all duration-500`} />
-                               </div>
-                            </CardContent>
-                         </Card>
+                           <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
+                              <AnimatePresence>
+                                {parentTasks.filter(t => (t.status || 'ABIERTO') === col.id).map(task => (
+                                  <motion.div
+                                    key={task.id}
+                                    layout
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.9, opacity: 0 }}
+                                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                                  >
+                                    <Card className="bg-[#1a1c23]/80 backdrop-blur-sm border-white/5 hover:border-primary/40 transition-all duration-300 cursor-pointer shadow-lg group overflow-hidden" onClick={() => setSelectedTask(task)}>
+                                      <div className="p-4 relative">
+                                         <div className="flex justify-between items-start mb-3">
+                                            <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-white/5 border-white/10 text-slate-400">
+                                              <Flag className="h-2.5 w-2.5 mr-1 fill-current" />
+                                              {task.priority || 'Normal'}
+                                            </Badge>
+                                            {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length} Subtareas</div>}
+                                         </div>
+                                         <h4 className="text-[13px] font-bold text-slate-200 leading-snug line-clamp-2 mb-4 group-hover:text-primary transition-colors">{task.title}</h4>
+                                         <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                                            <div className="flex items-center">
+                                               {/* AVATARES MÚLTIPLES */}
+                                               <div className="flex -space-x-2 overflow-hidden mr-2">
+                                                  {(task.assignees && task.assignees.length > 0) ? (
+                                                    task.assignees.map((a, i) => (
+                                                      <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-[#1a1c23] bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary uppercase border border-primary/20" title={a.nombre || a.username}>
+                                                        {(a.nombre || a.username)[0]}
+                                                      </div>
+                                                    ))
+                                                  ) : (
+                                                    <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary border border-primary/20">
+                                                      {(task.assignee_name || 'U')[0]}
+                                                    </div>
+                                                  )}
+                                               </div>
+                                               <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">
+                                                 {task.assignee_name || 'Sin Asignar'}
+                                               </span>
+                                            </div>
+                                            {task.due_date && <span className={`text-[10px] font-black flex items-center gap-1 ${new Date(task.due_date) < new Date() && !task.status.toLowerCase().includes('completado') ? 'text-red-500' : 'text-slate-400'}`}><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
+                                         </div>
+                                      </div>
+                                    </Card>
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
+                           </div>
+                         </motion.div>
                        ))}
-                    </div>
+                    </TabsContent>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                       <Card className="bg-[#13141a] border-white/5 shadow-2xl">
-                          <CardHeader className="border-b border-white/5">
-                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                <PieIcon className="h-4 w-4 text-primary" /> Tareas por responsable
-                             </CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-6 h-[400px]">
-                             <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                   <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
-                                      {statsByAssignee.map((entry, index) => (
-                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                      ))}
-                                   </Pie>
-                                   <ChartTooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
-                                   <Legend verticalAlign="bottom" height={36}/>
-                                </PieChart>
-                             </ResponsiveContainer>
-                          </CardContent>
-                       </Card>
+                    <TabsContent value="stats" className="h-full m-0 p-8 overflow-y-auto space-y-8 custom-scrollbar bg-black/40 focus-visible:outline-none">
+                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {[
+                            { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
+                            { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                            { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                          ].map((card, i) => (
+                            <motion.div key={i} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 300 }}>
+                               <Card className="bg-white/[0.02] border-white/5 shadow-2xl overflow-hidden relative group">
+                                  <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-150 transition-transform duration-700`} />
+                                  <CardContent className="p-8">
+                                     <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{card.label}</div>
+                                     <div className="flex items-center justify-between">
+                                        <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
+                                        <card.icon className={`h-10 w-10 ${card.color} opacity-20 group-hover:opacity-100 group-hover:rotate-12 transition-all duration-500`} />
+                                     </div>
+                                  </CardContent>
+                               </Card>
+                            </motion.div>
+                          ))}
+                       </div>
 
-                       <Card className="bg-[#13141a] border-white/5 shadow-2xl">
-                          <CardHeader className="border-b border-white/5">
-                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                <BarIcon className="h-4 w-4 text-blue-500" /> Distribución por estados ClickUp
-                             </CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-6 h-[400px]">
-                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={statsByStatus}>
-                                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 9, fontWeight: 'bold' }} />
-                                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
-                                   <ChartTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
-                                   <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-                                      {statsByStatus.map((entry, index) => (
-                                         <Cell key={`cell-${index}`} fill={entry.color} />
-                                      ))}
-                                   </Bar>
-                                </BarChart>
-                             </運ResponsiveContainer>
-                          </CardContent>
-                       </Card>
-                    </div>
-                 </TabsContent>
-                 
-                 <TabsContent value="list" className="h-full m-0 p-6 overflow-y-auto space-y-2">
-                    {parentTasks.map(t => (
-                      <div key={t.id} className="group flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
-                         <div className="flex items-center gap-4">
-                            <div className="h-3 w-3 rounded-full border-2 border-slate-700" />
-                            <div>
-                               <div className="text-[13px] font-bold text-slate-200 group-hover:text-primary transition-colors">{t.title}</div>
-                               <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1">
-                                  <span>{t.assignee_name || 'Sin asignar'}</span>
-                                  {t.due_date && <span>{format(new Date(t.due_date), 'd MMM')}</span>}
-                               </div>
-                            </div>
-                         </div>
-                         <Badge variant="outline" className="text-[9px] font-black tracking-widest">{t.status}</Badge>
-                      </div>
-                    ))}
-                 </TabsContent>
+                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                          <Card className="bg-[#13141a] border-white/5 shadow-2xl">
+                             <CardHeader className="border-b border-white/5">
+                                <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                   <PieIcon className="h-4 w-4 text-primary" /> Tareas por responsable
+                                </CardTitle>
+                             </CardHeader>
+                             <CardContent className="p-6 h-[400px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                   <PieChart>
+                                      <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
+                                         {statsByAssignee.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                         ))}
+                                      </Pie>
+                                      <ChartTooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                                      <Legend verticalAlign="bottom" height={36}/>
+                                   </PieChart>
+                                </ResponsiveContainer>
+                             </CardContent>
+                          </Card>
 
-                 <TabsContent value="calendar" className="h-full m-0 p-6">
-                    <div className="h-full bg-white/[0.02] rounded-3xl border border-white/5 p-6 relative overflow-hidden">
-                       <BigCalendar
-                         localizer={localizer}
-                         events={calendarEvents}
-                         startAccessor="start"
-                         endAccessor="end"
-                         style={{ height: '100%' }}
-                         onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                         messages={{ today: "Hoy", previous: "Back", next: "Next", month: "Mes", week: "Semana", day: "Día" }}
-                       />
-                    </div>
-                 </TabsContent>
+                          <Card className="bg-[#13141a] border-white/5 shadow-2xl">
+                             <CardHeader className="border-b border-white/5">
+                                <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                   <BarIcon className="h-4 w-4 text-blue-500" /> Distribución por estados ClickUp
+                                </CardTitle>
+                             </CardHeader>
+                             <CardContent className="p-6 h-[400px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                   <BarChart data={statsByStatus}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 9, fontWeight: 'bold' }} />
+                                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                                      <ChartTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                                      <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                                         {statsByStatus.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                         ))}
+                                      </Bar>
+                                   </BarChart>
+                                </ResponsiveContainer>
+                             </CardContent>
+                          </Card>
+                       </div>
+                    </TabsContent>
+                 </AnimatePresence>
               </div>
            </Tabs>
         </div>

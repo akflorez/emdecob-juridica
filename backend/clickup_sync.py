@@ -34,20 +34,29 @@ def extract_radicado(text: str) -> str:
 async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, api_token: str, parent_id: int = None, inherited_case_id: int = None):
     """Procesa una tarea de ClickUp y sus subtareas recursivamente."""
     
-    # 1. Mapear responsable
-    assignee_id = None
-    assignee_name = None
-    if task_data.get('assignees'):
-        main_assignee = task_data['assignees'][0]
-        assignee_name = main_assignee.get('username')
-        name_clean = (assignee_name or '').lower().strip()
-        assignee_id = user_map.get(name_clean)
+    # 1. Mapear responsable (Múltiples)
+    all_assignees_data = task_data.get('assignees', [])
+    mapped_users = []
+    assignee_names = []
+    
+    for a_data in all_assignees_data:
+        a_name = a_data.get('username')
+        if not a_name: continue
+        assignee_names.append(a_name)
+        name_clean = a_name.lower().strip()
+        uid = user_map.get(name_clean)
         
-        # --- Lógica específica: Juan Jose Escobar -> jurico_emdecob ---
-        if "juan" in name_clean and "escobar" in name_clean:
+        # Lógica específica: Juan Jose Escobar -> jurico_emdecob
+        if not uid and "juan" in name_clean and "escobar" in name_clean:
             juridico_user = db.query(User).filter(User.username == 'jurico_emdecob').first()
-            if juridico_user:
-                assignee_id = juridico_user.id
+            if juridico_user: uid = juridico_user.id
+            
+        if uid:
+            user_obj = db.query(User).filter(User.id == uid).first()
+            if user_obj: mapped_users.append(user_obj)
+
+    assignee_id = mapped_users[0].id if mapped_users else None
+    assignee_name = ", ".join(assignee_names) if assignee_names else None
 
     # 2. Vinculación con Radicado Jurídico
     case_id = inherited_case_id
@@ -87,8 +96,9 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         existing_task.priority = task_data.get('priority', {}).get('priority') if task_data.get('priority') else None
         existing_task.due_date = due_date
         existing_task.case_id = case_id or existing_task.case_id
-        existing_task.assignee_id = assignee_id or existing_task.assignee_id
-        existing_task.assignee_name = assignee_name or existing_task.assignee_name
+        existing_task.assignee_id = assignee_id
+        existing_task.assignee_name = assignee_name
+        existing_task.assignees = mapped_users
         existing_task.parent_id = parent_id or existing_task.parent_id
         db_task = existing_task
     else:
@@ -103,6 +113,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             case_id=case_id,
             assignee_id=assignee_id,
             assignee_name=assignee_name,
+            assignees=mapped_users,
             creator_id=owner_id,
             parent_id=parent_id,
             custom_fields=json.dumps(task_data.get('custom_fields', []))

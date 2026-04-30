@@ -59,17 +59,25 @@ def migrate():
         print("Verificando columna 'custom_fields' en 'tasks'...")
         try:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
-            print("Columna 'custom_fields' verificada.")
         except Exception as e:
             print(f"Nota en custom_fields: {e}")
 
-        # 5. Columna assignee_name en tasks (para ClickUp)
+        # 5. Columna assignee_name en tasks
         print("Verificando columna 'assignee_name' en 'tasks'...")
         try:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
-            print("Columna 'assignee_name' verificada.")
         except Exception as e:
             print(f"Nota en assignee_name: {e}")
+
+        # 6. Tabla de relación task_assignees (Multiples responsables)
+        print("Verificando tabla 'task_assignees'...")
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS task_assignees (
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                PRIMARY KEY (task_id, user_id)
+            )
+        """))
 
         conn.commit()
     

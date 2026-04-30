@@ -862,6 +862,7 @@ export type Task = {
   tags?: Tag[];
   attachments?: Attachment[];
   custom_fields?: string; // JSON string
+  assignees?: User[];
 };
 
 export function getWorkspaces() {

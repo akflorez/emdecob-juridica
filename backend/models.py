@@ -14,6 +14,14 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, backref
 from backend.db import Base
 
+# Tabla de asociación para múltiples responsables por tarea
+task_assignees = Table(
+    "task_assignees",
+    Base.metadata,
+    Column("task_id", Integer, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Case(Base):
     __tablename__ = "cases"
@@ -329,6 +337,8 @@ class Task(Base):
     comments = relationship("TaskComment", cascade="all, delete-orphan")
     tags = relationship("Tag", secondary=task_tags, back_populates="tasks")
     attachments = relationship("TaskAttachment", cascade="all, delete-orphan")
+    # Soporte para múltiples responsables
+    assignees = relationship("User", secondary=task_assignees)
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
