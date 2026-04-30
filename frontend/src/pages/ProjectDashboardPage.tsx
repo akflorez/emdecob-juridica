@@ -6,7 +6,8 @@ import {
   LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
   TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database,
-  PanelLeftClose, PanelLeftOpen, AlertTriangle, CalendarRange
+  PanelLeftClose, PanelLeftOpen, AlertTriangle, CalendarRange, ArrowLeft,
+  ChevronLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
 import { 
   getWorkspaces, getTasks, importClickUp, updateTask, getUsers,
@@ -37,7 +46,7 @@ import { TaskDrawer } from "@/components/TaskDrawer";
 import { Calendar as BigCalendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { format, subDays, startOfMonth, endOfMonth, isToday, isYesterday, isWithinInterval, startOfDay, endOfDay, addDays, startOfYear, endOfYear } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, isToday, isYesterday, isWithinInterval, startOfDay, endOfDay, addDays, startOfYear, endOfYear, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip, 
@@ -59,6 +68,9 @@ export default function ProjectDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Drill-down dashboard
+  const [detailView, setDetailView] = useState<string | null>(null);
   
   // Calendario state
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -269,11 +281,14 @@ export default function ProjectDashboardPage() {
     };
   }, [filteredTasks]);
 
-  const handleActionClick = (action: string) => {
-    toast.success(`Iniciando ${action}`, { 
-      description: "La funcionalidad se ha activado en tu entorno de trabajo."
-    });
-  };
+  const detailTasks = useMemo(() => {
+    const now = new Date();
+    if (detailView === 'vencidas') return filteredTasks.filter(t => t.due_date && new Date(t.due_date) < now && !t.status.toLowerCase().includes('completado'));
+    if (detailView === 'porVencer') return filteredTasks.filter(t => t.due_date && isWithinInterval(new Date(t.due_date), { start: now, end: addDays(now, 7) }) && !t.status.toLowerCase().includes('completado'));
+    if (detailView === 'enCurso') return filteredTasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso'));
+    if (detailView === 'sinAsignar') return filteredTasks.filter(t => !t.assignee_id && !t.assignee_name);
+    return [];
+  }, [filteredTasks, detailView]);
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden relative font-sans transition-colors duration-500">
@@ -292,7 +307,7 @@ export default function ProjectDashboardPage() {
           <div className="p-2.5 bg-gradient-to-br from-primary to-blue-600 rounded-xl shadow-xl shadow-primary/20">
             <LayoutDashboard className="h-5 w-5 text-white" />
           </div>
-          <div onClick={() => { setSelectedWorkspaceId(null); setSelectedFolderId(null); setSelectedListId(null); }} className="cursor-pointer hidden sm:block">
+          <div onClick={() => { setSelectedWorkspaceId(null); setSelectedFolderId(null); setSelectedListId(null); setDetailView(null); }} className="cursor-pointer hidden sm:block">
             <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
               EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">EXPERT</Badge>
             </h1>
@@ -304,19 +319,19 @@ export default function ProjectDashboardPage() {
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
                <Button variant="outline" size="sm" className="rounded-lg h-9 bg-accent/50 border-border/40 font-bold text-xs">
-                 <Layers className="mr-2 h-3.5 w-3.5" /> Operaciones
+                 <Layers className="mr-2 h-3.5 w-3.5" /> Opciones
                </Button>
              </DropdownMenuTrigger>
              <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
                <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Operativa</DropdownMenuLabel>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Espacio")}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Carpeta")}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Lista")}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Espacios activado")}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Carpetas activado")}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Listas activado")}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Plantillas")}><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Equipos")}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Configuración")}><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer"><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer"><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer"><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
              </DropdownMenuContent>
            </DropdownMenu>
 
@@ -356,6 +371,7 @@ export default function ProjectDashboardPage() {
                          setSelectedWorkspaceId(ws.id);
                          setSelectedFolderId(null);
                          setSelectedListId(null);
+                         setDetailView(null);
                        }}>
                          <motion.div animate={{ rotate: expandedWorkspaces.has(ws.id) ? 0 : -90 }}>
                             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -379,6 +395,7 @@ export default function ProjectDashboardPage() {
                                     setExpandedFolders(n);
                                     setSelectedFolderId(f.id);
                                     setSelectedListId(null);
+                                    setDetailView(null);
                                   }}>
                                     <motion.div animate={{ rotate: expandedFolders.has(f.id) ? 0 : -90 }}>
                                       <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -397,7 +414,7 @@ export default function ProjectDashboardPage() {
                                           <motion.div 
                                             key={list.id} 
                                             whileHover={{ x: 5 }}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); }}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); setDetailView(null); }}
                                             className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground hover:text-foreground"}`}
                                           >
                                              {list.name}
@@ -488,14 +505,13 @@ export default function ProjectDashboardPage() {
                                     <div className="p-4">
                                        <div className="flex justify-between items-start mb-3">
                                           <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{task.priority || 'Normal'}</Badge>
-                                          {subtasksMap[task.id] && <div className="text-[9px] text-primary font-bold">{subtasksMap[task.id].length} Subtareas</div>}
                                        </div>
                                        <h4 className="text-[13px] font-bold leading-snug line-clamp-2 mb-4">{task.title}</h4>
                                        <div className="flex items-center justify-between border-t border-border/40 pt-3">
                                           <div className="flex items-center">
                                              <div className="flex -space-x-2 overflow-hidden mr-2">
                                                 {task.assignees?.map((a, i) => (
-                                                  <div key={i} className="h-5 w-5 rounded-full ring-2 ring-card bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary border border-primary/20">{(a.nombre || a.username)[0]}</div>
+                                                  <div key={i} className="h-5 w-5 rounded-full ring-2 ring-card bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary">{(a.nombre || a.username)[0]}</div>
                                                 ))}
                                              </div>
                                              <span className="text-[9px] font-bold text-muted-foreground truncate max-w-[80px]">{task.assignee_name}</span>
@@ -557,6 +573,7 @@ export default function ProjectDashboardPage() {
                               onView={setCalendarView}
                               style={{ height: '100%' }}
                               onSelectEvent={(e: any) => setSelectedTask(e.resource)}
+                              views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
                               messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día", agenda: "Agenda" }}
                               culture="es"
                             />
@@ -572,69 +589,126 @@ export default function ProjectDashboardPage() {
                         exit={{ opacity: 0, scale: 1.02 }}
                         className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5"
                       >
-                         {/* METRICAS SUPERIORES */}
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                            {[
-                              { label: 'Sin Asignar', count: dashboardMetrics.sinAsignar, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
-                              { label: 'En Curso', count: dashboardMetrics.enCurso, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                              { label: 'Vencidas', count: dashboardMetrics.vencidas, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/10' },
-                              { label: 'Por Vencer (7d)', count: dashboardMetrics.porVencer, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-                              { label: 'Completadas', count: dashboardMetrics.completadas, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
-                            ].map((card, i) => (
-                              <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group">
-                                 <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
-                                 <CardContent className="p-6">
-                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
-                                    <div className="flex items-center justify-between">
-                                       <div className={`text-4xl font-black ${card.color}`}>{card.count}</div>
-                                       <card.icon className={`h-8 w-8 ${card.color} opacity-20`} />
-                                    </div>
-                                 </CardContent>
+                         {/* DRILL-DOWN VIEW */}
+                         {detailView ? (
+                           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                              <Button variant="ghost" size="sm" onClick={() => setDetailView(null)} className="font-bold text-xs">
+                                <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Dashboard
+                              </Button>
+                              <Card className="bg-card border-border/40 shadow-2xl rounded-3xl overflow-hidden">
+                                 <CardHeader className="bg-primary/5 border-b border-border/40">
+                                    <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">
+                                       Detalle: {detailView === 'vencidas' ? 'Tareas Vencidas' : detailView === 'porVencer' ? 'Próximas a Vencer' : 'Tareas en Curso'}
+                                    </CardTitle>
+                                 </CardHeader>
+                                 <Table>
+                                    <TableHeader>
+                                       <TableRow className="border-border/40 bg-accent/30">
+                                          <TableHead className="text-[10px] uppercase font-black tracking-widest">Tarea</TableHead>
+                                          <TableHead className="text-[10px] uppercase font-black tracking-widest">Responsable</TableHead>
+                                          <TableHead className="text-[10px] uppercase font-black tracking-widest">Estado</TableHead>
+                                          <TableHead className="text-[10px] uppercase font-black tracking-widest text-right">Vencimiento</TableHead>
+                                          <TableHead className="text-[10px] uppercase font-black tracking-widest text-right">Días Retraso</TableHead>
+                                       </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                       {detailTasks.map(t => {
+                                          const delay = t.due_date ? differenceInDays(new Date(), new Date(t.due_date)) : 0;
+                                          return (
+                                             <TableRow key={t.id} className="border-border/40 hover:bg-primary/5 cursor-pointer" onClick={() => setSelectedTask(t)}>
+                                                <TableCell className="font-bold text-[11px]">{t.title}</TableCell>
+                                                <TableCell className="text-[11px] text-muted-foreground">{t.assignee_name || 'Sin Asignar'}</TableCell>
+                                                <TableCell><Badge variant="outline" className="text-[9px] uppercase">{t.status}</Badge></TableCell>
+                                                <TableCell className="text-right text-[11px]">{t.due_date ? format(new Date(t.due_date), 'dd/MM/yyyy') : '-'}</TableCell>
+                                                <TableCell className="text-right font-black text-red-500 text-xs">{delay > 0 ? `+${delay}` : '-'}</TableCell>
+                                             </TableRow>
+                                          );
+                                       })}
+                                    </TableBody>
+                                 </Table>
                               </Card>
-                            ))}
-                         </div>
+                           </motion.div>
+                         ) : (
+                           <>
+                             {/* METRICAS SUPERIORES */}
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                                {[
+                                  { id: 'sinAsignar', label: 'Sin Asignar', count: dashboardMetrics.sinAsignar, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
+                                  { id: 'enCurso', label: 'En Curso', count: dashboardMetrics.enCurso, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                                  { id: 'vencidas', label: 'Vencidas', count: dashboardMetrics.vencidas, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/10' },
+                                  { id: 'porVencer', label: 'Por Vencer (7d)', count: dashboardMetrics.porVencer, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+                                  { id: 'completadas', label: 'Completadas', count: dashboardMetrics.completadas, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                                ].map((card, i) => (
+                                  <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group cursor-pointer hover:border-primary/40 transition-all" onClick={() => setDetailView(card.id)}>
+                                     <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-150 transition-transform duration-500`} />
+                                     <CardContent className="p-6">
+                                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
+                                        <div className="flex items-center justify-between">
+                                           <div className={`text-4xl font-black ${card.color}`}>{card.count}</div>
+                                           <card.icon className={`h-8 w-8 ${card.color} opacity-20`} />
+                                        </div>
+                                     </CardContent>
+                                  </Card>
+                                ))}
+                             </div>
 
-                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <Card className="bg-card border-border/40 shadow-xl">
-                               <CardHeader className="border-b border-border/40">
-                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Carga por Abogado</CardTitle>
-                               </CardHeader>
-                               <CardContent className="p-6 h-[400px]">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                     <PieChart>
-                                        <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
-                                           {statsByAssignee.map((entry, index) => (
-                                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                           ))}
-                                        </Pie>
-                                        <ChartTooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
-                                        <Legend verticalAlign="bottom" height={36}/>
-                                     </PieChart>
-                                  </ResponsiveContainer>
-                               </CardContent>
-                            </Card>
+                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <Card className="bg-card border-border/40 shadow-xl overflow-hidden flex flex-col">
+                                   <CardHeader className="border-b border-border/40">
+                                      <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Carga por Abogado</CardTitle>
+                                   </CardHeader>
+                                   <CardContent className="p-4 flex-1 h-[450px]">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                         <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                            <Pie data={statsByAssignee} cx="50%" cy="45%" innerRadius={70} outerRadius={100} paddingAngle={2} dataKey="value" stroke="none">
+                                               {statsByAssignee.map((entry, index) => (
+                                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                               ))}
+                                            </Pie>
+                                            <ChartTooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '10px' }} />
+                                            <Legend 
+                                              verticalAlign="bottom" 
+                                              align="center" 
+                                              wrapperStyle={{ paddingTop: '20px', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                                              layout="horizontal"
+                                              iconType="circle"
+                                            />
+                                         </PieChart>
+                                      </ResponsiveContainer>
+                                   </CardContent>
+                                </Card>
 
-                            <Card className="bg-card border-border/40 shadow-xl">
-                               <CardHeader className="border-b border-border/40">
-                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Distribución de Estados</CardTitle>
-                               </CardHeader>
-                               <CardContent className="p-6 h-[400px]">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                     <BarChart data={statsByStatus}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 9, fontWeight: 'bold' }} />
-                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
-                                        <ChartTooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
-                                        <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-                                           {statsByStatus.map((entry, index) => (
-                                              <Cell key={`cell-${index}`} fill={entry.color} />
-                                           ))}
-                                        </Bar>
-                                     </BarChart>
-                                  </ResponsiveContainer>
-                               </CardContent>
-                            </Card>
-                         </div>
+                                <Card className="bg-card border-border/40 shadow-xl overflow-hidden flex flex-col">
+                                   <CardHeader className="border-b border-border/40">
+                                      <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Distribución de Estados</CardTitle>
+                                   </CardHeader>
+                                   <CardContent className="p-4 flex-1 h-[450px]">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                         <BarChart data={statsByStatus} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
+                                            <XAxis 
+                                              dataKey="name" 
+                                              axisLine={false} 
+                                              tickLine={false} 
+                                              tick={{ fill: 'var(--muted-foreground)', fontSize: 8, fontWeight: 'bold' }} 
+                                              angle={-45}
+                                              textAnchor="end"
+                                              interval={0}
+                                            />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
+                                            <ChartTooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                                            <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={35}>
+                                               {statsByStatus.map((entry, index) => (
+                                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                               ))}
+                                            </Bar>
+                                         </BarChart>
+                                      </ResponsiveContainer>
+                                   </CardContent>
+                                </Card>
+                             </div>
+                           </>
+                         )}
                       </motion.div>
                     )}
                  </AnimatePresence>
