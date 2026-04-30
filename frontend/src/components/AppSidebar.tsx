@@ -55,6 +55,20 @@ export function AppSidebar() {
           {!collapsed && "Importar Excel"}
         </SidebarNavLink>
 
+        {!collapsed && (
+          <p className="px-4 py-2 mt-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Mis Tareas
+          </p>
+        )}
+
+        <SidebarNavLink to="/mis-tareas" icon={UserCheck} collapsed={collapsed} title="Asignadas a mí">
+          {!collapsed && "Asignadas a mí"}
+        </SidebarNavLink>
+
+        <SidebarNavLink to="/hoy-vencido" icon={Clock} collapsed={collapsed} title="Hoy y vencido">
+          {!collapsed && "Hoy y vencido"}
+        </SidebarNavLink>
+
         <SidebarNavLink to="/consultar" icon={Search} collapsed={collapsed} title="Consultar Caso">
           {!collapsed && "Consultar Caso"}
         </SidebarNavLink>

@@ -21,6 +21,8 @@ import ProjectDashboardPage from "./pages/ProjectDashboardPage";
 import AgendaView from "./pages/AgendaView";
 import NotFound from "./pages/NotFound";
 
+import { MyTasksView } from "./components/MyTasksView";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -45,6 +47,11 @@ const App = () => (
               }>
                 <Route path="/" element={<Navigate to="/consultar" replace />} />
                 <Route path="/importar" element={<ImportarPage />} />
+                
+                {/* Nuevas rutas de Experiencia de Usuario */}
+                <Route path="/mis-tareas" element={<MyTasksView mode="assigned" />} />
+                <Route path="/hoy-vencido" element={<MyTasksView mode="today" />} />
+                
                 <Route path="/consultar" element={<ConsultarPage />} />
                 <Route path="/consultar-nombre" element={<BulkSearchPage />} />
                 <Route path="/casos" element={<CasosPage />} />
