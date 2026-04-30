@@ -4154,7 +4154,8 @@ async def get_tasks(
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Task).options(
-        joinedload(Task.subtasks)
+        joinedload(Task.subtasks),
+        joinedload(Task.tags)
     )
     
     # Solo filtrar por list_id si se pide explícitamente y existe en la pantalla
@@ -4182,7 +4183,8 @@ async def get_task_detail(
     task = db.query(Task).options(
         joinedload(Task.checklists),
         joinedload(Task.subtasks),
-        joinedload(Task.comments)
+        joinedload(Task.comments),
+        joinedload(Task.tags)
     ).filter(Task.id == task_id).first()
     
     if not task:
@@ -4369,6 +4371,18 @@ async def update_task(
     if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
     if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
     
+    if hasattr(t_data, 'tags') and t_data.tags is not None:
+        # t_data.tags es una lista de nombres de tags
+        db_tags = []
+        for tname in t_data.tags:
+            tag = db.query(Tag).filter(Tag.name == tname).first()
+            if not tag:
+                tag = Tag(name=tname)
+                db.add(tag)
+                db.flush()
+            db_tags.append(tag)
+        task.tags = db_tags
+
     db.commit()
     return task
 
@@ -4567,3 +4581,8 @@ async def system_health_diagnostic(
         },
         "server_time": now_colombia()
     }
+
+@app.get("/api/projects/tags")
+@app.get("/projects/tags")
+async def get_all_tags(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(Tag).all()

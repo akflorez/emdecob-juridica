@@ -3,7 +3,7 @@ import asyncio
 import httpx
 from sqlalchemy.orm import Session
 from datetime import datetime
-from backend.models import Workspace, Folder, ProjectList, Task, User, Case, TaskChecklistItem, TaskComment
+from backend.models import Workspace, WorkspaceFolder, WorkspaceList, Task, TaskChecklistItem, TaskComment, User, Case, Tag
 
 CLICKUP_API_URL = "https://api.clickup.com/api/v2"
 
@@ -142,6 +142,27 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                     new_comm = TaskComment(task_id=db_task.id, content=text_comm, user_id=owner_id)
                     db.add(new_comm)
         except: pass
+
+    # 6.5 Procesar Etiquetas (Tags)
+    clickup_tags = task_data.get('tags', [])
+    if clickup_tags:
+        # Asegurarnos de que las etiquetas existen en nuestra DB
+        db_tags = []
+        for tag_data in clickup_tags:
+            tag_name = tag_data.get('name')
+            if not tag_name: continue
+            
+            # Buscar o crear tag
+            db_tag = db.query(Tag).filter(Tag.name == tag_name).first()
+            if not db_tag:
+                db_tag = Tag(name=tag_name, color=tag_data.get('tag_bg', '#3b82f6'))
+                db.add(db_tag)
+                db.flush()
+            db_tags.append(db_tag)
+        
+        # Vincular tags a la tarea
+        db_task.tags = db_tags
+        db.flush()
 
     # 7. Procesar Subtareas
     subtasks = task_data.get('subtasks', [])

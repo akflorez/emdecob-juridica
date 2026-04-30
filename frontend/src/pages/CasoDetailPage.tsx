@@ -964,6 +964,22 @@ function TaskItem({ task, onSelect, isSubtask }: { task: TaskType; onSelect: (t:
                 {task.assignee_name}
               </span>
             )}
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+              <Clock className="h-3 w-3" />
+              {task.priority || 'Normal'}
+            </span>
+            {task.tags && task.tags.length > 0 && (
+              <div className="flex gap-1 ml-1">
+                {task.tags.map(tag => (
+                  <div 
+                    key={tag.id} 
+                    className="h-1 w-3 rounded-full" 
+                    style={{ backgroundColor: tag.color || '#3b82f6' }}
+                    title={tag.name}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

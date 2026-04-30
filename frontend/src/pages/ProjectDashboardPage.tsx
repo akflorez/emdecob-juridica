@@ -685,6 +685,18 @@ function TaskRow({ task, onClick, index, isSubtask }: { task: TaskType; onClick:
               <Clock className="h-3 w-3" />
               {task.priority || 'Normal'}
             </span>
+            {task.tags && task.tags.length > 0 && (
+              <div className="flex gap-1 ml-1">
+                {task.tags.map(tag => (
+                  <div 
+                    key={tag.id} 
+                    className="h-1.5 w-4 rounded-full" 
+                    style={{ backgroundColor: tag.color || '#3b82f6' }}
+                    title={tag.name}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

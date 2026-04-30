@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid, MessageSquare, Trash2, Edit2, Trash, CheckCircle } from 'lucide-react';
-import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, deleteComment, updateChecklistItem, deleteChecklistItem, type CaseRow } from '@/services/api';
+import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, deleteComment, updateChecklistItem, deleteChecklistItem, getTags, type CaseRow, type Tag } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -40,6 +40,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const [newComment, setNewComment] = useState('');
   const [newChecklist, setNewChecklist] = useState("");
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
 
   useEffect(() => {
     if (task && open) {
@@ -58,6 +60,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
+    getTags().then(setAllTags).catch(console.error);
   }, []);
 
   // Buscar caso vinculado inicialmente
@@ -90,6 +93,25 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setEditedDesc(t.description || '');
     }
   }, [fullTask, task]);
+
+  const handleTagToggle = async (tagName: string) => {
+    if (!displayTask) return;
+    const currentTags = displayTask.tags?.map(t => t.name) || [];
+    let nextTags: string[];
+    if (currentTags.includes(tagName)) {
+      nextTags = currentTags.filter(t => t !== tagName);
+    } else {
+      nextTags = [...currentTags, tagName];
+    }
+    
+    try {
+      const updated = await updateTask(displayTask.id, { tags: nextTags as any });
+      setDisplayTask(updated);
+      onTaskUpdate(updated);
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo actualizar etiquetas", variant: "destructive" });
+    }
+  };
 
   const handleSave = async (field: Partial<TaskType>) => {
     if (!task) return;
@@ -289,6 +311,40 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 disabled={isLoading}
               />
             </div>
+          </div>
+
+          {/* ETIQUETAS (TAGS) */}
+          <div className="space-y-2">
+             <label className="text-xs text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3"/> Etiquetas</label>
+             <div className="flex flex-wrap gap-1.5 items-center">
+                {displayTask.tags?.map(tag => (
+                  <Badge 
+                    key={tag.id} 
+                    style={{ backgroundColor: tag.color || '#3b82f6', color: 'white', border: 'none' }}
+                    className="text-[10px] py-0 px-2 cursor-pointer hover:opacity-80 flex items-center gap-1"
+                    onClick={() => handleTagToggle(tag.name)}
+                  >
+                    {tag.name}
+                    <Plus className="h-3 w-3 rotate-45" />
+                  </Badge>
+                ))}
+                
+                <Select onValueChange={handleTagToggle}>
+                  <SelectTrigger className="w-auto h-6 text-[10px] bg-muted/30 border-dashed rounded-full px-2">
+                    <Plus className="h-3 w-3 mr-1" /> Añadir
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allTags.filter(t => !(displayTask.tags?.some(dt => dt.name === t.name))).map(t => (
+                      <SelectItem key={t.id} value={t.name}>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color || '#3b82f6' }} />
+                          {t.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+             </div>
           </div>
 
           <div className="space-y-2">

@@ -828,6 +828,12 @@ export type TaskComment = {
   created_at: string;
 };
 
+export type Tag = {
+  id: number;
+  name: string;
+  color?: string;
+};
+
 export type Task = {
   id: number;
   title: string;
@@ -845,10 +851,15 @@ export type Task = {
   subtasks?: Task[];
   comments?: TaskComment[];
   assignee_name?: string;
+  tags?: Tag[];
 };
 
 export function getWorkspaces() {
   return apiFetch<Workspace[]>("/projects/workspaces");
+}
+
+export function getTags() {
+  return apiFetch<Tag[]>("/projects/tags");
 }
 
 export function getTasks(params: { list_id?: number; status?: string; assignee_id?: number; radicado?: string }) {
