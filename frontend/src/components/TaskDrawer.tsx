@@ -127,8 +127,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     if (!displayTask) return;
     try {
       const cleanedUpdates = { ...updates };
-      if (cleanedUpdates.due_date && typeof cleanedUpdates.due_date === 'string') {
+      if (cleanedUpdates.due_date && typeof cleanedUpdates.due_date === 'string' && cleanedUpdates.due_date.trim() !== '') {
         cleanedUpdates.due_date = new Date(cleanedUpdates.due_date).toISOString();
+      } else if (cleanedUpdates.due_date === '') {
+        cleanedUpdates.due_date = null as any;
       }
 
       const updated = await updateTask(displayTask.id, cleanedUpdates);

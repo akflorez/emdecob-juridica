@@ -3952,6 +3952,7 @@ class TaskUpdate(BaseModel):
     assignee_id: Optional[int] = None
     assignee_name: Optional[str] = None
     assignee_ids: Optional[List[int]] = None
+    tags: Optional[List[str]] = None
     
     class Config:
         extra = "ignore"
