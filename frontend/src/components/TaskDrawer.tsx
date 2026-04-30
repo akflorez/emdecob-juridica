@@ -18,6 +18,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, deleteComment, updateChecklistItem, deleteChecklistItem, getTags, type CaseRow, type Tag } from '@/services/api';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -42,7 +53,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const [newChecklist, setNewChecklist] = useState("");
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
+
+  const displayTask = fullTask || task;
 
   useEffect(() => {
     if (task && open) {
@@ -66,14 +78,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   // Buscar caso vinculado inicialmente
   useEffect(() => {
-    if (task?.case_id) {
-      getCases({ search: String(task.case_id), page_size: 1 }).then(res => {
+    if (displayTask?.case_id) {
+      getCases({ search: String(displayTask.case_id), page_size: 1 }).then(res => {
         if (res.items.length > 0) setLinkedCase(res.items[0]);
       });
     } else {
       setLinkedCase(null);
     }
-  }, [task?.case_id]);
+  }, [displayTask?.case_id]);
 
   // Búsqueda dinámica de casos
   useEffect(() => {
@@ -88,12 +100,30 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   }, [caseSearch]);
 
   useEffect(() => {
-    if (fullTask || task) {
-      const t = fullTask || task!;
-      setEditedTitle(t.title || '');
-      setEditedDesc(t.description || '');
+    if (displayTask) {
+      setEditedTitle(displayTask.title || '');
+      setEditedDesc(displayTask.description || '');
     }
-  }, [fullTask, task]);
+  }, [displayTask]);
+
+  const getPriorityColor = (p: string | undefined) => {
+    switch(p?.toLowerCase()) {
+      case 'urgent': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'high': return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
+      case 'normal': return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
+      case 'low': return 'text-slate-500 bg-slate-500/10 border-slate-500/20';
+      default: return 'text-muted-foreground bg-muted/30 border-border/30';
+    }
+  };
+
+  const getStatusColor = (s: string | undefined) => {
+    switch(s?.toLowerCase()) {
+      case 'complete': return 'bg-green-500 text-white';
+      case 'in progress': return 'bg-blue-500 text-white';
+      case 'to do': return 'bg-slate-500 text-white';
+      default: return 'bg-primary text-white';
+    }
+  };
 
   const handleTagToggle = async (tagName: string) => {
     if (!displayTask) return;
@@ -107,29 +137,22 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     
     try {
       const updated = await updateTask(displayTask.id, { tags: nextTags as any });
-      setDisplayTask(updated);
-      onTaskUpdate(updated);
+      const fullUpdated = await getTaskDetail(displayTask.id, clickupToken);
+      setFullTask(fullUpdated);
+      onTaskUpdate(fullUpdated);
     } catch (e) {
       toast({ title: "Error", description: "No se pudo actualizar etiquetas", variant: "destructive" });
     }
   };
 
   const handleSave = async (field: Partial<TaskType>) => {
-    if (!task) return;
+    if (!displayTask) return;
     setIsLoading(true);
     try {
-      if (task.id) {
-        const updated = await updateTask(task.id, field);
-        onTaskUpdate(updated);
-        toast({ title: 'Tarea actualizada', description: 'Cambios guardados.' });
-      } else {
-        // Es una tarea nueva
-        if (!field.title && !editedTitle) return; // No crear si esta vacia
-        const toCreate = { ...task, ...field, title: field.title || editedTitle };
-        const created = await createTask(toCreate);
-        onTaskUpdate(created);
-        toast({ title: 'Tarea creada', description: 'Iniciaste un nuevo flujo.' });
-      }
+      const updated = await updateTask(displayTask.id, field);
+      setFullTask(updated);
+      onTaskUpdate(updated);
+      toast({ title: 'Tarea actualizada', description: 'Cambios guardados.' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message || 'Error de servidor', variant: 'destructive' });
     } finally {
@@ -138,14 +161,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleAddComment = async () => {
-    if (!task || !newComment.trim()) return;
+    if (!displayTask || !newComment.trim()) return;
     setIsLoading(true);
     try {
-      await addComment(task.id, newComment);
+      await addComment(displayTask.id, newComment);
       setNewComment('');
-      const updated = await getTaskDetail(task.id, clickupToken);
-      onTaskUpdate(updated);
+      const updated = await getTaskDetail(displayTask.id, clickupToken);
       setFullTask(updated);
+      onTaskUpdate(updated);
     } catch(e) {
       toast({ title: 'Error', description: 'No se pudo agregar el comentario' });
     } finally {
@@ -154,15 +177,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleAddChecklist = async () => {
-    if (!task || !newChecklist.trim()) return;
+    if (!displayTask || !newChecklist.trim()) return;
     setIsLoading(true);
     try {
-      await addChecklistItem(task.id, newChecklist);
+      await addChecklistItem(displayTask.id, newChecklist);
       setNewChecklist('');
-      const updated = await getTaskDetail(task.id, clickupToken);
-      onTaskUpdate(updated);
+      const updated = await getTaskDetail(displayTask.id, clickupToken);
       setFullTask(updated);
-      setDisplayTask(updated);
+      onTaskUpdate(updated);
     } catch (e) {
       toast({ title: "Error", description: "No se pudo añadir el item", variant: "destructive" });
     } finally {
@@ -171,12 +193,12 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleDeleteComment = async (commentId: number) => {
+    if (!displayTask) return;
     try {
       await deleteComment(commentId);
-      setDisplayTask(prev => ({
-        ...prev!,
-        comments: prev?.comments?.filter(c => c.id !== commentId) || []
-      }));
+      const updated = { ...displayTask, comments: displayTask.comments?.filter(c => c.id !== commentId) || [] };
+      setFullTask(updated);
+      onTaskUpdate(updated);
       toast({ title: "Comentario eliminado" });
     } catch (e) {
       toast({ title: "Error", description: "No se pudo eliminar el comentario", variant: "destructive" });
@@ -184,24 +206,24 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleToggleChecklist = async (itemId: number, currentStatus: boolean) => {
+    if (!displayTask) return;
     try {
       const res = await updateChecklistItem(itemId, { is_completed: !currentStatus });
-      setDisplayTask(prev => ({
-        ...prev!,
-        checklists: prev?.checklists?.map(c => c.id === itemId ? res : c) || []
-      }));
+      const updated = { ...displayTask, checklists: displayTask.checklists?.map(c => c.id === itemId ? res : c) || [] };
+      setFullTask(updated);
+      onTaskUpdate(updated);
     } catch (e) {
       toast({ title: "Error", description: "No se pudo actualizar el item", variant: "destructive" });
     }
   };
 
   const handleDeleteChecklist = async (itemId: number) => {
+    if (!displayTask) return;
     try {
       await deleteChecklistItem(itemId);
-      setDisplayTask(prev => ({
-        ...prev!,
-        checklists: prev?.checklists?.filter(c => c.id !== itemId) || []
-      }));
+      const updated = { ...displayTask, checklists: displayTask.checklists?.filter(c => c.id !== itemId) || [] };
+      setFullTask(updated);
+      onTaskUpdate(updated);
       toast({ title: "Item eliminado" });
     } catch (e) {
       toast({ title: "Error", description: "No se pudo eliminar el item", variant: "destructive" });
@@ -209,13 +231,12 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   };
 
   const handleEditChecklist = async (itemId: number, newContent: string) => {
-    if (!newContent.trim()) return;
+    if (!displayTask || !newContent.trim()) return;
     try {
       const res = await updateChecklistItem(itemId, { content: newContent });
-      setDisplayTask(prev => ({
-        ...prev!,
-        checklists: prev?.checklists?.map(c => c.id === itemId ? res : c) || []
-      }));
+      const updated = { ...displayTask, checklists: displayTask.checklists?.map(c => c.id === itemId ? res : c) || [] };
+      setFullTask(updated);
+      onTaskUpdate(updated);
     } catch (e) {
       toast({ title: "Error", description: "No se pudo editar el item", variant: "destructive" });
     }
@@ -233,13 +254,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
         status: 'to do',
         priority: 'normal'
       });
-      setDisplayTask(prev => ({
-        ...prev!,
-        subtasks: [...(prev?.subtasks || []), res]
-      }));
+      const updated = { ...displayTask, subtasks: [...(displayTask.subtasks || []), res] };
+      setFullTask(updated);
       setNewSubtaskTitle("");
+      onTaskUpdate(updated);
       toast({ title: "Subtarea creada", description: res.title });
-      onTaskUpdate?.({ ...displayTask, subtasks: [...(displayTask.subtasks || []), res] });
     } catch (e) {
       toast({ title: "Error", description: "No se pudo crear la subtarea", variant: "destructive" });
     } finally {
@@ -247,18 +266,23 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     }
   };
 
+  const parsedCustomFields = displayTask?.custom_fields ? (() => {
+    try {
+      return JSON.parse(displayTask.custom_fields);
+    } catch(e) { return []; }
+  })() : [];
+
   if (!displayTask) return null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[500px] bg-background/80 backdrop-blur-3xl overflow-y-auto border-l-border/50 shadow-2xl">
-        <SheetHeader className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="outline" className="uppercase text-[10px] h-5 tracking-wider bg-primary/10 text-primary border-primary/20">
-              {displayTask.status}
+      <SheetContent className="sm:max-w-[650px] p-0 border-l border-border/40 shadow-2xl overflow-hidden flex flex-col bg-background/95 backdrop-blur-xl">
+        {/* HEADER BAR */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/20">
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="text-[10px] font-mono bg-background/50 border-border/40">
+              ID: {displayTask.clickup_id || displayTask.id}
             </Badge>
-            {displayTask.priority && (
-              <Badge variant="secondary" className="uppercase text-[10px] h-5">
             <div className="h-4 w-[1px] bg-border/40" />
             <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium">
               <History className="h-3 w-3" /> Actualizado {displayTask.created_at ? format(new Date(displayTask.created_at), "d MMM, HH:mm", { locale: es }) : 'Reciente'}
@@ -275,7 +299,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 <TooltipContent>Compartir</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
               <Plus className="h-4 w-4 rotate-45" />
             </Button>
           </div>
@@ -283,7 +307,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
         <ScrollArea className="flex-1 px-0">
           <div className="p-6 space-y-8">
-            {/* HERO SECTION: Titulo, Status, Prioridad */}
+            {/* HERO SECTION */}
             <div className="space-y-6">
               <div className="space-y-2">
                 <Input 
@@ -331,9 +355,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               </div>
             </div>
 
-            {/* PROPERTIES GRID: Assignee, Dates, Tags, Case */}
+            {/* PROPERTIES GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 bg-muted/10 p-5 rounded-2xl border border-border/30 relative overflow-hidden">
-               {/* Left Column */}
                <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><UserIcon className="h-3 w-3"/> Responsable</label>
@@ -368,7 +391,6 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                   </div>
                </div>
 
-               {/* Right Column */}
                <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><Tag className="h-3 w-3"/> Etiquetas</label>
@@ -377,7 +399,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                         <Badge 
                           key={tag.id} 
                           style={{ backgroundColor: tag.color || '#3b82f6', color: 'white' }}
-                          className="text-[9px] py-0 px-2 cursor-pointer hover:opacity-80 flex items-center gap-1 border-none shadow-sm animate-in zoom-in-95"
+                          className="text-[9px] py-0 px-2 cursor-pointer hover:opacity-80 flex items-center gap-1 border-none shadow-sm"
                           onClick={() => handleTagToggle(tag.name)}
                         >
                           {tag.name}
@@ -406,7 +428,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                     <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><LayoutGrid className="h-3 w-3"/> Caso Vinculado</label>
                     <div className="space-y-2">
                       {linkedCase ? (
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-primary/5 border border-primary/20 animate-in fade-in duration-300">
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-primary/5 border border-primary/20">
                           <div className="flex items-center gap-2 overflow-hidden">
                             <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center text-primary"><Search className="h-3 w-3"/></div>
                             <span className="text-[11px] font-semibold truncate text-primary">{linkedCase.radicado}</span>
@@ -423,7 +445,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                             onChange={(e) => setCaseSearch(e.target.value)}
                           />
                           {caseResults.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border shadow-xl rounded-xl z-50 py-1 overflow-hidden animate-in slide-in-from-top-2">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border shadow-xl rounded-xl z-50 py-1 overflow-hidden">
                               {caseResults.map(c => (
                                 <div 
                                   key={c.id} 
@@ -443,7 +465,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                </div>
             </div>
 
-            {/* CUSTOM FIELDS (Nivel Experto) */}
+            {/* CUSTOM FIELDS */}
             {parsedCustomFields.length > 0 && (
               <div className="space-y-3">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><AlertTriangle className="h-3 w-3"/> Campos de ClickUp</label>
@@ -460,7 +482,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               </div>
             )}
 
-            {/* TABS: Descripción, Subtareas, Checklists, Adjuntos */}
+            {/* TABS */}
             <Tabs defaultValue="desc" className="w-full">
               <TabsList className="grid w-full grid-cols-4 bg-muted/30 p-1 rounded-xl h-11 border border-border/40">
                 <TabsTrigger value="desc" className="text-[11px] font-bold gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"><FileText className="h-3.5 w-3.5" /> Notas</TabsTrigger>
@@ -469,7 +491,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 <TabsTrigger value="docs" className="text-[11px] font-bold gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"><Paperclip className="h-3.5 w-3.5" /> Docs</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="desc" className="mt-4 animate-in fade-in duration-300">
+              <TabsContent value="desc" className="mt-4">
                 <Textarea 
                   placeholder="Añade una descripción detallada o notas aquí..."
                   className="min-h-[250px] bg-muted/10 border-border/30 rounded-2xl p-4 text-sm leading-relaxed focus-visible:ring-primary/20 resize-none transition-all"
@@ -479,7 +501,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 />
               </TabsContent>
 
-              <TabsContent value="subs" className="mt-4 space-y-4 animate-in fade-in duration-300">
+              <TabsContent value="subs" className="mt-4 space-y-4">
                 <div className="flex gap-2">
                   <Input 
                     placeholder="Escribe el nombre de la nueva subtarea..." 
@@ -514,7 +536,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 )}
               </TabsContent>
 
-              <TabsContent value="check" className="mt-4 space-y-4 animate-in fade-in duration-300">
+              <TabsContent value="check" className="mt-4 space-y-4">
                 <div className="flex gap-2">
                   <Input 
                     placeholder="Añadir paso a seguir..." 
@@ -563,7 +585,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 </div>
               </TabsContent>
 
-              <TabsContent value="docs" className="mt-4 animate-in fade-in duration-300">
+              <TabsContent value="docs" className="mt-4">
                 <div className="space-y-4">
                    <div className="flex items-center justify-between">
                      <h5 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Documentos y Evidencias</h5>
@@ -604,7 +626,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               </TabsContent>
             </Tabs>
 
-            {/* ACTIVITY FEED: Comentarios estilizados como chat */}
+            {/* ACTIVITY FEED */}
             <div className="space-y-6 pt-6 border-t border-border/40">
               <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><MessageSquare className="h-3 w-3"/> Flujo de Actividad</label>
               
@@ -663,11 +685,5 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
         </ScrollArea>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function FileTextIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
   );
 }
