@@ -422,7 +422,7 @@ export default function ProjectDashboardPage() {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                      {filteredTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).map(task => (
+                      {parentTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).map(task => (
                         <div 
                           key={task.id}
                           draggable
@@ -436,12 +436,28 @@ export default function ProjectDashboardPage() {
                             </Badge>
                             {subtasksMap[task.id] && (
                                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20">
-                                 <LayoutGrid className="h-3 w-3 mr-1" /> {subtasksMap[task.id].length}
+                                 <LayoutGrid className="h-3 w-3 mr-1" /> {subtasksMap[task.id].length} Subtareas
                                </Badge>
                             )}
                           </div>
                           <div className={`absolute left-0 top-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500/50' : 'bg-primary/30'}`} />
-                          <h4 className="font-bold text-[14px] mb-4 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
+                          <h4 className="font-bold text-[14px] mb-2 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
+                          
+                          {/* Mini lista de subtareas en el Board */}
+                          {subtasksMap[task.id] && (
+                            <div className="pl-2 mb-4 space-y-1">
+                              {subtasksMap[task.id].slice(0, 3).map(sub => (
+                                <div key={sub.id} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                  <div className={`h-1.5 w-1.5 rounded-full ${sub.status === 'complete' ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+                                  <span className="truncate">{sub.title}</span>
+                                </div>
+                              ))}
+                              {subtasksMap[task.id].length > 3 && (
+                                <div className="text-[9px] text-primary/60 font-medium">+ {subtasksMap[task.id].length - 3} más...</div>
+                              )}
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
                             <span className="text-muted-foreground font-medium flex items-center gap-1">
                               <UserIcon className="h-3 w-3" /> US
@@ -657,21 +673,19 @@ function TaskRow({ task, onClick, index, isSubtask }: { task: TaskType; onClick:
         </div>
         <div className="flex flex-col gap-1 min-w-0">
           <h3 className={`font-semibold ${isSubtask ? 'text-[13px]' : 'text-[15px]'} truncate max-w-[400px] text-foreground/90 group-hover:text-primary transition-colors`}>{task.title}</h3>
-          {!isSubtask && (
-            <div className="flex items-center gap-3 text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
-                task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
-                task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
-                'bg-muted text-muted-foreground border border-border'
-              }`}>
-                {task.status}
-              </span>
-              <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
-                <Clock className="h-3 w-3" />
-                {task.priority || 'Normal'}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-3 text-xs">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
+              task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
+              task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+              'bg-muted text-muted-foreground border border-border'
+            }`}>
+              {task.status}
+            </span>
+            <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
+              <Clock className="h-3 w-3" />
+              {task.priority || 'Normal'}
+            </span>
+          </div>
         </div>
       </div>
       
