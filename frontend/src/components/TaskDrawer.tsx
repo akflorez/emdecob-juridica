@@ -360,22 +360,38 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2 tracking-widest"><UserIcon className="h-3 w-3"/> Responsable</label>
-                    <Select value={displayTask.assignee_id?.toString() || 'unassigned'} onValueChange={(v) => handleSave({ assignee_id: v === 'unassigned' ? null : parseInt(v) })}>
+                    <Select 
+                      value={displayTask.assignee_name || 'unassigned'} 
+                      onValueChange={(v) => handleSave({ assignee_name: v === 'unassigned' ? null : v })}
+                    >
                       <SelectTrigger className="h-9 bg-background border-border/40 hover:border-primary/40 rounded-lg shadow-sm transition-all">
                         <SelectValue placeholder="Sin asignar" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">Sin asignar</SelectItem>
-                        {users.map(u => (
-                          <SelectItem key={u.id} value={u.id.toString()}>
-                            <div className="flex items-center gap-2">
-                              <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                                {u.nombre?.charAt(0) || u.username.charAt(0)}
+                        {allAssignees.length > 0 ? (
+                          allAssignees.map(name => (
+                            <SelectItem key={name} value={name}>
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                                  {name[0].toUpperCase()}
+                                </div>
+                                {name}
                               </div>
-                              {u.nombre || u.username}
-                            </div>
-                          </SelectItem>
-                        ))}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          users.map(u => (
+                            <SelectItem key={u.id} value={u.nombre || u.username}>
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                                  {(u.nombre || u.username)[0].toUpperCase()}
+                                </div>
+                                {u.nombre || u.username}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
