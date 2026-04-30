@@ -46,26 +46,22 @@ export function AppSidebar() {
       <nav className={`flex-1 ${collapsed ? "p-2" : "p-4"} space-y-2 transition-all duration-300`}>
         {!collapsed && (
           <p className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Experiencia de Usuario
+          </p>
+        )}
+
+        <SidebarNavLink to="/mis-tareas" icon={UserCheck} collapsed={collapsed} title="Mis Tareas">
+          {!collapsed && "Mis Tareas"}
+        </SidebarNavLink>
+
+        {!collapsed && (
+          <p className="px-4 py-2 mt-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Menú Principal
           </p>
         )}
 
         <SidebarNavLink to="/importar" icon={Upload} collapsed={collapsed} title="Importar Excel">
           {!collapsed && "Importar Excel"}
-        </SidebarNavLink>
-
-        {!collapsed && (
-          <p className="px-4 py-2 mt-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Mis Tareas
-          </p>
-        )}
-
-        <SidebarNavLink to="/mis-tareas" icon={UserCheck} collapsed={collapsed} title="Asignadas a mí">
-          {!collapsed && "Asignadas a mí"}
-        </SidebarNavLink>
-
-        <SidebarNavLink to="/hoy-vencido" icon={Clock} collapsed={collapsed} title="Hoy y vencido">
-          {!collapsed && "Hoy y vencido"}
         </SidebarNavLink>
 
         <SidebarNavLink to="/consultar" icon={Search} collapsed={collapsed} title="Consultar Caso">
