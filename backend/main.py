@@ -666,6 +666,17 @@ async def lifespan(app: FastAPI):
             if 'assignee_name' not in cols:
                 conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_name VARCHAR(200)"))
                 print("Migración: Columna assignee_name añadida")
+            
+            # Garantizar tablas de soporte
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_checklist_items (
+                    id SERIAL PRIMARY KEY,
+                    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                    content VARCHAR(500) NOT NULL,
+                    is_completed BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
             conn.commit()
     except Exception as e:
         print(f"Error en migración rápida: {e}")
@@ -3946,6 +3957,9 @@ class TaskUpdate(BaseModel):
         extra = "ignore"
 
 
+class ChecklistItemCreate(BaseModel):
+    content: str
+
 class CommentCreate(BaseModel):
     task_id: int
     content: str
@@ -4282,19 +4296,20 @@ async def add_task_comment(
 @app.post("/tasks/{task_id}/checklists")
 async def add_task_checklist_item(
     task_id: int,
-    data: dict,
+    data: ChecklistItemCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     item = TaskChecklistItem(
         task_id=task_id,
-        content=data.get("content"),
+        content=data.content,
         is_completed=False
     )
     db.add(item)
     db.commit()
     db.refresh(item)
     return item
+
 
 @app.patch("/api/projects/tasks/{task_id}")
 @app.patch("/projects/tasks/{task_id}")

@@ -18,6 +18,7 @@ import {
   getCaseEventsById, 
   getCasePublicationsById,
   getCaseTasks,
+  getTasks,
   getUsers,
   type User,
   type Task as TaskType
@@ -50,6 +51,7 @@ export default function CasoDetailPage() {
   const [multipleCases, setMultipleCases] = useState<any[] | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [systemUsers, setSystemUsers] = useState<User[]>([]);
+  const [clickupToken, setClickupToken] = useState<string | null>(null);
   
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -60,6 +62,11 @@ export default function CasoDetailPage() {
 
   const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+
+  useEffect(() => {
+    const token = localStorage.getItem('clickup_token');
+    if (token) setClickupToken(token);
+  }, []);
 
   useEffect(() => {
     if (!radicado && !id) return;
@@ -860,6 +867,8 @@ export default function CasoDetailPage() {
               setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
               setSelectedTask(updated); // refrescar drawer data en vivo
             }}
+            clickupToken={clickupToken || undefined}
+            allAssignees={Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))) as string[]}
           />
         </TabsContent>
       </Tabs>
@@ -907,6 +916,61 @@ export default function CasoDetailPage() {
         </Card>
       )}
 
+    </div>
+  );
+}
+
+function TaskItem({ task, onSelect, isSubtask }: { task: TaskType; onSelect: (t: TaskType) => void; isSubtask?: boolean }) {
+  const { toast } = useToast();
+  
+  return (
+    <div 
+      onClick={() => onSelect(task)}
+      className={`group relative flex items-center justify-between transition-all duration-200 cursor-pointer border rounded-xl overflow-hidden shadow-sm hover:shadow-md ${
+        isSubtask 
+          ? 'p-2 bg-background/50 hover:bg-background border-dashed ml-2' 
+          : 'p-4 bg-card hover:bg-muted/30 border-border/60'
+      }`}
+    >
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+        task.status === 'complete' ? 'bg-green-500' : 
+        task.priority === 'urgent' ? 'bg-red-500' : 
+        'bg-primary'
+      }`} />
+
+      <div className="flex items-center gap-4 min-w-0">
+        <div className={`flex-shrink-0 ${isSubtask ? 'h-6 w-6' : 'h-8 w-8'} flex items-center justify-center rounded-full bg-muted/50 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors`}>
+          <CheckCircle2 className={`${isSubtask ? 'h-3 w-3' : 'h-4 w-4'}`} />
+        </div>
+        <div className="flex flex-col min-w-0">
+          <h4 className={`font-semibold ${isSubtask ? 'text-xs' : 'text-sm'} truncate max-w-[300px]`}>
+            {task.title || 'Sin título'}
+          </h4>
+          <div className="flex items-center gap-3 mt-0.5">
+            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
+              task.status === 'complete' ? 'bg-green-500/10 text-green-600' : 'bg-primary/10 text-primary'
+            }`}>
+              {task.status}
+            </span>
+            {task.due_date && (
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+                <Calendar className="h-3 w-3" />
+                {new Date(task.due_date).toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}
+              </span>
+            )}
+            {task.assignee_name && (
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+                <User className="h-3 w-3" />
+                {task.assignee_name}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 pr-2">
+        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+      </div>
     </div>
   );
 }

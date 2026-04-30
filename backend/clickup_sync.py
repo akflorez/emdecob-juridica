@@ -34,7 +34,7 @@ def extract_radicado(text: str) -> str:
     match = re.search(r'\d{21,23}', normalized)
     return match.group(0) if match else None
 
-async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, api_token: str, parent_id: int = None):
+async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, api_token: str, parent_id: int = None, inherited_case_id: int = None):
     """Procesa una tarea de ClickUp y sus subtareas recursivamente."""
     
     # 1. Mapear responsable
@@ -53,9 +53,9 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                 assignee_id = juridico_user.id
 
     # 2. Vinculación con Radicado Jurídico
-    case_id = None
+    case_id = inherited_case_id
     radicado = extract_radicado(task_data['name'] + " " + (task_data.get('description') or ""))
-    if radicado:
+    if radicado and not case_id:
         # Intentamos encontrar por radicado exacto o que lo contenga
         matching_case = db.query(Case).filter(Case.radicado.like(f"%{radicado}%")).first()
         if matching_case:
@@ -146,7 +146,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     # 7. Procesar Subtareas
     subtasks = task_data.get('subtasks', [])
     for sub in subtasks:
-        await process_task(sub, list_id, db, owner_id, user_map, api_token, parent_id=db_task.id)
+        await process_task(sub, list_id, db, owner_id, user_map, api_token, parent_id=db_task.id, inherited_case_id=case_id)
 
 async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int):
     """Sincronización Maestra Juricob v2: Importación total y jerárquica."""
