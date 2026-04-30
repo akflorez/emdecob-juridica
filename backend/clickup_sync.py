@@ -3,7 +3,7 @@ import asyncio
 import httpx
 from sqlalchemy.orm import Session
 from datetime import datetime
-from backend.models import Workspace, WorkspaceFolder, WorkspaceList, Task, TaskChecklistItem, TaskComment, User, Case, Tag, TaskAttachment
+from backend.models import Workspace, Folder, ProjectList, Task, TaskChecklistItem, TaskComment, User, Case, Tag, TaskAttachment
 import json
 
 CLICKUP_API_URL = "https://api.clickup.com/api/v2"
