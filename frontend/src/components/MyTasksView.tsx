@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   CheckCircle2, Clock, Calendar as CalendarIcon, User as UserIcon, 
   Flag, AlertCircle, ChevronDown, ChevronRight, Activity, 
-  Search, Filter, ListChecks, Hash, UserCheck
+  Search, Filter, ListChecks, Hash, UserCheck, RefreshCw
 } from "lucide-react";
 import { getTasks, type Task } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -60,6 +60,15 @@ export function MyTasksView() {
     );
   };
 
+  const overdueCount = useMemo(() => {
+    const today = startOfToday();
+    return tasks.filter(t => {
+      if (!t.due_date) return false;
+      const d = parseISO(t.due_date.toString());
+      return isToday(d) || isBefore(d, today);
+    }).length;
+  }, [tasks]);
+
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
     setIsDrawerOpen(true);
@@ -81,21 +90,21 @@ export function MyTasksView() {
                   Panel central de litigio y gestión de términos legales
                </p>
             </div>
-            <Button onClick={loadTasks} variant="outline" className="h-12 px-8 rounded-2xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-black text-[11px] uppercase tracking-widest transition-all shadow-xl">
-               <RefreshCw className={cn("h-4 w-4 mr-3 text-primary", isLoading && "animate-spin")} />
+            <Button onClick={loadTasks} variant="outline" className="h-12 px-8 rounded-2xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-black text-[11px] uppercase tracking-widest transition-all shadow-xl gap-3">
+               <RefreshCw className={cn("h-4 w-4 text-primary", isLoading && "animate-spin")} />
                Sincronizar ClickUp
             </Button>
           </div>
 
           <Tabs defaultValue="assigned" className="w-full" onValueChange={setActiveTab}>
              <div className="flex items-center justify-between border-b border-white/5 pb-1">
-                <TabsList className="bg-transparent border-none p-0 gap-10">
-                   <TabsTrigger value="assigned" className="bg-transparent border-none text-gray-700 data-[state=active]:text-primary data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-primary transition-all text-[14px] font-black uppercase tracking-widest">
+                <TabsList className="bg-transparent border-none p-0 h-auto gap-10">
+                   <TabsTrigger value="assigned" className="bg-transparent border-none text-gray-700 data-[state=active]:text-primary data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-primary transition-all text-[14px] font-black uppercase tracking-widest shadow-none hover:text-gray-400">
                       Asignadas a mí
                    </TabsTrigger>
-                   <TabsTrigger value="today" className="bg-transparent border-none text-gray-700 data-[state=active]:text-red-500 data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-red-500 transition-all text-[14px] font-black uppercase tracking-widest flex items-center gap-3">
+                   <TabsTrigger value="today" className="bg-transparent border-none text-gray-700 data-[state=active]:text-red-500 data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-red-500 transition-all text-[14px] font-black uppercase tracking-widest flex items-center gap-3 shadow-none hover:text-gray-400">
                       Hoy y vencido
-                      <Badge className="bg-red-500/10 text-red-500 border-none text-[10px] h-5 px-2">21</Badge>
+                      {overdueCount > 0 && <Badge className="bg-red-500/10 text-red-500 border-none text-[10px] h-5 px-2">{overdueCount}</Badge>}
                    </TabsTrigger>
                 </TabsList>
 
@@ -116,10 +125,10 @@ export function MyTasksView() {
              </div>
 
              <div className="mt-8">
-                <TabsContent value="assigned">
+                <TabsContent value="assigned" className="m-0 focus-visible:outline-none outline-none">
                    <TaskList tasks={getFilteredTasks("assigned")} isLoading={isLoading} onTaskClick={handleTaskClick} />
                 </TabsContent>
-                <TabsContent value="today">
+                <TabsContent value="today" className="m-0 focus-visible:outline-none outline-none">
                    <TaskList tasks={getFilteredTasks("today")} isLoading={isLoading} onTaskClick={handleTaskClick} isUrgent />
                 </TabsContent>
              </div>
@@ -135,6 +144,7 @@ export function MyTasksView() {
           setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
           setSelectedTask(updated);
         }}
+        clickupToken={localStorage.getItem("clickup_token") || undefined}
       />
     </div>
   );
@@ -223,26 +233,4 @@ function TaskList({ tasks, isLoading, onTaskClick, isUrgent }: TaskListProps) {
        </div>
     </div>
   );
-}
-
-function RefreshCw(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M3 21v-5h5" />
-    </svg>
-  )
 }
