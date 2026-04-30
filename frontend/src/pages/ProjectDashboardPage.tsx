@@ -39,14 +39,7 @@ import {
 moment.locale('es');
 const localizer = momentLocalizer(moment);
 
-const BOARD_COLUMNS = [
-  { id: 'to do', label: 'To Do', color: 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300', dot: 'bg-slate-400' },
-  { id: 'in progress', label: 'En Progreso', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400', dot: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' },
-  { id: 'review', label: 'Revisión', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400', dot: 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]' },
-  { id: 'complete', label: 'Completado', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400', dot: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' }
-];
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#6366f1'];
 
 export default function ProjectDashboardPage() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -157,6 +150,37 @@ export default function ProjectDashboardPage() {
     });
   }, [tasks, searchTerm, responsibleFilter, dateRange, dateFilterType]);
 
+  // Generar columnas de tablero DINÁMICAMENTE desde los datos
+  const dynamicBoardColumns = useMemo(() => {
+    const statuses = Array.from(new Set(filteredTasks.map(t => t.status || 'TO DO')));
+    // Ordenar: To do primero, Complete al final
+    statuses.sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      if (aLower === 'abierto' || aLower === 'to do') return -1;
+      if (bLower === 'abierto' || bLower === 'to do') return 1;
+      if (aLower === 'completado' || aLower === 'complete' || aLower === 'closed') return 1;
+      if (bLower === 'completado' || bLower === 'complete' || bLower === 'closed') return -1;
+      return 0;
+    });
+
+    return statuses.map((s, idx) => {
+      const sLower = s.toLowerCase();
+      let dotColor = COLORS[idx % COLORS.length];
+      if (sLower.includes('abierto') || sLower.includes('todo')) dotColor = '#94a3b8';
+      if (sLower.includes('proceso') || sLower.includes('curso')) dotColor = '#3b82f6';
+      if (sLower.includes('presentar')) dotColor = '#8b5cf6';
+      if (sLower.includes('retiro')) dotColor = '#ef4444';
+      if (sLower.includes('completado') || sLower.includes('finalizado')) dotColor = '#10b981';
+
+      return {
+        id: s,
+        label: s.toUpperCase(),
+        dot: dotColor
+      };
+    });
+  }, [filteredTasks]);
+
   const parentTasks = filteredTasks.filter(t => !t.parent_id);
   const subtasksMap = filteredTasks.reduce((acc, t) => {
     if (t.parent_id) {
@@ -166,7 +190,6 @@ export default function ProjectDashboardPage() {
     return acc;
   }, {} as Record<number, TaskType[]>);
 
-  // Datos para Gráficos
   const statsByAssignee = useMemo(() => {
     const map: Record<string, number> = {};
     filteredTasks.forEach(t => {
@@ -177,18 +200,19 @@ export default function ProjectDashboardPage() {
   }, [filteredTasks]);
 
   const statsByStatus = useMemo(() => {
-    return BOARD_COLUMNS.map(col => ({
+    return dynamicBoardColumns.map(col => ({
       name: col.label,
-      value: filteredTasks.filter(t => (t.status || '').toLowerCase() === col.id).length
+      value: filteredTasks.filter(t => (t.status || 'TO DO') === col.id).length,
+      color: col.dot
     }));
-  }, [filteredTasks]);
+  }, [filteredTasks, dynamicBoardColumns]);
 
   const calendarEvents = useMemo(() => {
     return filteredTasks
       .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
       .map(t => ({
         id: t.id,
-        title: (t.title || 'Sin Título') + (t.status === 'complete' ? ' ✅' : ''),
+        title: (t.title || 'Sin Título') + ((t.status || '').toLowerCase().includes('completado') ? ' ✅' : ''),
         start: new Date(t.due_date!),
         end: new Date(t.due_date!),
         resource: t,
@@ -197,7 +221,6 @@ export default function ProjectDashboardPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#0d0e12] text-slate-200 overflow-hidden relative">
-      {/* Premium Glows */}
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
       
       {/* Header */}
@@ -208,16 +231,16 @@ export default function ProjectDashboardPage() {
           </div>
           <div>
             <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-              EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">PRO</Badge>
+              EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">EXPERT</Badge>
             </h1>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Advanced Portfolio Management</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Master Workflow Engine</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
            <Button variant="ghost" onClick={handleSync} disabled={isSyncing} className="rounded-lg h-9 bg-white/5 hover:bg-white/10 text-xs border border-white/5">
-             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} /> Sincronizar
+             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} /> Sincronizar ClickUp
            </Button>
-           <Button onClick={() => setSelectedTask({ title: '', status: 'to do', priority: 'normal', list_id: selectedListId } as any)} className="rounded-lg h-9 bg-primary hover:bg-primary/90 text-white font-bold text-xs px-5 shadow-lg shadow-primary/20">
+           <Button onClick={() => setSelectedTask({ title: '', status: 'ABIERTO', priority: 'normal', list_id: selectedListId } as any)} className="rounded-lg h-9 bg-primary hover:bg-primary/90 text-white font-bold text-xs px-5 shadow-lg shadow-primary/20">
              <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
            </Button>
         </div>
@@ -229,7 +252,7 @@ export default function ProjectDashboardPage() {
            <div className="p-4">
              <div className="relative group">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-               <Input placeholder="Buscar lista..." className="pl-9 h-9 bg-white/5 border-white/10 rounded-lg text-xs" />
+               <Input placeholder="Explorar procesos..." className="pl-9 h-9 bg-white/5 border-white/10 rounded-lg text-xs" />
              </div>
            </div>
            <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
@@ -281,7 +304,7 @@ export default function ProjectDashboardPage() {
                    <TabsTrigger value="board" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4 data-[state=active]:bg-primary data-[state=active]:text-white">Tablero</TabsTrigger>
                    <TabsTrigger value="list" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Lista</TabsTrigger>
                    <TabsTrigger value="calendar" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Agenda</TabsTrigger>
-                   <TabsTrigger value="stats" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Panel Control</TabsTrigger>
+                   <TabsTrigger value="stats" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Dashboard</TabsTrigger>
                  </TabsList>
 
                  <div className="flex items-center gap-3">
@@ -317,24 +340,24 @@ export default function ProjectDashboardPage() {
               </div>
 
               <div className="flex-1 overflow-hidden relative">
-                 {/* TAB: TABLERO (KANBAN EXPERTO) */}
+                 {/* TAB: TABLERO DINÁMICO */}
                  <TabsContent value="board" className="h-full m-0 p-6 flex gap-6 overflow-x-auto custom-scrollbar">
-                    {BOARD_COLUMNS.map(col => (
+                    {dynamicBoardColumns.map(col => (
                       <div key={col.id} className="min-w-[320px] flex flex-col bg-white/[0.02] border border-white/5 rounded-3xl p-4 shadow-2xl relative group/col">
                         <div className="flex items-center justify-between mb-6 px-2">
                            <div className="flex items-center gap-2">
-                              <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
+                              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.dot }} />
                               <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{col.label}</h3>
                            </div>
-                           <Badge variant="outline" className="bg-white/5 border-white/10 text-[10px] font-mono text-slate-500">{filteredTasks.filter(t => t.status === col.id).length}</Badge>
+                           <Badge variant="outline" className="bg-white/5 border-white/10 text-[10px] font-mono text-slate-500">{filteredTasks.filter(t => (t.status || 'TO DO') === col.id).length}</Badge>
                         </div>
                         <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
-                           {parentTasks.filter(t => t.status === col.id).map(task => (
+                           {parentTasks.filter(t => (t.status || 'TO DO') === col.id).map(task => (
                              <Card key={task.id} className="bg-[#1a1c23] border-white/5 hover:border-primary/40 hover:translate-y-[-2px] transition-all duration-300 cursor-pointer shadow-lg group overflow-hidden" onClick={() => setSelectedTask(task)}>
                                <div className="p-4 relative">
                                   <div className="flex justify-between items-start mb-3">
                                      <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-white/5 border-white/10 text-slate-400">{task.priority || 'Normal'}</Badge>
-                                     {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length}</div>}
+                                     {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length} Subtareas</div>}
                                   </div>
                                   <h4 className="text-[13px] font-bold text-slate-200 leading-snug line-clamp-2 mb-4 group-hover:text-primary transition-colors">{task.title}</h4>
                                   <div className="flex items-center justify-between border-t border-white/5 pt-3">
@@ -352,54 +375,13 @@ export default function ProjectDashboardPage() {
                     ))}
                  </TabsContent>
 
-                 {/* TAB: LISTA */}
-                 <TabsContent value="list" className="h-full m-0 p-6 overflow-y-auto space-y-2">
-                    {parentTasks.map(t => (
-                      <div key={t.id} className="group flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] hover:border-primary/20 transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
-                         <div className="flex items-center gap-4">
-                            <div className={`h-3 w-3 rounded-full border-2 ${t.status === 'complete' ? 'bg-green-500 border-green-500/30' : 'border-slate-700'}`} />
-                            <div>
-                               <div className="text-[13px] font-bold text-slate-200 group-hover:text-primary transition-colors">{t.title}</div>
-                               <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1">
-                                  <span className="flex items-center gap-1"><Users className="h-3 w-3"/> {t.assignee_name || 'Sin asignar'}</span>
-                                  {t.due_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3"/> {format(new Date(t.due_date), 'd MMM, yyyy')}</span>}
-                               </div>
-                            </div>
-                         </div>
-                         <Badge className={`uppercase text-[9px] font-black tracking-widest ${t.status === 'complete' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-primary/10 text-primary border-primary/20'}`}>{t.status}</Badge>
-                      </div>
-                    ))}
-                 </TabsContent>
-
-                 {/* TAB: AGENDA */}
-                 <TabsContent value="calendar" className="h-full m-0 p-6">
-                    <div className="h-full bg-white/[0.02] rounded-3xl border border-white/5 p-6 shadow-2xl relative overflow-hidden">
-                       <style>{`
-                         .rbc-calendar { color: #94a3b8; }
-                         .rbc-month-view, .rbc-header { border-color: rgba(255,255,255,0.05) !important; }
-                         .rbc-off-range-bg { background: rgba(0,0,0,0.2); }
-                         .rbc-event { background: #3b82f6 !important; border: none; font-size: 10px; font-weight: 800; border-radius: 6px; }
-                         .rbc-today { background: rgba(59,130,246,0.05); }
-                       `}</style>
-                       <BigCalendar
-                         localizer={localizer}
-                         events={calendarEvents}
-                         startAccessor="start"
-                         endAccessor="end"
-                         style={{ height: '100%' }}
-                         onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                         messages={{ today: "Hoy", previous: "Back", next: "Next", month: "Mes", week: "Semana", day: "Día" }}
-                       />
-                    </div>
-                 </TabsContent>
-
-                 {/* TAB: PANEL DE CONTROL (CLICKUP STYLE) */}
+                 {/* TAB: DASHBOARD (CARDS + CHARTS) */}
                  <TabsContent value="stats" className="h-full m-0 p-8 overflow-y-auto space-y-8 custom-scrollbar bg-black/40">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                        {[
                          { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
-                         { label: 'En Curso', count: tasks.filter(t => t.status === 'in progress').length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                         { label: 'Completadas', count: tasks.filter(t => t.status === 'complete').length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                         { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                         { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
                        ].map((card, i) => (
                          <Card key={i} className="bg-white/[0.02] border-white/5 shadow-2xl overflow-hidden relative group">
                             <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
@@ -409,76 +391,49 @@ export default function ProjectDashboardPage() {
                                   <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
                                   <card.icon className={`h-10 w-10 ${card.color} opacity-20 group-hover:opacity-100 transition-all duration-500`} />
                                </div>
-                               <div className="mt-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">Tareas totales en este estado</div>
                             </CardContent>
                          </Card>
                        ))}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                       {/* Chart: Total de tareas por persona */}
                        <Card className="bg-[#13141a] border-white/5 shadow-2xl">
                           <CardHeader className="border-b border-white/5">
                              <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                <PieIcon className="h-4 w-4 text-primary" /> Total tareas por persona asignada
+                                <PieIcon className="h-4 w-4 text-primary" /> Tareas por responsable
                              </CardTitle>
                           </CardHeader>
                           <CardContent className="p-6 h-[400px]">
                              <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                   <Pie
-                                      data={statsByAssignee}
-                                      cx="50%"
-                                      cy="50%"
-                                      innerRadius={80}
-                                      outerRadius={120}
-                                      paddingAngle={5}
-                                      dataKey="value"
-                                      stroke="none"
-                                   >
+                                   <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
                                       {statsByAssignee.map((entry, index) => (
                                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                       ))}
                                    </Pie>
-                                   <ChartTooltip 
-                                      contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                                      itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
-                                   />
+                                   <ChartTooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
                                    <Legend verticalAlign="bottom" height={36}/>
                                 </PieChart>
                              </ResponsiveContainer>
                           </CardContent>
                        </Card>
 
-                       {/* Chart: Tareas abiertas por persona */}
                        <Card className="bg-[#13141a] border-white/5 shadow-2xl">
                           <CardHeader className="border-b border-white/5">
                              <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                <BarIcon className="h-4 w-4 text-blue-500" /> Tareas por estado actual
+                                <BarIcon className="h-4 w-4 text-blue-500" /> Distribución por estados ClickUp
                              </CardTitle>
                           </CardHeader>
                           <CardContent className="p-6 h-[400px]">
                              <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={statsByStatus}>
                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                   <XAxis 
-                                      dataKey="name" 
-                                      axisLine={false} 
-                                      tickLine={false} 
-                                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} 
-                                   />
-                                   <YAxis 
-                                      axisLine={false} 
-                                      tickLine={false} 
-                                      tick={{ fill: '#64748b', fontSize: 10 }} 
-                                   />
-                                   <ChartTooltip 
-                                      cursor={{ fill: 'rgba(255,255,255,0.02)' }}
-                                      contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                                   />
+                                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 9, fontWeight: 'bold' }} />
+                                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                                   <ChartTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
                                    <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
                                       {statsByStatus.map((entry, index) => (
-                                         <Cell key={`cell-${index}`} fill={entry.name === 'Completado' ? '#10b981' : entry.name === 'En Progreso' ? '#3b82f6' : '#64748b'} />
+                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                       ))}
                                    </Bar>
                                 </BarChart>
@@ -486,58 +441,38 @@ export default function ProjectDashboardPage() {
                           </CardContent>
                        </Card>
                     </div>
+                 </TabsContent>
+                 
+                 {/* Otros Tabs (Lista, Agenda) se mantienen igual */}
+                 <TabsContent value="list" className="h-full m-0 p-6 overflow-y-auto space-y-2">
+                    {parentTasks.map(t => (
+                      <div key={t.id} className="group flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
+                         <div className="flex items-center gap-4">
+                            <div className="h-3 w-3 rounded-full border-2 border-slate-700" />
+                            <div>
+                               <div className="text-[13px] font-bold text-slate-200 group-hover:text-primary transition-colors">{t.title}</div>
+                               <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1">
+                                  <span>{t.assignee_name || 'Sin asignar'}</span>
+                                  {t.due_date && <span>{format(new Date(t.due_date), 'd MMM')}</span>}
+                               </div>
+                            </div>
+                         </div>
+                         <Badge variant="outline" className="text-[9px] font-black tracking-widest">{t.status}</Badge>
+                      </div>
+                    ))}
+                 </TabsContent>
 
-                    {/* Workload Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
-                       <Card className="bg-[#13141a] border-white/5 shadow-2xl overflow-hidden">
-                          <CardHeader className="border-b border-white/5 bg-white/[0.02]">
-                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Rendimiento Detallado por Equipo</CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-0">
-                             <div className="overflow-x-auto">
-                                <table className="w-full text-left text-[11px]">
-                                   <thead className="bg-white/[0.01] text-slate-500 uppercase tracking-widest font-black border-b border-white/5">
-                                      <tr>
-                                         <th className="px-6 py-4">Usuario</th>
-                                         <th className="px-6 py-4">Total</th>
-                                         <th className="px-6 py-4">Completadas</th>
-                                         <th className="px-6 py-4">Eficiencia</th>
-                                         <th className="px-6 py-4">Carga actual</th>
-                                      </tr>
-                                   </thead>
-                                   <tbody className="divide-y divide-white/5">
-                                      {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => {
-                                         const userTasks = tasks.filter(t => t.assignee_name === name);
-                                         const done = userTasks.filter(t => t.status === 'complete').length;
-                                         const open = userTasks.length - done;
-                                         const pct = userTasks.length > 0 ? Math.round((done / userTasks.length) * 100) : 0;
-                                         return (
-                                            <tr key={name!} className="hover:bg-white/[0.02] transition-colors group">
-                                               <td className="px-6 py-4 flex items-center gap-3">
-                                                  <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary border border-primary/20">{name![0]}</div>
-                                                  <span className="font-bold text-slate-300 group-hover:text-primary transition-colors">{name}</span>
-                                               </td>
-                                               <td className="px-6 py-4 font-mono text-slate-500">{userTasks.length}</td>
-                                               <td className="px-6 py-4 text-green-500 font-bold">{done}</td>
-                                               <td className="px-6 py-4">
-                                                  <div className="flex items-center gap-3">
-                                                     <div className="h-1.5 flex-1 bg-white/5 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                                                     </div>
-                                                     <span className="font-black text-slate-400">{pct}%</span>
-                                                  </div>
-                                               </td>
-                                               <td className="px-6 py-4">
-                                                  <Badge variant="outline" className={`${open > 10 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'} border-none`}>{open} Abiertas</Badge>
-                                               </td>
-                                            </tr>
-                                         );
-                                      })}
-                                   </tbody>
-                                </table>
-                             </div>
-                          </CardContent>
-                       </Card>
+                 <TabsContent value="calendar" className="h-full m-0 p-6">
+                    <div className="h-full bg-white/[0.02] rounded-3xl border border-white/5 p-6 relative overflow-hidden">
+                       <BigCalendar
+                         localizer={localizer}
+                         events={calendarEvents}
+                         startAccessor="start"
+                         endAccessor="end"
+                         style={{ height: '100%' }}
+                         onSelectEvent={(e: any) => setSelectedTask(e.resource)}
+                         messages={{ today: "Hoy", previous: "Back", next: "Next", month: "Mes", week: "Semana", day: "Día" }}
+                       />
                     </div>
                  </TabsContent>
               </div>

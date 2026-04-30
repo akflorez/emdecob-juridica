@@ -21,12 +21,8 @@ async def fetch_clickup(endpoint: str, api_token: str):
         return resp.json()
 
 def normalize_status(clickup_status: str) -> str:
-    s = clickup_status.lower().strip()
-    if s in ['to do', 'todo', 'abierto', 'open', 'new', 'nueva']: return 'to do'
-    if s in ['in progress', 'doing', 'en proceso', 'pendiente', 'en curso', 'desarrollo']: return 'in progress'
-    if s in ['review', 'revisión', 'revisada', 'waiting', 'validación']: return 'review'
-    if s in ['complete', 'completado', 'completada', 'closed', 'finalizado', 'finalizada', 'terminado', 'terminada']: return 'complete'
-    return 'to do'
+    # Retornar el estado original de ClickUp para mantener fidelidad total
+    return clickup_status
 
 def extract_radicado(text: str) -> str:
     if not text: return None
