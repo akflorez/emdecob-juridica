@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   LayoutDashboard, FolderPlus, ListPlus, Plus, RefreshCw, Search, 
   Filter, MoreVertical, ChevronRight, MessageSquare, 
   Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock,
-  LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock
+  LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
+  ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
+  TrendingUp, Users, Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -26,21 +28,16 @@ import { TaskDrawer } from "@/components/TaskDrawer";
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { format, subDays, startOfMonth, endOfMonth, isToday, isYesterday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { 
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip, 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend 
+} from 'recharts';
 
 // Español para el calendario
 moment.locale('es');
 const localizer = momentLocalizer(moment);
-
-const safeFormatDate = (date: any, formatStr: string) => {
-  if (!date) return 'Sin fecha';
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return 'Fecha inválida';
-    return format(d, formatStr, { locale: es });
-  } catch (e) {
-    return 'Fecha pendiente';
-  }
-};
 
 const BOARD_COLUMNS = [
   { id: 'to do', label: 'To Do', color: 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300', dot: 'bg-slate-400' },
@@ -48,6 +45,8 @@ const BOARD_COLUMNS = [
   { id: 'review', label: 'Revisión', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400', dot: 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]' },
   { id: 'complete', label: 'Completado', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400', dot: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' }
 ];
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function ProjectDashboardPage() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -58,27 +57,23 @@ export default function ProjectDashboardPage() {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<number>>(new Set());
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
   
-  // States para el Modal/Drawer interactivo
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterType, setDateFilterType] = useState<string>("month");
+  const [dateRange, setDateRange] = useState({ 
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'), 
+    end: format(endOfMonth(new Date()), 'yyyy-MM-dd') 
+  });
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
-  const [users, setUsers] = useState<User[]>([]);
-
-  useEffect(() => {
-    getUsers().then(setUsers).catch(console.error);
-  }, []);
 
   useEffect(() => {
     fetchInitialData();
   }, []);
 
-  // Cuando cambia selectedListId, recargar tareas de esa lista
-  // Si no hay lista seleccionada, cargar TODAS las tareas
   useEffect(() => {
     fetchTasks(selectedListId ?? undefined);
   }, [selectedListId]);
@@ -88,15 +83,12 @@ export default function ProjectDashboardPage() {
     try {
       const wsData = await getWorkspaces();
       setWorkspaces(wsData);
-      // Expandir el primer workspace y carpeta para navegación visual
-      // pero NO pre-seleccionar ninguna lista: queremos ver todas las tareas al inicio
       if (wsData.length > 0) {
         setExpandedWorkspaces(new Set([wsData[0].id]));
         if (wsData[0].folders.length > 0) {
           setExpandedFolders(new Set([wsData[0].folders[0].id]));
         }
       }
-      // Cargar TODAS las tareas sin filtro al inicio
       await fetchTasks(undefined);
     } catch (error) {
       toast.error("Error al cargar proyectos");
@@ -107,23 +99,13 @@ export default function ProjectDashboardPage() {
 
   const fetchTasks = async (listId?: number) => {
     try {
-      console.log('[DASHBOARD] Fetching tasks. list_id:', listId ?? 'ALL');
       const taskData = await getTasks({ list_id: listId });
-      console.log('[DASHBOARD] Received:', taskData?.length ?? 0, 'tasks');
       setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
-      console.error('[DASHBOARD] Error fetching tasks:', error);
       toast.error("Error al cargar tareas");
       setTasks([]);
     }
   };
-
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (selectedListId) fetchTasks(selectedListId);
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
 
   const handleSync = async () => {
     const token = prompt("Ingresa tu ClickUp API Token:", clickupToken);
@@ -142,57 +124,39 @@ export default function ProjectDashboardPage() {
     }
   };
 
-  const toggleWorkspace = (id: number) => {
-    const next = new Set(expandedWorkspaces);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setExpandedWorkspaces(next);
+  const handleDateFilterChange = (val: string) => {
+    setDateFilterType(val);
+    const today = new Date();
+    let start = "";
+    let end = "";
+
+    switch(val) {
+      case 'today': start = end = format(today, 'yyyy-MM-dd'); break;
+      case 'yesterday': start = end = format(subDays(today, 1), 'yyyy-MM-dd'); break;
+      case '7d': start = format(subDays(today, 7), 'yyyy-MM-dd'); end = format(today, 'yyyy-MM-dd'); break;
+      case '30d': start = format(subDays(today, 30), 'yyyy-MM-dd'); end = format(today, 'yyyy-MM-dd'); break;
+      case 'month': start = format(startOfMonth(today), 'yyyy-MM-dd'); end = format(endOfMonth(today), 'yyyy-MM-dd'); break;
+      case 'all': start = ""; end = ""; break;
+    }
+    setDateRange({ start, end });
   };
 
-  const toggleFolder = (id: number) => {
-    const next = new Set(expandedFolders);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setExpandedFolders(next);
-  };
-
-  const handleDrop = async (status: string) => {
-    if (!draggedTaskId) return;
-    const t = tasks.find(x => x.id === draggedTaskId);
-    if (t && t.status !== status) {
-      setTasks(prev => prev.map(x => x.id === draggedTaskId ? { ...x, status } : x));
-      try {
-        await updateTask(draggedTaskId, { status });
-      } catch(e) {
-        toast.error("Error sincronizando movimiento.");
-        fetchTasks(selectedListId!); // revertir
+  const filteredTasks = useMemo(() => {
+    return (tasks || []).filter(t => {
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        if (!t.title.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search)) return false;
       }
-    }
-    setDraggedTaskId(null);
-  };
+      if (responsibleFilter !== "all" && t.assignee_name !== responsibleFilter) return false;
+      if (dateFilterType === "all") return true;
+      if (!t.due_date) return true;
+      const d = new Date(t.due_date);
+      if (dateRange.start && d < startOfDay(new Date(dateRange.start))) return false;
+      if (dateRange.end && d > endOfDay(new Date(dateRange.end))) return false;
+      return true;
+    });
+  }, [tasks, searchTerm, responsibleFilter, dateRange, dateFilterType]);
 
-  const filteredTasks = tasks.filter(t => {
-    // Filtro de búsqueda (Radicado o Título)
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      const matchTitle = t.title.toLowerCase().includes(search);
-      const matchDesc = t.description?.toLowerCase().includes(search);
-      if (!matchTitle && !matchDesc) return false;
-    }
-
-    // Filtro de responsable
-    if (responsibleFilter !== "all" && t.assignee_name !== responsibleFilter) {
-        return false;
-    }
-
-    // Filtro de fechas
-    if (!dateRange.start && !dateRange.end) return true;
-    if (!t.due_date) return true; // Keep dateless tasks so they show up
-    const d = new Date(t.due_date);
-    if (dateRange.start && d < new Date(dateRange.start)) return false;
-    if (dateRange.end && d > new Date(dateRange.end)) return false;
-    return true;
-  });
-
-  // Agrupar por parent_id para visualización jerárquica
   const parentTasks = filteredTasks.filter(t => !t.parent_id);
   const subtasksMap = filteredTasks.reduce((acc, t) => {
     if (t.parent_id) {
@@ -202,441 +166,385 @@ export default function ProjectDashboardPage() {
     return acc;
   }, {} as Record<number, TaskType[]>);
 
-  const calendarEvents = (filteredTasks || [])
-    .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
-    .map(t => {
-      const d = new Date(t.due_date!);
-      return {
+  // Datos para Gráficos
+  const statsByAssignee = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredTasks.forEach(t => {
+      const name = t.assignee_name || "Sin Asignar";
+      map[name] = (map[name] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [filteredTasks]);
+
+  const statsByStatus = useMemo(() => {
+    return BOARD_COLUMNS.map(col => ({
+      name: col.label,
+      value: filteredTasks.filter(t => (t.status || '').toLowerCase() === col.id).length
+    }));
+  }, [filteredTasks]);
+
+  const calendarEvents = useMemo(() => {
+    return filteredTasks
+      .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
+      .map(t => ({
         id: t.id,
         title: (t.title || 'Sin Título') + (t.status === 'complete' ? ' ✅' : ''),
-        start: d,
-        end: d,
+        start: new Date(t.due_date!),
+        end: new Date(t.due_date!),
         resource: t,
-      };
-    });
+      }));
+  }, [filteredTasks]);
 
   return (
-    <div className="flex flex-col h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative overflow-hidden">
-      {/* Decorative Orbs */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] -z-10 pointer-events-none mix-blend-screen" />
-      <div className="absolute bottom-[-20%] left-[-10%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
-
-      {/* Header Panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-6 border-b border-border/40 px-6 backdrop-blur-sm z-10 relative">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-gradient-to-tr from-primary to-blue-500 rounded-lg shadow-lg shadow-primary/20">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 leading-[1.2]">
-              Gestión Avanzada
-            </h1>
-            <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-200 font-bold ml-2 h-6 self-start mt-2 px-3 animate-pulse">v4.0 SENIOR</Badge>
-          </div>
-          <p className="text-sm font-medium text-muted-foreground ml-[44px]">Sincronización de grado militar y diagnóstico resiliente.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={handleSync} disabled={isSyncing} className="group relative overflow-hidden bg-background/50 backdrop-blur border-border/50 hover:bg-muted/50 transition-all duration-300 rounded-full px-6">
-            <span className="relative z-10 flex items-center font-semibold">
-              <RefreshCw className={`mr-2 h-4 w-4 text-primary ${isSyncing ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-700"}`} />
-              Sincronizar ClickUp
-            </span>
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-          </Button>
-          <Button onClick={() => setSelectedTask({ title: '', status: 'to do', priority: 'normal', list_id: selectedListId } as any)} className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300 font-bold px-6 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500">
-            <Plus className="mr-2 h-4 w-4" /> Lanzar Tarea
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)] p-6 pt-6 z-10">
-        
-        {/* Sidebar de Jerarquía (Explorador) */}
-        <div className="lg:col-span-3 flex flex-col h-full bg-card/80 backdrop-blur-xl border border-border/40 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(255,255,255,0.02)] overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
-          <div className="p-4 border-b border-border/40 bg-gradient-to-r from-muted/50 to-transparent flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
-              <LayoutDashboard className="h-3.5 w-3.5" /> Explorador
-            </span>
-            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background/50 shadow-sm hover:bg-primary hover:text-primary-foreground transition-all duration-300">
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          
-          <div className="flex-1 overflow-auto p-3 space-y-3 custom-scrollbar">
-            {workspaces.map(ws => (
-              <div key={ws.id} className="space-y-1 relative">
-                <div 
-                  className="flex items-center justify-between p-2 rounded-xl hover:bg-primary/5 cursor-pointer text-sm font-bold transition-all duration-200 group"
-                  onClick={() => toggleWorkspace(ws.id)}
-                >
-                  <div className="flex items-center gap-2.5 text-foreground/90 group-hover:text-primary transition-colors">
-                    <ChevronRight className={`h-4 w-4 text-muted-foreground/50 transition-transform duration-300 ${expandedWorkspaces.has(ws.id) ? "rotate-90 text-primary" : "group-hover:translate-x-1"}`} />
-                    <div className="p-1 rounded bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10">
-                      <Lock className="h-3 w-3 text-primary" />
-                    </div>
-                    <span className="truncate">{ws.name}</span>
-                  </div>
-                </div>
-                
-                {/* Folders con Animacion Slide-Down */}
-                {expandedWorkspaces.has(ws.id) && ws.folders.map(f => (
-                  <div key={f.id} className="ml-5 space-y-1 relative before:absolute before:-left-3 before:top-4 before:h-[calc(100%-16px)] before:w-px before:bg-gradient-to-b before:from-border before:to-transparent animate-in slide-in-from-top-2 fade-in duration-200">
-                    <div 
-                      className="flex items-center justify-between p-2 rounded-xl hover:bg-muted/50 cursor-pointer text-sm font-semibold opacity-90 transition-all group"
-                      onClick={() => toggleFolder(f.id)}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 ${expandedFolders.has(f.id) ? "rotate-90" : "group-hover:translate-x-1"}`} />
-                        <FolderPlus className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <span className="group-hover:text-foreground transition-colors truncate">{f.name}</span>
-                      </div>
-                    </div>
-
-                    {expandedFolders.has(f.id) && f.lists.map(list => (
-                      <div 
-                        key={list.id}
-                        className={`ml-5 flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer text-[13px] transition-all duration-300 animate-in slide-in-from-left-2 fade-in ${selectedListId === list.id ? "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold shadow-md shadow-primary/25 translate-x-1" : "text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-1"}`}
-                        onClick={() => setSelectedListId(list.id)}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className={`w-2 h-2 rounded-full shadow-[0_0_5px_currentColor] ${selectedListId === list.id ? 'bg-white' : 'bg-primary/40'}`} />
-                          <span className="truncate">{list.name}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Content Area - Tabs para List / Kanban / Calendar */}
-        <div className="lg:col-span-9 flex flex-col h-full overflow-hidden bg-card/40 backdrop-blur-sm border border-border/30 rounded-2xl shadow-xl">
-          <Tabs defaultValue="board" className="flex-1 flex flex-col h-full w-full p-4 pb-0">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div className="relative flex-1 max-w-md group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                </div>
-                <Input 
-                  placeholder="Buscar por radicado o nombre..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-background/50 backdrop-blur shadow-sm border-border/50 focus-visible:ring-primary/30 rounded-full h-10 transition-all duration-300" 
-                />
-              </div>
-
-              <div className="flex gap-2 items-center">
-                <Select 
-                  value={responsibleFilter} 
-                  onValueChange={setResponsibleFilter}
-                >
-                  <SelectTrigger className="h-9 w-[180px] text-xs bg-background/50 rounded-lg">
-                    <SelectValue placeholder="Responsable: Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los responsables</SelectItem>
-                    {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => (
-                      <SelectItem key={name} value={name!}>{name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Input 
-                  type="date" 
-                  value={dateRange.start} 
-                  onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                  className="h-9 w-32 text-xs rounded-lg bg-background/50"
-                />
-                <span className="text-muted-foreground">→</span>
-                <Input 
-                  type="date" 
-                  value={dateRange.end} 
-                  onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                  className="h-9 w-32 text-xs rounded-lg bg-background/50"
-                />
-              </div>
-              
-              <div className="flex items-center justify-end gap-3 flex-wrap">
-                <TabsList className="bg-muted/50 backdrop-blur-md p-1 rounded-full shadow-inner border border-white/5 dark:border-white/10">
-                  <TabsTrigger value="list" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
-                    <ListIcon className="h-4 w-4 mr-2" /> Lista
-                  </TabsTrigger>
-                  <TabsTrigger value="board" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
-                    <LayoutGrid className="h-4 w-4 mr-2" /> Tablero
-                  </TabsTrigger>
-                  <TabsTrigger value="calendar" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
-                    <CalendarDays className="h-4 w-4 mr-2" /> Agenda
-                  </TabsTrigger>
-                  <TabsTrigger value="stats" className="rounded-full px-5 py-1.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all duration-300 font-semibold text-sm">
-                    <Zap className="h-4 w-4 mr-2" /> Dashboard
-                  </TabsTrigger>
-                </TabsList>
-                <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
-                <Button variant="outline" size="icon" className="rounded-full bg-background/50 backdrop-blur hover:bg-muted shadow-sm">
-                  <Filter className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button variant="outline" size="icon" className="rounded-full bg-background/50 backdrop-blur hover:bg-muted shadow-sm">
-                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex-1 w-full relative overflow-hidden pt-2 rounded-t-xl">
-              
-              {/* TAB: LIST (Datatable ultra moderna) */}
-              <TabsContent value="list" className="h-full m-0 overflow-y-auto space-y-3 custom-scrollbar pb-6 animate-in fade-in duration-500">
-                {parentTasks.length === 0 ? (
-                  <EmptyState text="El lienzo está en blanco. Inicia un nuevo flujo." />
-                ) : parentTasks.map((task, i) => (
-                  <div key={task.id} className="space-y-2">
-                    <TaskRow task={task} onClick={() => setSelectedTask(task)} index={i} />
-                    {subtasksMap[task.id] && (
-                      <div className="ml-12 space-y-2 border-l-2 border-dashed border-primary/20 pl-4 py-1">
-                        {subtasksMap[task.id].map((sub, si) => (
-                          <TaskRow key={sub.id} task={sub} onClick={() => setSelectedTask(sub)} index={si} isSubtask />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </TabsContent>
-
-              {/* TAB: BOARD KANBAN (Drag and Drop nativo) */}
-              <TabsContent value="board" className="h-[calc(100%-20px)] m-0 overflow-x-auto flex gap-5 items-start custom-scrollbar pb-4 animate-in fade-in zoom-in-95 duration-500">
-                {BOARD_COLUMNS.map(col => (
-                  <div 
-                    key={col.id}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={() => handleDrop(col.id)}
-                    className="min-w-[320px] max-w-[320px] flex flex-col bg-background/40 backdrop-blur-md border border-border/40 rounded-2xl h-full shadow-sm hover:shadow-md transition-all duration-300"
-                  >
-                    <div className="p-4 flex items-center justify-between border-b border-border/40 rounded-t-2xl bg-muted/30">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${col.color}`} />
-                        <span className="font-bold tracking-wide uppercase text-xs text-foreground/80">{col.label}</span>
-                        <Badge variant="secondary" className="ml-1 text-[10px] bg-background/50">{filteredTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).length}</Badge>
-                      </div>
-                      <Plus className="h-4 w-4 text-muted-foreground/50 cursor-pointer hover:text-primary transition-colors" />
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                      {parentTasks.filter(t => (t.status || '').trim().toLowerCase() === col.id.trim().toLowerCase()).map(task => (
-                        <div 
-                          key={task.id}
-                          draggable
-                          onDragStart={() => setDraggedTaskId(task.id)}
-                          onClick={() => setSelectedTask(task)}
-                          className="group bg-card/80 hover:bg-card p-4 rounded-xl border border-border/50 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 cursor-pointer relative overflow-hidden animate-in fade-in slide-in-from-bottom-2"
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <Badge variant="outline" className="text-[9px] uppercase tracking-wider bg-background/50 border-border/50">
-                              {task.priority || 'Normal'}
-                            </Badge>
-                            {subtasksMap[task.id] && (
-                               <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20">
-                                 <LayoutGrid className="h-3 w-3 mr-1" /> {subtasksMap[task.id].length} Subtareas
-                               </Badge>
-                            )}
-                          </div>
-                          <div className={`absolute left-0 top-0 w-1 h-full ${task.priority === 'urgent' ? 'bg-red-500/50' : 'bg-primary/30'}`} />
-                          <h4 className="font-bold text-[14px] mb-2 leading-snug line-clamp-2 pl-2 text-foreground/90 group-hover:text-primary transition-colors">{task.title}</h4>
-                          
-                          {/* Mini lista de subtareas en el Board */}
-                          {subtasksMap[task.id] && (
-                            <div className="pl-2 mb-4 space-y-1">
-                              {subtasksMap[task.id].slice(0, 3).map(sub => (
-                                <div key={sub.id} className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                  <div className={`h-1.5 w-1.5 rounded-full ${sub.status === 'complete' ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
-                                  <span className="truncate">{sub.title}</span>
-                                </div>
-                              ))}
-                              {subtasksMap[task.id].length > 3 && (
-                                <div className="text-[9px] text-primary/60 font-medium">+ {subtasksMap[task.id].length - 3} más...</div>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between text-xs pl-2 border-t border-border/40 pt-3">
-                            <span className="text-muted-foreground font-medium flex items-center gap-1">
-                              <UserIcon className="h-3 w-3" /> US
-                            </span>
-                            {task.due_date && (
-                              <span className="flex items-center gap-1 font-bold text-primary">
-                                <CalendarIcon className="h-3 w-3" />
-                                {(() => {
-                                  const d = new Date(task.due_date);
-                                  return isNaN(d.getTime()) ? 'Pendiente' : d.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'});
-                                })()}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </TabsContent>
-
-              {/* TAB: CALENDAR (Visión Macro) */}
-              <TabsContent value="calendar" className="h-full m-0 p-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <style>{`
-                  .rbc-calendar { font-family: inherit; }
-                  .rbc-month-view { border-radius: 12px; overflow: hidden; border-color: hsl(var(--border)/0.5); border-width: 1px; }
-                  .rbc-header { padding: 10px 0; font-weight: 700; text-transform: uppercase; font-size: 11px; background: hsl(var(--muted)/0.3); border-color: hsl(var(--border)/0.5); }
-                  .rbc-day-bg { border-color: hsl(var(--border)/0.3); }
-                  .rbc-off-range-bg { background: hsl(var(--muted)/0.1); }
-                  .rbc-event { background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary)/0.8)); border: none; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 2px; }
-                  .rbc-today { background-color: hsl(var(--primary)/0.03); }
-                  .rbc-toolbar button { color: hsl(var(--foreground)); border-radius: 8px; border-color: hsl(var(--border)/0.5); padding: 4px 12px; font-weight: 500; transition: all 0.2s; }
-                  .rbc-toolbar button:hover { background-color: hsl(var(--muted)); }
-                  .rbc-toolbar button.rbc-active { background-color: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); box-shadow: 0 4px 10px hsl(var(--primary)/0.3); }
-                `}</style>
-                <div className="h-full bg-background/80 backdrop-blur-xl rounded-2xl p-4 shadow-sm border border-border/40">
-                  <BigCalendar
-                    localizer={localizer}
-                    events={calendarEvents}
-                    startAccessor="start"
-                    endAccessor="end"
-                    style={{ height: '100%' }}
-                    onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                    messages={{ today: "Hoy", previous: "Volver", next: "Avanzar", month: "Mes", week: "Semana", day: "Día" }}
-                  />
-                </div>
-              </TabsContent>
-
-              {/* TAB: STATS (DASHBOARD PREMIUM) */}
-              <TabsContent value="stats" className="h-full m-0 overflow-y-auto p-4 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="bg-gradient-to-br from-primary/10 to-transparent border-primary/20 shadow-lg">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-primary uppercase tracking-tighter">Total Tareas</span>
-                        <Zap className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="text-4xl font-black mt-2">{tasks.length}</div>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Sincronizadas desde ClickUp</p>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20 shadow-lg">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-green-600 uppercase tracking-tighter">Completadas</span>
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      </div>
-                      <div className="text-4xl font-black mt-2 text-green-600">{tasks.filter(t => t.status === 'complete').length}</div>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Éxito operativo</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-gradient-to-br from-blue-500/10 to-transparent border-blue-500/20 shadow-lg">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-blue-600 uppercase tracking-tighter">En Proceso</span>
-                        <RefreshCw className="h-5 w-5 text-blue-500" />
-                      </div>
-                      <div className="text-4xl font-black mt-2 text-blue-600">{tasks.filter(t => t.status === 'in progress').length}</div>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Gestión activa</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-gradient-to-br from-orange-500/10 to-transparent border-orange-500/20 shadow-lg">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-orange-600 uppercase tracking-tighter">Pendientes</span>
-                        <Clock className="h-5 w-5 text-orange-500" />
-                      </div>
-                      <div className="text-4xl font-black mt-2 text-orange-600">{tasks.filter(t => t.status === 'to do').length}</div>
-                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Por iniciar</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-4">
-                    <h3 className="text-xl font-bold flex items-center gap-2 px-2">
-                      <UserIcon className="h-5 w-5 text-primary" /> Rendimiento por Responsable
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => {
-                        const userTasks = (tasks || []).filter(t => t.assignee_name === name);
-                        const completed = userTasks.filter(t => t.status === 'complete').length;
-                        const total = userTasks.length;
-                        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-                        
-                        return (
-                          <div key={name!} className="p-5 rounded-2xl bg-card border border-border/40 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
-                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${pct > 80 ? 'bg-green-500' : pct > 40 ? 'bg-blue-500' : 'bg-orange-500'}`} />
-                            <div className="flex justify-between items-start mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
-                                  {(name || '??').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                                </div>
-                                <div>
-                                  <div className="font-bold text-foreground group-hover:text-primary transition-colors">{name}</div>
-                                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Abogado / Gestor</div>
-                                </div>
-                              </div>
-                              <Badge variant="secondary" className="font-black text-lg h-9 px-3">{pct}%</Badge>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-xs font-bold">
-                                <span>Progreso</span>
-                                <span>{completed} / {total} Completadas</span>
-                              </div>
-                              <div className="h-3 w-full bg-muted/50 rounded-full overflow-hidden border border-border/20">
-                                <div 
-                                  className={`h-full transition-all duration-1000 ${pct > 80 ? 'bg-green-500' : pct > 40 ? 'bg-blue-500' : 'bg-orange-500'}`} 
-                                  style={{ width: `${pct}%` }} 
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-xl font-bold flex items-center gap-2 px-2">
-                      <ListIcon className="h-5 w-5 text-primary" /> Distribución de Estados
-                    </h3>
-                    <Card className="p-6 bg-card/50 backdrop-blur border-border/40">
-                      <div className="space-y-5">
-                        {BOARD_COLUMNS.map(col => {
-                          const count = tasks.filter(t => t.status === col.id).length;
-                          const pct = tasks.length > 0 ? Math.round((count / tasks.length) * 100) : 0;
-                          return (
-                            <div key={col.id} className="space-y-1.5">
-                              <div className="flex justify-between text-xs">
-                                <span className="font-bold flex items-center gap-2">
-                                  <div className={`h-2 w-2 rounded-full ${col.dot}`} />
-                                  {col.label}
-                                </span>
-                                <span className="text-muted-foreground font-bold">{count} ({pct}%)</span>
-                              </div>
-                              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full ${col.color.split(' ')[0].replace('-100', '-500')}`} 
-                                  style={{ width: `${pct}%` }} 
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </Card>
-                  </div>
-                </div>
-              </TabsContent>
-            </div>
-          </Tabs>
-        </div>
-      </div>
+    <div className="flex flex-col h-full bg-[#0d0e12] text-slate-200 overflow-hidden relative">
+      {/* Premium Glows */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
       
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 px-6 border-b border-white/5 bg-black/40 backdrop-blur-xl z-20">
+        <div className="flex items-center gap-4">
+          <div className="p-2.5 bg-gradient-to-br from-primary to-blue-600 rounded-xl shadow-xl shadow-primary/20">
+            <LayoutDashboard className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+              EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">PRO</Badge>
+            </h1>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Advanced Portfolio Management</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+           <Button variant="ghost" onClick={handleSync} disabled={isSyncing} className="rounded-lg h-9 bg-white/5 hover:bg-white/10 text-xs border border-white/5">
+             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} /> Sincronizar
+           </Button>
+           <Button onClick={() => setSelectedTask({ title: '', status: 'to do', priority: 'normal', list_id: selectedListId } as any)} className="rounded-lg h-9 bg-primary hover:bg-primary/90 text-white font-bold text-xs px-5 shadow-lg shadow-primary/20">
+             <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
+           </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Navigation Sidebar */}
+        <div className="w-64 flex flex-col border-r border-white/5 bg-black/20 backdrop-blur-md">
+           <div className="p-4">
+             <div className="relative group">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+               <Input placeholder="Buscar lista..." className="pl-9 h-9 bg-white/5 border-white/10 rounded-lg text-xs" />
+             </div>
+           </div>
+           <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
+              {workspaces.map(ws => (
+                <div key={ws.id} className="space-y-0.5">
+                   <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer group" onClick={() => {
+                     const n = new Set(expandedWorkspaces);
+                     if (n.has(ws.id)) n.delete(ws.id); else n.add(ws.id);
+                     setExpandedWorkspaces(n);
+                   }}>
+                     <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expandedWorkspaces.has(ws.id) ? "" : "-rotate-90"}`} />
+                     <span className="text-[11px] font-black uppercase text-slate-400 group-hover:text-primary transition-colors">{ws.name}</span>
+                   </div>
+                   {expandedWorkspaces.has(ws.id) && ws.folders.map(f => (
+                     <div key={f.id} className="ml-3 space-y-0.5">
+                        <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer group" onClick={() => {
+                          const n = new Set(expandedFolders);
+                          if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
+                          setExpandedFolders(n);
+                        }}>
+                          <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${expandedFolders.has(f.id) ? "" : "-rotate-90"}`} />
+                          <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-300">{f.name}</span>
+                        </div>
+                        {expandedFolders.has(f.id) && f.lists.map(list => (
+                          <div 
+                            key={list.id} 
+                            onClick={() => setSelectedListId(list.id)}
+                            className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] flex items-center justify-between group transition-all ${selectedListId === list.id ? "bg-primary/10 text-primary border border-primary/20 shadow-lg shadow-primary/5" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"}`}
+                          >
+                             <div className="flex items-center gap-2">
+                               <div className={`h-1.5 w-1.5 rounded-full ${selectedListId === list.id ? 'bg-primary animate-pulse' : 'bg-slate-700'}`} />
+                               {list.name}
+                             </div>
+                             {selectedListId === list.id && <Zap className="h-3 w-3" />}
+                          </div>
+                        ))}
+                     </div>
+                   ))}
+                </div>
+              ))}
+           </div>
+        </div>
+
+        {/* Main Console */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+           <Tabs defaultValue="board" className="flex-1 flex flex-col overflow-hidden">
+              <div className="h-14 flex items-center justify-between px-6 border-b border-white/5 bg-black/20">
+                 <TabsList className="bg-white/5 p-1 rounded-xl h-9 border border-white/5">
+                   <TabsTrigger value="board" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4 data-[state=active]:bg-primary data-[state=active]:text-white">Tablero</TabsTrigger>
+                   <TabsTrigger value="list" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Lista</TabsTrigger>
+                   <TabsTrigger value="calendar" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Agenda</TabsTrigger>
+                   <TabsTrigger value="stats" className="rounded-lg text-[10px] font-bold uppercase tracking-widest px-4">Panel Control</TabsTrigger>
+                 </TabsList>
+
+                 <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/5">
+                       <Select value={dateFilterType} onValueChange={handleDateFilterChange}>
+                         <SelectTrigger className="w-[120px] h-7 text-[10px] border-none bg-transparent font-black uppercase text-primary">
+                           <Calendar className="h-3 w-3 mr-2" />
+                           <SelectValue />
+                         </SelectTrigger>
+                         <SelectContent className="bg-slate-900 border-white/10 text-white">
+                           <SelectItem value="today">Hoy</SelectItem>
+                           <SelectItem value="yesterday">Ayer</SelectItem>
+                           <SelectItem value="7d">7 Días</SelectItem>
+                           <SelectItem value="30d">30 Días</SelectItem>
+                           <SelectItem value="month">Este Mes</SelectItem>
+                           <SelectItem value="all">Todo</SelectItem>
+                         </SelectContent>
+                       </Select>
+                    </div>
+                    <Select value={responsibleFilter} onValueChange={setResponsibleFilter}>
+                       <SelectTrigger className="w-[140px] h-7 text-[10px] bg-white/5 border-white/10 rounded-lg uppercase font-bold">
+                         <Users className="h-3 w-3 mr-2" />
+                         <SelectValue placeholder="Responsable" />
+                       </SelectTrigger>
+                       <SelectContent className="bg-slate-900 border-white/10 text-white">
+                         <SelectItem value="all">Todos</SelectItem>
+                         {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => (
+                           <SelectItem key={name} value={name!}>{name}</SelectItem>
+                         ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
+              </div>
+
+              <div className="flex-1 overflow-hidden relative">
+                 {/* TAB: TABLERO (KANBAN EXPERTO) */}
+                 <TabsContent value="board" className="h-full m-0 p-6 flex gap-6 overflow-x-auto custom-scrollbar">
+                    {BOARD_COLUMNS.map(col => (
+                      <div key={col.id} className="min-w-[320px] flex flex-col bg-white/[0.02] border border-white/5 rounded-3xl p-4 shadow-2xl relative group/col">
+                        <div className="flex items-center justify-between mb-6 px-2">
+                           <div className="flex items-center gap-2">
+                              <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
+                              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{col.label}</h3>
+                           </div>
+                           <Badge variant="outline" className="bg-white/5 border-white/10 text-[10px] font-mono text-slate-500">{filteredTasks.filter(t => t.status === col.id).length}</Badge>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
+                           {parentTasks.filter(t => t.status === col.id).map(task => (
+                             <Card key={task.id} className="bg-[#1a1c23] border-white/5 hover:border-primary/40 hover:translate-y-[-2px] transition-all duration-300 cursor-pointer shadow-lg group overflow-hidden" onClick={() => setSelectedTask(task)}>
+                               <div className="p-4 relative">
+                                  <div className="flex justify-between items-start mb-3">
+                                     <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-white/5 border-white/10 text-slate-400">{task.priority || 'Normal'}</Badge>
+                                     {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length}</div>}
+                                  </div>
+                                  <h4 className="text-[13px] font-bold text-slate-200 leading-snug line-clamp-2 mb-4 group-hover:text-primary transition-colors">{task.title}</h4>
+                                  <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                                     <div className="flex items-center gap-2">
+                                        <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary border border-primary/20">{(task.assignee_name || 'US')[0]}</div>
+                                        <span className="text-[10px] font-bold text-slate-500">{task.assignee_name || 'Sin Asignar'}</span>
+                                     </div>
+                                     {task.due_date && <span className="text-[10px] font-black text-slate-400 flex items-center gap-1"><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
+                                  </div>
+                               </div>
+                             </Card>
+                           ))}
+                        </div>
+                      </div>
+                    ))}
+                 </TabsContent>
+
+                 {/* TAB: LISTA */}
+                 <TabsContent value="list" className="h-full m-0 p-6 overflow-y-auto space-y-2">
+                    {parentTasks.map(t => (
+                      <div key={t.id} className="group flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] hover:border-primary/20 transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
+                         <div className="flex items-center gap-4">
+                            <div className={`h-3 w-3 rounded-full border-2 ${t.status === 'complete' ? 'bg-green-500 border-green-500/30' : 'border-slate-700'}`} />
+                            <div>
+                               <div className="text-[13px] font-bold text-slate-200 group-hover:text-primary transition-colors">{t.title}</div>
+                               <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1">
+                                  <span className="flex items-center gap-1"><Users className="h-3 w-3"/> {t.assignee_name || 'Sin asignar'}</span>
+                                  {t.due_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3"/> {format(new Date(t.due_date), 'd MMM, yyyy')}</span>}
+                               </div>
+                            </div>
+                         </div>
+                         <Badge className={`uppercase text-[9px] font-black tracking-widest ${t.status === 'complete' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-primary/10 text-primary border-primary/20'}`}>{t.status}</Badge>
+                      </div>
+                    ))}
+                 </TabsContent>
+
+                 {/* TAB: AGENDA */}
+                 <TabsContent value="calendar" className="h-full m-0 p-6">
+                    <div className="h-full bg-white/[0.02] rounded-3xl border border-white/5 p-6 shadow-2xl relative overflow-hidden">
+                       <style>{`
+                         .rbc-calendar { color: #94a3b8; }
+                         .rbc-month-view, .rbc-header { border-color: rgba(255,255,255,0.05) !important; }
+                         .rbc-off-range-bg { background: rgba(0,0,0,0.2); }
+                         .rbc-event { background: #3b82f6 !important; border: none; font-size: 10px; font-weight: 800; border-radius: 6px; }
+                         .rbc-today { background: rgba(59,130,246,0.05); }
+                       `}</style>
+                       <BigCalendar
+                         localizer={localizer}
+                         events={calendarEvents}
+                         startAccessor="start"
+                         endAccessor="end"
+                         style={{ height: '100%' }}
+                         onSelectEvent={(e: any) => setSelectedTask(e.resource)}
+                         messages={{ today: "Hoy", previous: "Back", next: "Next", month: "Mes", week: "Semana", day: "Día" }}
+                       />
+                    </div>
+                 </TabsContent>
+
+                 {/* TAB: PANEL DE CONTROL (CLICKUP STYLE) */}
+                 <TabsContent value="stats" className="h-full m-0 p-8 overflow-y-auto space-y-8 custom-scrollbar bg-black/40">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                       {[
+                         { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
+                         { label: 'En Curso', count: tasks.filter(t => t.status === 'in progress').length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                         { label: 'Completadas', count: tasks.filter(t => t.status === 'complete').length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                       ].map((card, i) => (
+                         <Card key={i} className="bg-white/[0.02] border-white/5 shadow-2xl overflow-hidden relative group">
+                            <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
+                            <CardContent className="p-8">
+                               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">{card.label}</div>
+                               <div className="flex items-center justify-between">
+                                  <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
+                                  <card.icon className={`h-10 w-10 ${card.color} opacity-20 group-hover:opacity-100 transition-all duration-500`} />
+                               </div>
+                               <div className="mt-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">Tareas totales en este estado</div>
+                            </CardContent>
+                         </Card>
+                       ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                       {/* Chart: Total de tareas por persona */}
+                       <Card className="bg-[#13141a] border-white/5 shadow-2xl">
+                          <CardHeader className="border-b border-white/5">
+                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                <PieIcon className="h-4 w-4 text-primary" /> Total tareas por persona asignada
+                             </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-6 h-[400px]">
+                             <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                   <Pie
+                                      data={statsByAssignee}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={80}
+                                      outerRadius={120}
+                                      paddingAngle={5}
+                                      dataKey="value"
+                                      stroke="none"
+                                   >
+                                      {statsByAssignee.map((entry, index) => (
+                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                      ))}
+                                   </Pie>
+                                   <ChartTooltip 
+                                      contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                      itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                                   />
+                                   <Legend verticalAlign="bottom" height={36}/>
+                                </PieChart>
+                             </ResponsiveContainer>
+                          </CardContent>
+                       </Card>
+
+                       {/* Chart: Tareas abiertas por persona */}
+                       <Card className="bg-[#13141a] border-white/5 shadow-2xl">
+                          <CardHeader className="border-b border-white/5">
+                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                <BarIcon className="h-4 w-4 text-blue-500" /> Tareas por estado actual
+                             </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-6 h-[400px]">
+                             <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={statsByStatus}>
+                                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                   <XAxis 
+                                      dataKey="name" 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} 
+                                   />
+                                   <YAxis 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{ fill: '#64748b', fontSize: 10 }} 
+                                   />
+                                   <ChartTooltip 
+                                      cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                      contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                   />
+                                   <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                                      {statsByStatus.map((entry, index) => (
+                                         <Cell key={`cell-${index}`} fill={entry.name === 'Completado' ? '#10b981' : entry.name === 'En Progreso' ? '#3b82f6' : '#64748b'} />
+                                      ))}
+                                   </Bar>
+                                </BarChart>
+                             </ResponsiveContainer>
+                          </CardContent>
+                       </Card>
+                    </div>
+
+                    {/* Workload Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+                       <Card className="bg-[#13141a] border-white/5 shadow-2xl overflow-hidden">
+                          <CardHeader className="border-b border-white/5 bg-white/[0.02]">
+                             <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Rendimiento Detallado por Equipo</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                             <div className="overflow-x-auto">
+                                <table className="w-full text-left text-[11px]">
+                                   <thead className="bg-white/[0.01] text-slate-500 uppercase tracking-widest font-black border-b border-white/5">
+                                      <tr>
+                                         <th className="px-6 py-4">Usuario</th>
+                                         <th className="px-6 py-4">Total</th>
+                                         <th className="px-6 py-4">Completadas</th>
+                                         <th className="px-6 py-4">Eficiencia</th>
+                                         <th className="px-6 py-4">Carga actual</th>
+                                      </tr>
+                                   </thead>
+                                   <tbody className="divide-y divide-white/5">
+                                      {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => {
+                                         const userTasks = tasks.filter(t => t.assignee_name === name);
+                                         const done = userTasks.filter(t => t.status === 'complete').length;
+                                         const open = userTasks.length - done;
+                                         const pct = userTasks.length > 0 ? Math.round((done / userTasks.length) * 100) : 0;
+                                         return (
+                                            <tr key={name!} className="hover:bg-white/[0.02] transition-colors group">
+                                               <td className="px-6 py-4 flex items-center gap-3">
+                                                  <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary border border-primary/20">{name![0]}</div>
+                                                  <span className="font-bold text-slate-300 group-hover:text-primary transition-colors">{name}</span>
+                                               </td>
+                                               <td className="px-6 py-4 font-mono text-slate-500">{userTasks.length}</td>
+                                               <td className="px-6 py-4 text-green-500 font-bold">{done}</td>
+                                               <td className="px-6 py-4">
+                                                  <div className="flex items-center gap-3">
+                                                     <div className="h-1.5 flex-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                                                     </div>
+                                                     <span className="font-black text-slate-400">{pct}%</span>
+                                                  </div>
+                                               </td>
+                                               <td className="px-6 py-4">
+                                                  <Badge variant="outline" className={`${open > 10 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'} border-none`}>{open} Abiertas</Badge>
+                                               </td>
+                                            </tr>
+                                         );
+                                      })}
+                                   </tbody>
+                                </table>
+                             </div>
+                          </CardContent>
+                       </Card>
+                    </div>
+                 </TabsContent>
+              </div>
+           </Tabs>
+        </div>
+      </div>
+
       <TaskDrawer 
         task={selectedTask} 
         open={!!selectedTask} 
@@ -647,94 +555,9 @@ export default function ProjectDashboardPage() {
             if (exists) return prev.map(pt => pt.id === t.id ? t : pt);
             return [t, ...prev];
           });
-          setSelectedTask(t);
         }}
         clickupToken={clickupToken}
-        allAssignees={Array.from(new Set([...tasks.map(t => t.assignee_name), ...users.map(u => u.nombre || u.username)].filter(Boolean))) as string[]}
       />
-    </div>
-  );
-}
-
-// Subcomponente de fila Data-Table (List Mode) - Estilizado al máximo nivel
-function TaskRow({ task, onClick, index, isSubtask }: { task: TaskType; onClick: () => void; index: number; isSubtask?: boolean }) {
-  return (
-    <div 
-      onClick={onClick}
-      style={{ animationDelay: `${index * 50}ms` }}
-      className={`group relative flex items-center justify-between ${isSubtask ? 'p-3 bg-background/40 hover:bg-background/60 text-xs py-2' : 'p-4 bg-background/60'} backdrop-blur-md border border-border/40 hover:border-primary/40 rounded-xl hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300 cursor-pointer overflow-hidden animate-in fade-in slide-in-from-bottom-2`}
-    >
-      {/* Dynamic left indicator line */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.status === 'complete' ? 'bg-green-500' : task.priority === 'urgent' ? 'bg-red-500' : 'bg-primary'} transition-all duration-300 group-hover:w-1.5`} />
-      
-      <div className="flex items-center gap-5 ml-2 overflow-hidden">
-        <div className={`flex-shrink-0 ${isSubtask ? 'h-7 w-7' : 'h-9 w-9'} flex items-center justify-center rounded-full transition-all duration-500 ${task.status === 'complete' ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'}`}>
-          <CheckCircle2 className={`${isSubtask ? 'h-4 w-4' : 'h-5 w-5'}`} />
-        </div>
-        <div className="flex flex-col gap-1 min-w-0">
-          <h3 className={`font-semibold ${isSubtask ? 'text-[13px]' : 'text-[15px]'} truncate max-w-[400px] text-foreground/90 group-hover:text-primary transition-colors`}>{task.title}</h3>
-          <div className="flex items-center gap-3 text-xs">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold uppercase tracking-wider text-[9px] ${
-              task.status === 'complete' ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 
-              task.status === 'in progress' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
-              'bg-muted text-muted-foreground border border-border'
-            }`}>
-              {task.status}
-            </span>
-            <span className="text-muted-foreground/60 flex items-center gap-1 font-medium">
-              <Clock className="h-3 w-3" />
-              {task.priority || 'Normal'}
-            </span>
-            {task.tags && task.tags.length > 0 && (
-              <div className="flex gap-1 ml-1">
-                {task.tags.map(tag => (
-                  <div 
-                    key={tag.id} 
-                    className="h-1.5 w-4 rounded-full" 
-                    style={{ backgroundColor: tag.color || '#3b82f6' }}
-                    title={tag.name}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-6 ml-4">
-        <div className="hidden md:flex items-center -space-x-2 mr-4">
-            <div className="h-8 w-8 rounded-full border-2 border-background bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] text-white font-bold shadow-sm opacity-80 group-hover:opacity-100 transition-opacity">US</div>
-        </div>
-        {task.due_date ? (
-          <div className="hidden sm:flex flex-col items-end">
-            <span className="text-xs font-semibold text-foreground/70">Vencimiento</span>
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {(() => {
-                const d = new Date(task.due_date);
-                return isNaN(d.getTime()) ? 'Pendiente' : d.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'});
-              })()}
-            </span>
-          </div>
-        ) : (
-          <div className="hidden sm:text-muted-foreground/30 sm:flex items-center"><CalendarIcon className="h-4 w-4" /></div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-[400px] w-full text-center">
-      <div className="relative mb-6">
-        <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-        <div className="h-24 w-24 rounded-full bg-gradient-to-tr from-muted to-muted/30 border border-white/10 dark:border-white/5 flex items-center justify-center shadow-2xl relative">
-          <LayoutGrid className="h-10 w-10 text-muted-foreground/50" />
-        </div>
-      </div>
-      <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60 mb-2">Workspace Despejado</h3>
-      <p className="text-sm font-medium text-muted-foreground max-w-[250px]">{text}</p>
-      <Button className="mt-8 rounded-full shadow-lg shadow-primary/20 px-8">Crear la primera tarea</Button>
     </div>
   );
 }

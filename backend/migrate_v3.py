@@ -5,17 +5,45 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sqlalchemy import create_engine, text
-from backend.db import DATABASE_URL
-from backend.models import Base
+
+def get_db_url():
+    # Intentar obtener la URL de la base de datos de forma robusta
+    try:
+        from backend.db import DATABASE_URL
+        return DATABASE_URL
+    except:
+        return os.getenv("DATABASE_URL", "postgresql://emdecob:emdecob2026@db:5432/juricob")
 
 def migrate():
-    engine = create_engine(DATABASE_URL)
+    url = get_db_url()
+    engine = create_engine(url)
     
-    print(f"Conectando a la base de datos para migración v3...")
+    print(f"Conectando a {url} para migración de Datos Expertos...")
     
     with engine.connect() as conn:
-        # 1. Crear tabla task_attachments si no existe
-        print("Verificando tabla task_attachments...")
+        # 1. Tabla de etiquetas (tags)
+        print("Verificando tabla 'tags'...")
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tags (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                color VARCHAR(50) DEFAULT '#3b82f6',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+        # 2. Tabla de relación task_tags
+        print("Verificando tabla 'task_tags'...")
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS task_tags (
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (task_id, tag_id)
+            )
+        """))
+
+        # 3. Tabla task_attachments
+        print("Verificando tabla 'task_attachments'...")
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS task_attachments (
                 id SERIAL PRIMARY KEY,
@@ -27,20 +55,25 @@ def migrate():
             )
         """))
         
-        # 2. Añadir columna custom_fields a tasks si no existe
-        print("Verificando columna custom_fields en tabla tasks...")
+        # 4. Columna custom_fields en tasks
+        print("Verificando columna 'custom_fields' en 'tasks'...")
         try:
-            conn.execute(text("ALTER TABLE tasks ADD COLUMN custom_fields TEXT"))
-            print("Columna custom_fields añadida exitosamente.")
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
+            print("Columna 'custom_fields' verificada.")
         except Exception as e:
-            if "already exists" in str(e).lower():
-                print("La columna custom_fields ya existe.")
-            else:
-                print(f"Nota: {e}")
+            print(f"Nota en custom_fields: {e}")
+
+        # 5. Columna assignee_name en tasks (para ClickUp)
+        print("Verificando columna 'assignee_name' en 'tasks'...")
+        try:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
+            print("Columna 'assignee_name' verificada.")
+        except Exception as e:
+            print(f"Nota en assignee_name: {e}")
 
         conn.commit()
     
-    print("Migración v3 completada exitosamente.")
+    print("✅ Migración Experta completada exitosamente.")
 
 if __name__ == "__main__":
     migrate()
