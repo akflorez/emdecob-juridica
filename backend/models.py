@@ -319,6 +319,7 @@ class Task(Base):
     # Referencia a ClickUp para evitar duplicados en importación
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
     assignee_name = Column(String(200), nullable=True) # Nombre real de ClickUp
+    custom_fields = Column(Text, nullable=True) # JSON con campos personalizados
     
     project_list = relationship("ProjectList", back_populates="tasks")
     case = relationship("Case", back_populates="tasks")
@@ -327,6 +328,7 @@ class Task(Base):
     checklists = relationship("TaskChecklistItem", back_populates="task", cascade="all, delete-orphan")
     comments = relationship("TaskComment", cascade="all, delete-orphan")
     tags = relationship("Tag", secondary=task_tags, back_populates="tasks")
+    attachments = relationship("TaskAttachment", cascade="all, delete-orphan")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

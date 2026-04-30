@@ -3,7 +3,8 @@ import asyncio
 import httpx
 from sqlalchemy.orm import Session
 from datetime import datetime
-from backend.models import Workspace, WorkspaceFolder, WorkspaceList, Task, TaskChecklistItem, TaskComment, User, Case, Tag
+from backend.models import Workspace, WorkspaceFolder, WorkspaceList, Task, TaskChecklistItem, TaskComment, User, Case, Tag, TaskAttachment
+import json
 
 CLICKUP_API_URL = "https://api.clickup.com/api/v2"
 
@@ -107,7 +108,8 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             assignee_id=assignee_id,
             assignee_name=assignee_name,
             creator_id=owner_id,
-            parent_id=parent_id
+            parent_id=parent_id,
+            custom_fields=json.dumps(task_data.get('custom_fields', []))
         )
         db.add(db_task)
     
@@ -142,6 +144,22 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                     new_comm = TaskComment(task_id=db_task.id, content=text_comm, user_id=owner_id)
                     db.add(new_comm)
         except: pass
+
+    # 6.2 Procesar Adjuntos (Attachments) de ClickUp
+    attachments = task_data.get('attachments', [])
+    for att in attachments:
+        existing_att = db.query(TaskAttachment).filter(
+            TaskAttachment.task_id == db_task.id, 
+            TaskAttachment.name == att['title']
+        ).first()
+        if not existing_att:
+            new_att = TaskAttachment(
+                task_id=db_task.id,
+                name=att['title'],
+                file_path=att['url'], # URL de ClickUp
+                file_type=att.get('extension')
+            )
+            db.add(new_att)
 
     # 6.5 Procesar Etiquetas (Tags)
     clickup_tags = task_data.get('tags', [])

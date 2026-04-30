@@ -828,6 +828,14 @@ export type TaskComment = {
   created_at: string;
 };
 
+export type Attachment = {
+  id: number;
+  name: string;
+  file_path: string;
+  file_type?: string;
+  created_at: string;
+};
+
 export type Tag = {
   id: number;
   name: string;
@@ -852,6 +860,8 @@ export type Task = {
   comments?: TaskComment[];
   assignee_name?: string;
   tags?: Tag[];
+  attachments?: Attachment[];
+  custom_fields?: string; // JSON string
 };
 
 export function getWorkspaces() {
