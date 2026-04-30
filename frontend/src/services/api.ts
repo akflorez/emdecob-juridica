@@ -910,6 +910,21 @@ export function addChecklistItem(taskId: number, content: string) {
   });
 }
 
+export function deleteComment(commentId: number) {
+  return apiFetch(`/tasks/comments/${commentId}`, { method: "DELETE" });
+}
+
+export function updateChecklistItem(itemId: number, data: { content?: string, is_completed?: boolean }) {
+  return apiFetch(`/tasks/checklists/${itemId}`, { 
+    method: "PATCH", 
+    body: JSON.stringify(data) 
+  });
+}
+
+export function deleteChecklistItem(itemId: number) {
+  return apiFetch(`/tasks/checklists/${itemId}`, { method: "DELETE" });
+}
+
 export function importClickUp(token: string) {
   return apiFetch<{ ok: boolean; message: string }>("/projects/import-clickup", {
     method: "POST",

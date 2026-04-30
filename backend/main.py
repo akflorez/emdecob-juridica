@@ -4209,7 +4209,7 @@ async def get_task_detail(
                     user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
                     user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
                     
-                    await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token)
+                    await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
                     db.commit()
                     db.refresh(task)
         except Exception as e:
@@ -4316,6 +4316,34 @@ async def add_task_checklist_item(
     db.commit()
     db.refresh(item)
     return item
+
+@app.delete("/api/tasks/comments/{comment_id}")
+@app.delete("/tasks/comments/{comment_id}")
+async def delete_task_comment(comment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    comment = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
+    if not comment: raise HTTPException(status_code=404)
+    db.delete(comment)
+    db.commit()
+    return {"ok": True}
+
+@app.patch("/api/tasks/checklists/{item_id}")
+@app.patch("/tasks/checklists/{item_id}")
+async def update_task_checklist_item(item_id: int, data: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.query(TaskChecklistItem).filter(TaskChecklistItem.id == item_id).first()
+    if not item: raise HTTPException(status_code=404)
+    if "content" in data: item.content = data["content"]
+    if "is_completed" in data: item.is_completed = data["is_completed"]
+    db.commit()
+    return item
+
+@app.delete("/api/tasks/checklists/{item_id}")
+@app.delete("/tasks/checklists/{item_id}")
+async def delete_task_checklist_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.query(TaskChecklistItem).filter(TaskChecklistItem.id == item_id).first()
+    if not item: raise HTTPException(status_code=404)
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
 
 
 @app.patch("/api/projects/tasks/{task_id}")

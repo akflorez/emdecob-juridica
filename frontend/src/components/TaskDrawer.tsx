@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid, MessageSquare } from 'lucide-react';
-import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, type CaseRow } from '@/services/api';
+import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid, MessageSquare, Trash2, Edit2, Trash, CheckCircle } from 'lucide-react';
+import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, deleteComment, updateChecklistItem, deleteChecklistItem, type CaseRow } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -139,16 +139,67 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       const updated = await getTaskDetail(task.id, clickupToken);
       onTaskUpdate(updated);
       setFullTask(updated);
-    } catch(e) {
-      toast({ title: 'Error', description: 'No se pudo agregar item' });
+      setDisplayTask(updated);
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo añadir el item", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const displayTask = fullTask || task;
+  const handleDeleteComment = async (commentId: number) => {
+    try {
+      await deleteComment(commentId);
+      setDisplayTask(prev => ({
+        ...prev!,
+        comments: prev?.comments?.filter(c => c.id !== commentId) || []
+      }));
+      toast({ title: "Comentario eliminado" });
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo eliminar el comentario", variant: "destructive" });
+    }
+  };
+
+  const handleToggleChecklist = async (itemId: number, currentStatus: boolean) => {
+    try {
+      const res = await updateChecklistItem(itemId, { is_completed: !currentStatus });
+      setDisplayTask(prev => ({
+        ...prev!,
+        checklists: prev?.checklists?.map(c => c.id === itemId ? res : c) || []
+      }));
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo actualizar el item", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteChecklist = async (itemId: number) => {
+    try {
+      await deleteChecklistItem(itemId);
+      setDisplayTask(prev => ({
+        ...prev!,
+        checklists: prev?.checklists?.filter(c => c.id !== itemId) || []
+      }));
+      toast({ title: "Item eliminado" });
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo eliminar el item", variant: "destructive" });
+    }
+  };
+
+  const handleEditChecklist = async (itemId: number, newContent: string) => {
+    if (!newContent.trim()) return;
+    try {
+      const res = await updateChecklistItem(itemId, { content: newContent });
+      setDisplayTask(prev => ({
+        ...prev!,
+        checklists: prev?.checklists?.map(c => c.id === itemId ? res : c) || []
+      }));
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo editar el item", variant: "destructive" });
+    }
+  };
+
   const handleAddSubtask = async () => {
-    if (!newSubtaskTitle.trim() || !displayTask.id) return;
+    if (!newSubtaskTitle.trim() || !displayTask?.id) return;
     setIsLoading(true);
     try {
       const res = await createTask({
@@ -389,13 +440,29 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               </div>
               {displayTask.checklists && displayTask.checklists.length > 0 ? (
                 displayTask.checklists.map(item => (
-                  <div key={item.id} className="flex items-center gap-3 group">
-                    <div className={`h-5 w-5 rounded border flex items-center justify-center transition-colors ${item.is_completed ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}>
+                  <div key={item.id} className="flex items-center gap-3 group relative">
+                    <div 
+                      onClick={() => handleToggleChecklist(item.id, !!item.is_completed)}
+                      className={`h-5 w-5 rounded border flex items-center justify-center transition-colors cursor-pointer ${item.is_completed ? 'bg-primary border-primary text-white' : 'border-border group-hover:border-primary/50'}`}
+                    >
                       {item.is_completed && <CheckCircle className="h-3.5 w-3.5" />}
                     </div>
-                    <span className={`text-sm ${item.is_completed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                    <span 
+                      className={`text-sm flex-1 ${item.is_completed ? 'text-muted-foreground line-through' : 'text-foreground'}`}
+                      onBlur={(e) => e.target.innerText !== item.content && handleEditChecklist(item.id, e.target.innerText)}
+                      contentEditable={!item.is_completed}
+                      suppressContentEditableWarning
+                    >
                       {item.content}
                     </span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
+                      onClick={() => handleDeleteChecklist(item.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 ))
               ) : (
@@ -415,17 +482,27 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
             <div className="space-y-3">
               {displayTask.comments && displayTask.comments.length > 0 ? (
                 displayTask.comments.map(comm => (
-                  <div key={comm.id} className="p-3 rounded-xl bg-muted/20 border border-border/30 text-xs">
+                  <div key={comm.id} className="p-3 rounded-xl bg-muted/20 border border-border/30 text-xs group relative">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-primary">Sistema / ClickUp</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {comm.created_at ? (() => {
-                          try {
-                            const d = new Date(comm.created_at);
-                            return isNaN(d.getTime()) ? 'Reciente' : format(d, "d MMM, HH:mm", { locale: es });
-                          } catch(e) { return 'Reciente'; }
-                        })() : 'Reciente'}
-                      </span>
+                      <span className="font-bold text-primary">{comm.author_name || 'Sistema / ClickUp'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">
+                          {comm.created_at ? (() => {
+                            try {
+                              const d = new Date(comm.created_at);
+                              return isNaN(d.getTime()) ? 'Reciente' : format(d, "d MMM, HH:mm", { locale: es });
+                            } catch(e) { return 'Reciente'; }
+                          })() : 'Reciente'}
+                        </span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
+                          onClick={() => handleDeleteComment(comm.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-foreground/80 leading-relaxed">{comm.content}</p>
                   </div>
