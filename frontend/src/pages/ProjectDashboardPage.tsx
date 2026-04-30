@@ -5,7 +5,8 @@ import {
   Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock,
   LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
-  TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database
+  TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database,
+  PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,8 @@ export default function ProjectDashboardPage() {
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("board");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Filtros de navegación
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null);
@@ -250,6 +253,12 @@ export default function ProjectDashboardPage() {
       }));
   }, [filteredTasks]);
 
+  const handleActionClick = (action: string) => {
+    toast.info(`Función "${action}" iniciada`, { 
+      description: "Esta acción se sincronizará con ClickUp en la próxima actualización."
+    });
+  };
+
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden relative font-sans transition-colors duration-500">
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
@@ -261,10 +270,13 @@ export default function ProjectDashboardPage() {
         className="flex items-center justify-between py-4 px-6 border-b border-border/40 bg-background/80 backdrop-blur-xl z-20"
       >
         <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="rounded-lg hover:bg-accent">
+            {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </Button>
           <div className="p-2.5 bg-gradient-to-br from-primary to-blue-600 rounded-xl shadow-xl shadow-primary/20">
             <LayoutDashboard className="h-5 w-5 text-white" />
           </div>
-          <div onClick={() => { setSelectedWorkspaceId(null); setSelectedFolderId(null); setSelectedListId(null); }} className="cursor-pointer">
+          <div onClick={() => { setSelectedWorkspaceId(null); setSelectedFolderId(null); setSelectedListId(null); }} className="cursor-pointer hidden sm:block">
             <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
               EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">EXPERT</Badge>
             </h1>
@@ -282,13 +294,13 @@ export default function ProjectDashboardPage() {
              <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
                <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Avanzada</DropdownMenuLabel>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer"><Plus className="mr-2 h-4 w-4" /> Crear Espacio</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><FolderPlus className="mr-2 h-4 w-4" /> Crear Carpeta</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><ListPlus className="mr-2 h-4 w-4" /> Crear Lista</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Espacio")}><Plus className="mr-2 h-4 w-4" /> Crear Espacio</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Carpeta")}><FolderPlus className="mr-2 h-4 w-4" /> Crear Carpeta</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Lista")}><ListPlus className="mr-2 h-4 w-4" /> Crear Lista</DropdownMenuItem>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer"><Database className="mr-2 h-4 w-4" /> Gestionar Plantillas</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><Settings className="mr-2 h-4 w-4" /> Configuración</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Plantillas")}><Database className="mr-2 h-4 w-4" /> Gestionar Plantillas</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Equipos")}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Configuración")}><Settings className="mr-2 h-4 w-4" /> Configuración</DropdownMenuItem>
              </DropdownMenuContent>
            </DropdownMenu>
 
@@ -304,94 +316,99 @@ export default function ProjectDashboardPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <motion.div 
-          initial={{ x: -280 }}
-          animate={{ x: 0 }}
-          className="w-72 flex flex-col border-r border-border/40 bg-background/50 backdrop-blur-sm"
-        >
-           <div className="p-4">
-             <div className="relative group">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-               <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-accent/30 border-border/40 rounded-lg text-xs" />
-             </div>
-           </div>
-           <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
-              {workspaces.map(ws => (
-                <div key={ws.id}>
-                   <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedWorkspaceId === ws.id && !selectedFolderId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
-                     const n = new Set(expandedWorkspaces);
-                     if (n.has(ws.id)) n.delete(ws.id); else n.add(ws.id);
-                     setExpandedWorkspaces(n);
-                     setSelectedWorkspaceId(ws.id);
-                     setSelectedFolderId(null);
-                     setSelectedListId(null);
-                   }}>
-                     <motion.div animate={{ rotate: expandedWorkspaces.has(ws.id) ? 0 : -90 }}>
-                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                     </motion.div>
-                     <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">{ws.name}</span>
-                   </div>
-                   
-                   <AnimatePresence>
-                     {expandedWorkspaces.has(ws.id) && (
-                       <motion.div 
-                         initial={{ height: 0, opacity: 0 }}
-                         animate={{ height: "auto", opacity: 1 }}
-                         exit={{ height: 0, opacity: 0 }}
-                         className="overflow-hidden"
-                       >
-                         {ws.folders.map(f => (
-                           <div key={f.id} className="ml-3">
-                              <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
-                                const n = new Set(expandedFolders);
-                                if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
-                                setExpandedFolders(n);
-                                setSelectedFolderId(f.id);
-                                setSelectedListId(null);
-                              }}>
-                                <motion.div animate={{ rotate: expandedFolders.has(f.id) ? 0 : -90 }}>
-                                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                                </motion.div>
-                                <span className="text-[11px] font-bold text-foreground/70">{f.name}</span>
-                              </div>
-                              <AnimatePresence>
-                                {expandedFolders.has(f.id) && (
-                                  <motion.div 
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                  >
-                                    {f.lists.map(list => (
+        <AnimatePresence>
+          {!sidebarCollapsed && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 280, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="flex flex-col border-r border-border/40 bg-background/50 backdrop-blur-sm overflow-hidden"
+            >
+               <div className="p-4">
+                 <div className="relative group">
+                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                   <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-accent/30 border-border/40 rounded-lg text-xs" />
+                 </div>
+               </div>
+               <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
+                  {workspaces.map(ws => (
+                    <div key={ws.id}>
+                       <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedWorkspaceId === ws.id && !selectedFolderId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
+                         const n = new Set(expandedWorkspaces);
+                         if (n.has(ws.id)) n.delete(ws.id); else n.add(ws.id);
+                         setExpandedWorkspaces(n);
+                         setSelectedWorkspaceId(ws.id);
+                         setSelectedFolderId(null);
+                         setSelectedListId(null);
+                       }}>
+                         <motion.div animate={{ rotate: expandedWorkspaces.has(ws.id) ? 0 : -90 }}>
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                         </motion.div>
+                         <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">{ws.name}</span>
+                       </div>
+                       
+                       <AnimatePresence>
+                         {expandedWorkspaces.has(ws.id) && (
+                           <motion.div 
+                             initial={{ height: 0, opacity: 0 }}
+                             animate={{ height: "auto", opacity: 1 }}
+                             exit={{ height: 0, opacity: 0 }}
+                             className="overflow-hidden"
+                           >
+                             {ws.folders.map(f => (
+                               <div key={f.id} className="ml-3">
+                                  <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
+                                    const n = new Set(expandedFolders);
+                                    if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
+                                    setExpandedFolders(n);
+                                    setSelectedFolderId(f.id);
+                                    setSelectedListId(null);
+                                  }}>
+                                    <motion.div animate={{ rotate: expandedFolders.has(f.id) ? 0 : -90 }}>
+                                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                    </motion.div>
+                                    <span className="text-[11px] font-bold text-foreground/70">{f.name}</span>
+                                  </div>
+                                  <AnimatePresence>
+                                    {expandedFolders.has(f.id) && (
                                       <motion.div 
-                                        key={list.id} 
-                                        whileHover={{ x: 5 }}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); }}
-                                        className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground hover:text-foreground"}`}
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="overflow-hidden"
                                       >
-                                         {list.name}
-                                         {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse" />}
+                                        {f.lists.map(list => (
+                                          <motion.div 
+                                            key={list.id} 
+                                            whileHover={{ x: 5 }}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); }}
+                                            className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground hover:text-foreground"}`}
+                                          >
+                                             {list.name}
+                                             {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse" />}
+                                          </motion.div>
+                                        ))}
                                       </motion.div>
-                                    ))}
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                           </div>
-                         ))}
-                       </motion.div>
-                     )}
-                   </AnimatePresence>
-                </div>
-              ))}
-           </div>
-        </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                               </div>
+                             ))}
+                           </motion.div>
+                         )}
+                       </AnimatePresence>
+                    </div>
+                  ))}
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Content */}
+        {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-           <Tabs defaultValue="board" className="flex-1 flex flex-col overflow-hidden">
+           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
               <div className="h-16 flex items-center justify-between px-6 border-b border-border/40 bg-background/50">
                  <TabsList className="bg-accent/50 p-1 rounded-xl h-10 border border-border/40">
-                   <TabsTrigger value="board" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-primary">Tablero</TabsTrigger>
+                   <TabsTrigger value="board" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Tablero</TabsTrigger>
                    <TabsTrigger value="list" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Lista</TabsTrigger>
                    <TabsTrigger value="calendar" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Agenda</TabsTrigger>
                    <TabsTrigger value="stats" className="rounded-lg text-[10px] font-black uppercase tracking-widest px-6">Dashboard</TabsTrigger>
@@ -430,189 +447,170 @@ export default function ProjectDashboardPage() {
 
               <div className="flex-1 overflow-hidden relative">
                  <AnimatePresence mode="wait">
-                    {/* BOARD VIEW */}
-                    <TabsContent value="board" className="h-full m-0 p-6 flex gap-6 overflow-x-auto custom-scrollbar focus-visible:outline-none">
-                       {dynamicBoardColumns.map((col, colIdx) => (
-                         <motion.div 
-                           key={col.id} 
-                           initial={{ x: 50, opacity: 0 }}
-                           animate={{ x: 0, opacity: 1 }}
-                           transition={{ delay: colIdx * 0.1 }}
-                           className="min-w-[320px] flex flex-col bg-accent/5 border border-border/40 rounded-3xl p-4 shadow-2xl relative"
-                         >
-                           <div className="flex items-center justify-between mb-6 px-2">
-                              <div className="flex items-center gap-2">
-                                 <div className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px] shadow-current" style={{ backgroundColor: col.dot, color: col.dot }} />
-                                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">{col.label}</h3>
-                              </div>
-                              <Badge variant="outline" className="bg-accent/20 border-border/40 text-[10px] font-mono text-muted-foreground">{filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length}</Badge>
-                           </div>
-                           <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
-                              <AnimatePresence>
+                    {activeTab === "board" && (
+                      <motion.div 
+                        key="board"
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.02 }}
+                        className="h-full p-6 flex gap-6 overflow-x-auto custom-scrollbar"
+                      >
+                         {dynamicBoardColumns.map((col, colIdx) => (
+                           <div key={col.id} className="min-w-[320px] flex flex-col bg-accent/5 border border-border/40 rounded-3xl p-4 shadow-xl">
+                             <div className="flex items-center justify-between mb-6 px-2">
+                                <div className="flex items-center gap-2">
+                                   <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.dot }} />
+                                   <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">{col.label}</h3>
+                                </div>
+                                <Badge variant="outline" className="text-[10px]">{filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length}</Badge>
+                             </div>
+                             <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
                                 {parentTasks.filter(t => (t.status || 'ABIERTO') === col.id).map(task => (
-                                  <motion.div
-                                    key={task.id}
-                                    layout
-                                    initial={{ scale: 0.9, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    exit={{ scale: 0.9, opacity: 0 }}
-                                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                                  >
-                                    <Card className="bg-card/80 backdrop-blur-sm border-border/40 hover:border-primary/40 transition-all duration-300 cursor-pointer shadow-lg group overflow-hidden" onClick={() => setSelectedTask(task)}>
-                                      <div className="p-4 relative">
-                                         <div className="flex justify-between items-start mb-3">
-                                            <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-accent/20 border-border/40 text-muted-foreground">
-                                              <Flag className="h-2.5 w-2.5 mr-1 fill-current" />
-                                              {task.priority || 'Normal'}
-                                            </Badge>
-                                            {subtasksMap[task.id] && <div className="text-[9px] text-primary flex items-center gap-1 font-bold"><ListPlus className="h-3 w-3"/> {subtasksMap[task.id].length} Subtareas</div>}
-                                         </div>
-                                         <h4 className="text-[13px] font-bold text-foreground leading-snug line-clamp-2 mb-4 group-hover:text-primary transition-colors">{task.title}</h4>
-                                         <div className="flex items-center justify-between border-t border-border/40 pt-3">
-                                            <div className="flex items-center">
-                                               <div className="flex -space-x-2 overflow-hidden mr-2">
-                                                  {(task.assignees && task.assignees.length > 0) ? (
-                                                    task.assignees.map((a, i) => (
-                                                      <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-card bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary uppercase border border-primary/20" title={a.nombre || a.username}>
-                                                        {(a.nombre || a.username)[0]}
-                                                      </div>
-                                                    ))
-                                                  ) : (
-                                                    <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary border border-primary/20">
-                                                      {(task.assignee_name || 'U')[0]}
-                                                    </div>
-                                                  )}
-                                               </div>
-                                               <span className="text-[10px] font-bold text-muted-foreground truncate max-w-[100px]">
-                                                 {task.assignee_name || 'Sin Asignar'}
-                                               </span>
-                                            </div>
-                                            {task.due_date && <span className={`text-[10px] font-black flex items-center gap-1 ${new Date(task.due_date) < new Date() && !task.status.toLowerCase().includes('completado') ? 'text-red-500' : 'text-muted-foreground'}`}><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
-                                         </div>
-                                      </div>
-                                    </Card>
-                                  </motion.div>
+                                  <Card key={task.id} className="bg-card/80 border-border/40 hover:border-primary/40 transition-all cursor-pointer shadow-lg overflow-hidden" onClick={() => setSelectedTask(task)}>
+                                    <div className="p-4">
+                                       <div className="flex justify-between items-start mb-3">
+                                          <Badge variant="secondary" className="text-[9px] uppercase tracking-wider">{task.priority || 'Normal'}</Badge>
+                                          {subtasksMap[task.id] && <div className="text-[9px] text-primary font-bold">{subtasksMap[task.id].length} Subtareas</div>}
+                                       </div>
+                                       <h4 className="text-[13px] font-bold leading-snug line-clamp-2 mb-4">{task.title}</h4>
+                                       <div className="flex items-center justify-between border-t border-border/40 pt-3">
+                                          <div className="flex items-center">
+                                             <div className="flex -space-x-2 overflow-hidden mr-2">
+                                                {task.assignees?.map((a, i) => (
+                                                  <div key={i} className="h-5 w-5 rounded-full ring-2 ring-card bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary border border-primary/20">{(a.nombre || a.username)[0]}</div>
+                                                ))}
+                                             </div>
+                                             <span className="text-[9px] font-bold text-muted-foreground truncate max-w-[80px]">{task.assignee_name}</span>
+                                          </div>
+                                          {task.due_date && <span className="text-[9px] font-black text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
+                                       </div>
+                                    </div>
+                                  </Card>
                                 ))}
-                              </AnimatePresence>
+                             </div>
                            </div>
-                         </motion.div>
-                       ))}
-                    </TabsContent>
+                         ))}
+                      </motion.div>
+                    )}
 
-                    {/* LIST VIEW */}
-                    <TabsContent value="list" className="h-full m-0 p-6 overflow-y-auto space-y-2 custom-scrollbar">
-                       {parentTasks.map(t => (
-                         <motion.div 
-                           key={t.id} 
-                           initial={{ x: -20, opacity: 0 }} 
-                           animate={{ x: 0, opacity: 1 }}
-                           whileHover={{ x: 5 }}
-                           className="group flex items-center justify-between p-4 bg-accent/5 border border-border/40 rounded-2xl hover:bg-accent/10 transition-all cursor-pointer" 
-                           onClick={() => setSelectedTask(t)}
-                         >
-                            <div className="flex items-center gap-4">
-                               <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/30" />
-                               <div>
-                                  <div className="text-[13px] font-bold group-hover:text-primary transition-colors">{t.title}</div>
-                                  <div className="text-[10px] text-muted-foreground flex items-center gap-3 mt-1">
-                                     <span>{t.assignee_name || 'Sin asignar'}</span>
-                                     {t.due_date && <span>{format(new Date(t.due_date), 'd MMM')}</span>}
-                                  </div>
-                               </div>
-                            </div>
-                            <Badge variant="outline" className="text-[9px] font-black tracking-widest">{t.status}</Badge>
-                         </motion.div>
-                       ))}
-                    </TabsContent>
+                    {activeTab === "list" && (
+                      <motion.div 
+                        key="list"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="h-full p-6 overflow-y-auto space-y-2 custom-scrollbar"
+                      >
+                         {parentTasks.map(t => (
+                           <div key={t.id} className="group flex items-center justify-between p-4 bg-accent/5 border border-border/40 rounded-2xl hover:bg-accent/10 transition-all cursor-pointer" onClick={() => setSelectedTask(t)}>
+                              <div className="flex items-center gap-4">
+                                 <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/30" />
+                                 <div>
+                                    <div className="text-[13px] font-bold group-hover:text-primary transition-colors">{t.title}</div>
+                                    <div className="text-[10px] text-muted-foreground flex items-center gap-3 mt-1">
+                                       <span>{t.assignee_name || 'Sin asignar'}</span>
+                                       {t.due_date && <span>{format(new Date(t.due_date), 'd MMM')}</span>}
+                                    </div>
+                                 </div>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] font-black">{t.status}</Badge>
+                           </div>
+                         ))}
+                      </motion.div>
+                    )}
 
-                    {/* CALENDAR VIEW */}
-                    <TabsContent value="calendar" className="h-full m-0 p-6">
-                       <motion.div 
-                         initial={{ opacity: 0 }} 
-                         animate={{ opacity: 1 }}
-                         className="h-full bg-accent/5 rounded-3xl border border-border/40 p-6 relative overflow-hidden"
-                       >
-                          <BigCalendar
-                            localizer={localizer}
-                            events={calendarEvents}
-                            startAccessor="start"
-                            endAccessor="end"
-                            style={{ height: '100%' }}
-                            onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                            messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día" }}
-                          />
-                       </motion.div>
-                    </TabsContent>
+                    {activeTab === "calendar" && (
+                      <motion.div 
+                        key="calendar"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="h-full p-6"
+                      >
+                         <div className="h-full bg-accent/5 rounded-3xl border border-border/40 p-6 overflow-hidden">
+                            <BigCalendar
+                              localizer={localizer}
+                              events={calendarEvents}
+                              startAccessor="start"
+                              endAccessor="end"
+                              style={{ height: '100%' }}
+                              onSelectEvent={(e: any) => setSelectedTask(e.resource)}
+                              messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día" }}
+                            />
+                         </div>
+                      </motion.div>
+                    )}
 
-                    {/* STATS VIEW */}
-                    <TabsContent value="stats" className="h-full m-0 p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5">
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          {[
-                            { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/10' },
-                            { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                            { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
-                          ].map((card, i) => (
-                            <motion.div key={i} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 300 }}>
-                               <Card className="bg-card border-border/40 shadow-2xl overflow-hidden relative group">
-                                  <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-150 transition-transform duration-700`} />
-                                  <CardContent className="p-8">
-                                     <div className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
-                                     <div className="flex items-center justify-between">
-                                        <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
-                                        <card.icon className={`h-10 w-10 ${card.color} opacity-20 group-hover:opacity-100 group-hover:rotate-12 transition-all duration-500`} />
-                                     </div>
-                                  </CardContent>
-                               </Card>
-                            </motion.div>
-                          ))}
-                       </div>
+                    {activeTab === "stats" && (
+                      <motion.div 
+                        key="stats"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5"
+                      >
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[
+                              { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/10' },
+                              { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                              { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                            ].map((card, i) => (
+                              <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group">
+                                 <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
+                                 <CardContent className="p-8">
+                                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
+                                    <div className="flex items-center justify-between">
+                                       <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
+                                       <card.icon className={`h-10 w-10 ${card.color} opacity-20`} />
+                                    </div>
+                                 </CardContent>
+                              </Card>
+                            ))}
+                         </div>
 
-                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                          <Card className="bg-card border-border/40 shadow-2xl">
-                             <CardHeader className="border-b border-border/40">
-                                <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                                   <PieIcon className="h-4 w-4 text-primary" /> Tareas por responsable
-                                </CardTitle>
-                             </CardHeader>
-                             <CardContent className="p-6 h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                   <PieChart>
-                                      <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
-                                         {statsByAssignee.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                         ))}
-                                      </Pie>
-                                      <ChartTooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
-                                      <Legend verticalAlign="bottom" height={36}/>
-                                   </PieChart>
-                                </ResponsiveContainer>
-                             </CardContent>
-                          </Card>
+                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <Card className="bg-card border-border/40 shadow-xl">
+                               <CardHeader className="border-b border-border/40">
+                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Responsables</CardTitle>
+                               </CardHeader>
+                               <CardContent className="p-6 h-[400px]">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                     <PieChart>
+                                        <Pie data={statsByAssignee} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" stroke="none">
+                                           {statsByAssignee.map((entry, index) => (
+                                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                           ))}
+                                        </Pie>
+                                        <ChartTooltip contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                                        <Legend verticalAlign="bottom" height={36}/>
+                                     </PieChart>
+                                  </ResponsiveContainer>
+                               </CardContent>
+                            </Card>
 
-                          <Card className="bg-card border-border/40 shadow-2xl">
-                             <CardHeader className="border-b border-border/40">
-                                <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                                   <BarIcon className="h-4 w-4 text-blue-500" /> Distribución por estados ClickUp
-                                </CardTitle>
-                             </CardHeader>
-                             <CardContent className="p-6 h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                   <BarChart data={statsByStatus}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
-                                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 9, fontWeight: 'bold' }} />
-                                      <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
-                                      <ChartTooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
-                                      <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-                                         {statsByStatus.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                         ))}
-                                      </Bar>
-                                   </BarChart>
-                                </ResponsiveContainer>
-                             </CardContent>
-                          </Card>
-                       </div>
-                    </TabsContent>
+                            <Card className="bg-card border-border/40 shadow-xl">
+                               <CardHeader className="border-b border-border/40">
+                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Estados</CardTitle>
+                               </CardHeader>
+                               <CardContent className="p-6 h-[400px]">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                     <BarChart data={statsByStatus}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 9, fontWeight: 'bold' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} />
+                                        <ChartTooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                                        <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                                           {statsByStatus.map((entry, index) => (
+                                              <Cell key={`cell-${index}`} fill={entry.color} />
+                                           ))}
+                                        </Bar>
+                                     </BarChart>
+                                  </ResponsiveContainer>
+                               </CardContent>
+                            </Card>
+                         </div>
+                      </motion.div>
+                    )}
                  </AnimatePresence>
               </div>
            </Tabs>
