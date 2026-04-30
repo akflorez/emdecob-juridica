@@ -4324,10 +4324,30 @@ async def add_task_checklist_item(
 @app.delete("/tasks/comments/{comment_id}")
 async def delete_task_comment(comment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comment = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
-    if not comment: raise HTTPException(status_code=404)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comentario no encontrado")
+    
+    # Solo admin o el creador pueden borrar
+    if not current_user.is_admin and comment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para borrar este comentario")
+        
     db.delete(comment)
     db.commit()
     return {"ok": True}
+
+@app.patch("/api/tasks/comments/{comment_id}")
+@app.patch("/tasks/comments/{comment_id}")
+async def update_task_comment(comment_id: int, data: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    comment = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comentario no encontrado")
+    
+    if not current_user.is_admin and comment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para editar este comentario")
+        
+    comment.content = data.get("content", comment.content)
+    db.commit()
+    return comment
 
 @app.patch("/api/tasks/checklists/{item_id}")
 @app.patch("/tasks/checklists/{item_id}")
@@ -4593,4 +4613,16 @@ async def system_health_diagnostic(
 @app.get("/api/projects/tags")
 @app.get("/projects/tags")
 async def get_all_tags(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna todas las etiquetas del sistema."""
     return db.query(Tag).all()
+
+@app.get("/api/projects/statuses")
+@app.get("/projects/statuses")
+async def get_all_statuses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna todos los estados ?nicos usados en el sistema."""
+    statuses = db.query(Task.status).filter(Task.status.isnot(None)).distinct().all()
+    # Agregar estados base por defecto si no existen
+    base_statuses = ['ABIERTO', 'TO DO', 'IN PROGRESS', 'PENDIENTE', 'ALMP', '468', 'NOT PERSONAL', 'LIQUIDACION', 'REMATE', 'COMPLETO', 'CLOSED']
+    current_list = [s[0].upper() for s in statuses if s[0]]
+    final_list = list(set(current_list + base_statuses))
+    return sorted(final_list)

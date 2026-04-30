@@ -103,6 +103,7 @@ export default function ProjectDashboardPage() {
   const [dateFilterType, setDateFilterType] = useState<string>("all");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
+  const [newDueDate, setNewDueDate] = useState("");
   const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
 
   useEffect(() => {
@@ -305,10 +306,33 @@ export default function ProjectDashboardPage() {
     setCreationModal({ open: true, mode, title });
   };
 
-  const handleCreateConfirm = () => {
-    toast.success(`${creationModal.title} "${newItemName}" creada con éxito`);
-    setCreationModal({ open: false, mode: '', title: '' });
-    setNewItemName('');
+  const handleCreateConfirm = async () => {
+    if (!newItemName.trim()) return;
+    try {
+      if (creationModal.mode === 'espacio') {
+        await createWorkspace({ name: newItemName });
+      } else if (creationModal.mode === 'carpeta' && selectedWorkspaceId) {
+        await createFolder({ name: newItemName, workspace_id: selectedWorkspaceId });
+      } else if (creationModal.mode === 'lista' && (selectedFolderId || selectedWorkspaceId)) {
+        await createList({ name: newItemName, workspace_id: selectedWorkspaceId!, folder_id: selectedFolderId || undefined });
+      } else if (creationModal.mode === 'tarea' || !creationModal.mode) {
+        // Por defecto es tarea si no hay modo o es tarea
+        await createTask({ 
+          title: newItemName, 
+          list_id: selectedListId || 0,
+          due_date: newDueDate || undefined,
+          status: 'ABIERTO'
+        });
+      }
+      
+      toast.success(`${creationModal.title} "${newItemName}" creada con éxito`);
+      setCreationModal({ open: false, mode: '', title: '' });
+      setNewItemName('');
+      setNewDueDate('');
+      fetchInitialData();
+    } catch (error) {
+      toast.error("Error al crear el elemento");
+    }
   };
 
   return (
@@ -730,6 +754,17 @@ export default function ProjectDashboardPage() {
                  className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
                />
              </div>
+             {(creationModal.mode === 'tarea' || !creationModal.mode) && (
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Fecha de Vencimiento</label>
+                 <Input 
+                   type="date"
+                   value={newDueDate}
+                   onChange={(e) => setNewDueDate(e.target.value)}
+                   className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
+                 />
+               </div>
+             )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreationModal({ ...creationModal, open: false })} className="rounded-xl font-bold">Cancelar</Button>

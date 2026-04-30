@@ -873,6 +873,10 @@ export function getTags() {
   return apiFetch<Tag[]>("/projects/tags");
 }
 
+export function getStatuses() {
+  return apiFetch<string[]>("/projects/statuses");
+}
+
 export function getTasks(params: { list_id?: number; status?: string; assignee_id?: number; radicado?: string }) {
   const qs = new URLSearchParams();
   if (params.list_id) qs.set("list_id", String(params.list_id));
@@ -921,6 +925,13 @@ export function updateTask(taskId: number, data: Partial<Task>) {
 export function addComment(taskId: number, content: string) {
   return apiFetch<TaskComment>(`/projects/tasks/${taskId}/comments`, {
     method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function updateComment(commentId: number, content: string) {
+  return apiFetch<TaskComment>(`/tasks/comments/${commentId}`, {
+    method: "PATCH",
     body: JSON.stringify({ content }),
   });
 }
