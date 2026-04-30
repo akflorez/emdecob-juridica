@@ -37,9 +37,10 @@ interface TaskDrawerProps {
   onTaskUpdate: (updatedTask: TaskType) => void;
   clickupToken?: string;
   allAssignees?: string[];
+  allStatuses?: string[];
 }
 
-export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken, allAssignees = [] }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken, allAssignees = [], allStatuses = [] }: TaskDrawerProps) {
   const { toast } = useToast();
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
@@ -320,14 +321,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Select value={displayTask.status || 'to do'} onValueChange={(v) => handleSave({ status: v })}>
+                <Select value={displayTask.status || 'ABIERTO'} onValueChange={(v) => handleSave({ status: v })}>
                   <SelectTrigger className={`w-auto h-8 px-3 rounded-full border-none font-bold text-[10px] uppercase tracking-wider transition-all shadow-sm ${getStatusColor(displayTask.status)} hover:brightness-110`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="to do">To Do</SelectItem>
-                    <SelectItem value="in progress">En Progreso</SelectItem>
-                    <SelectItem value="complete">Completado</SelectItem>
+                    {(allStatuses.length > 0 ? allStatuses : ['ABIERTO', 'PENDIENTE', 'COMPLETADO']).map(s => (
+                      <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
 
