@@ -34,7 +34,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue 
-} from "@/select-trigger-fix"; // Assuming local fix or standard
+} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -42,9 +42,7 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-
-// Re-import standard Select if needed
-import * as SelectPrimitive from "@radix-ui/react-select";
+import { cn } from "@/lib/utils";
 
 interface TaskDrawerProps {
   task: TaskType | null;

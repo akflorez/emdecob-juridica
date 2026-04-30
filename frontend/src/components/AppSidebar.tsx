@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, Menu, LayoutDashboard, Calendar } from "lucide-react";
+import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, LayoutDashboard, Calendar, UserCheck, Clock, type LucideIcon } from "lucide-react";
 import { SidebarNavLink } from "./SidebarNavLink";
 import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Sun, Moon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const { user } = useAuth();

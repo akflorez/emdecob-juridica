@@ -6,9 +6,11 @@ interface SidebarNavLinkProps {
   to: string;
   icon: LucideIcon;
   children: React.ReactNode;
+  collapsed?: boolean;
+  title?: string;
 }
 
-export function SidebarNavLink({ to, icon: Icon, children }: SidebarNavLinkProps) {
+export function SidebarNavLink({ to, icon: Icon, children, collapsed, title }: SidebarNavLinkProps) {
   return (
     <RouterNavLink
       to={to}
