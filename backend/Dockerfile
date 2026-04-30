@@ -18,4 +18,4 @@ EXPOSE 8000
 
 # Command to run the application
 # We use --host 0.0.0.0 to make it accessible from outside the container
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python backend/migrate_v3.py && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
