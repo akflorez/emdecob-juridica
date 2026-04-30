@@ -80,6 +80,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
+  const [isNote, setIsNote] = useState(true);
 
   const displayTask = fullTask || task;
 
@@ -612,16 +613,25 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                    <Textarea 
                      value={newComment}
                      onChange={(e) => setNewComment(e.target.value)}
-                     placeholder="Añade una nota técnica..."
+                     placeholder={isNote ? "Escribe una nota interna para el equipo..." : "Añade un comentario público..."}
                      className="bg-transparent border-none focus:ring-0 p-0 text-[16px] min-h-[90px] resize-none text-gray-200 font-medium placeholder:text-gray-900"
                    />
                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-6 text-gray-700">
-                         <AttachmentIcon className="h-5 w-5 hover:text-white cursor-pointer transition-all" />
-                         <Zap className="h-5 w-5 text-purple-600 hover:scale-125 cursor-pointer" />
-                         <Smile className="h-5 w-5 hover:text-white cursor-pointer transition-all" />
-                         <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer text-[10px] font-black uppercase tracking-widest border border-white/5 transition-all">
-                            <MessageCircle className="h-4 w-4 text-primary" /> NOTA
+                         <label className="cursor-pointer hover:text-white transition-all">
+                            <AttachmentIcon className="h-5 w-5" />
+                            <input type="file" className="hidden" onChange={(e) => toast({ title: "Archivo seleccionado", description: e.target.files?.[0]?.name })} />
+                         </label>
+                         <Zap className="h-5 w-5 text-purple-600 hover:scale-125 cursor-pointer transition-all" onClick={() => toast({ title: "Slash commands activados" })} />
+                         <Smile className="h-5 w-5 hover:text-white cursor-pointer transition-all" onClick={() => toast({ title: "Selector de emojis" })} />
+                         <div 
+                           onClick={() => setIsNote(!isNote)}
+                           className={cn(
+                             "flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer text-[10px] font-black uppercase tracking-widest border transition-all",
+                             isNote ? "bg-primary/10 text-primary border-primary/20" : "bg-white/5 text-gray-600 border-white/5"
+                           )}
+                         >
+                            <MessageCircle className={cn("h-4 w-4", isNote ? "text-primary" : "text-gray-700")} /> {isNote ? "NOTA INTERNA" : "COMENTARIO"}
                          </div>
                       </div>
                       <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()} className={cn("h-12 w-12 rounded-2xl shadow-xl transition-all", newComment.trim() ? "bg-primary text-white scale-110" : "bg-gray-950 text-gray-900 opacity-20")}>
