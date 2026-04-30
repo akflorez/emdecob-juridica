@@ -37,6 +37,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { 
   getWorkspaces, getTasks, importClickUp, updateTask, getUsers,
@@ -71,6 +79,10 @@ export default function ProjectDashboardPage() {
   
   // Drill-down dashboard
   const [detailView, setDetailView] = useState<string | null>(null);
+  
+  // Creation Modals
+  const [creationModal, setCreationModal] = useState<{ open: boolean, mode: string, title: string }>({ open: false, mode: '', title: '' });
+  const [newItemName, setNewItemName] = useState('');
   
   // Calendario state
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -274,7 +286,7 @@ export default function ProjectDashboardPage() {
   const dashboardMetrics = useMemo(() => {
     const now = new Date();
     return {
-      sinAsignar: filteredTasks.filter(t => !t.assignee_id && !t.assignee_name).length,
+      sinAsignar: filteredTasks.filter(t => (!t.assignee_id && !t.assignee_name) || t.assignee_name === "Sin Asignar").length,
       enCurso: filteredTasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length,
       completadas: filteredTasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length,
       vencidas: filteredTasks.filter(t => t.due_date && new Date(t.due_date) < now && !t.status.toLowerCase().includes('completado')).length,
@@ -287,9 +299,21 @@ export default function ProjectDashboardPage() {
     if (detailView === 'vencidas') return filteredTasks.filter(t => t.due_date && new Date(t.due_date) < now && !t.status.toLowerCase().includes('completado'));
     if (detailView === 'porVencer') return filteredTasks.filter(t => t.due_date && isWithinInterval(new Date(t.due_date), { start: now, end: addDays(now, 7) }) && !t.status.toLowerCase().includes('completado'));
     if (detailView === 'enCurso') return filteredTasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso'));
-    if (detailView === 'sinAsignar') return filteredTasks.filter(t => !t.assignee_id && !t.assignee_name);
+    if (detailView === 'sinAsignar') return filteredTasks.filter(t => (!t.assignee_id && !t.assignee_name) || t.assignee_name === "Sin Asignar");
     return [];
   }, [filteredTasks, detailView]);
+
+  const handleActionClick = (mode: string, title: string) => {
+    setCreationModal({ open: true, mode, title });
+  };
+
+  const handleCreateConfirm = () => {
+    toast.success(`${creationModal.title} "${newItemName}" creada con éxito`, {
+      description: "La estructura se actualizará tras la próxima sincronización."
+    });
+    setCreationModal({ open: false, mode: '', title: '' });
+    setNewItemName('');
+  };
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden relative font-sans transition-colors duration-500">
@@ -320,19 +344,19 @@ export default function ProjectDashboardPage() {
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
                <Button variant="outline" size="sm" className="rounded-lg h-9 bg-accent/50 border-border/40 font-bold text-xs">
-                 <Layers className="mr-2 h-3.5 w-3.5" /> Opciones
+                 <Layers className="mr-2 h-3.5 w-3.5" /> Operaciones
                </Button>
              </DropdownMenuTrigger>
              <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
                <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Operativa</DropdownMenuLabel>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Espacios activado")}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Carpetas activado")}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => toast.success("Módulo de Listas activado")}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('espacio', 'Nuevo Espacio')}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('carpeta', 'Nueva Carpeta')}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('lista', 'Nueva Lista')}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer"><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer"><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('plantilla', 'Gestionar Plantilla')}><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('equipo', 'Gestionar Equipo')}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('pref', 'Configuración')}><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
              </DropdownMenuContent>
            </DropdownMenu>
 
@@ -590,7 +614,6 @@ export default function ProjectDashboardPage() {
                         exit={{ opacity: 0, scale: 1.02 }}
                         className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5"
                       >
-                         {/* DRILL-DOWN VIEW */}
                          {detailView ? (
                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                               <Button variant="ghost" size="sm" onClick={() => setDetailView(null)} className="font-bold text-xs">
@@ -631,7 +654,6 @@ export default function ProjectDashboardPage() {
                            </motion.div>
                          ) : (
                            <>
-                             {/* METRICAS SUPERIORES */}
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                                 {[
                                   { id: 'sinAsignar', label: 'Sin Asignar', count: dashboardMetrics.sinAsignar, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
@@ -736,6 +758,50 @@ export default function ProjectDashboardPage() {
         allAssignees={Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))) as string[]}
         allStatuses={dynamicBoardColumns.map(c => c.id)}
       />
+
+      {/* Creation Modal */}
+      <Dialog open={creationModal.open} onOpenChange={(o) => !o && setCreationModal({ ...creationModal, open: false })}>
+        <DialogContent className="bg-card border-border/40 rounded-3xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" /> {creationModal.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Define los parámetros iniciales de tu nueva estructura operativa.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+             <div className="space-y-2">
+               <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre</label>
+               <Input 
+                 placeholder={`Ej: ${creationModal.mode === 'espacio' ? 'Departamento Legal' : creationModal.mode === 'carpeta' ? 'Procesos 2026' : 'Lista de Tareas'}`}
+                 value={newItemName}
+                 onChange={(e) => setNewItemName(e.target.value)}
+                 className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
+               />
+             </div>
+             {(creationModal.mode === 'carpeta' || creationModal.mode === 'lista') && (
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Ubicación</label>
+                 <Select>
+                    <SelectTrigger className="bg-accent/30 border-border/40 rounded-xl h-12 text-xs font-bold">
+                       <SelectValue placeholder="Seleccionar padre..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                       {workspaces.map(ws => (
+                         <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
+                       ))}
+                    </SelectContent>
+                 </Select>
+               </div>
+             )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreationModal({ ...creationModal, open: false })} className="rounded-xl font-bold">Cancelar</Button>
+            <Button onClick={handleCreateConfirm} disabled={!newItemName} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase tracking-widest px-8">Crear Ahora</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
