@@ -19,7 +19,7 @@ import {
   updateTask, getTaskComments, addTaskComment, 
   getTaskChecklists, addTaskChecklist, updateTaskChecklist, 
   deleteTaskChecklist, deleteTaskComment, getCaseByRadicado,
-  getTags,
+  getTags, getUsers,
   type Task as TaskType, type User, type Tag as TagType
 } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
