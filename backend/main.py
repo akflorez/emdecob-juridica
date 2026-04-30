@@ -4164,6 +4164,10 @@ async def get_tasks(
         query = query.filter(Task.list_id == list_id)
     if case_id:
         query = query.filter(Task.case_id == case_id)
+    if radicado:
+        # Buscamos el caso por radicado exacto o LIKE
+        case_subquery = db.query(Case.id).filter(Case.radicado.like(f"%{radicado}%")).scalar_subquery()
+        query = query.filter(Task.case_id == case_subquery)
     if assignee_id:
         query = query.filter(Task.assignee_id == assignee_id)
     if status:
