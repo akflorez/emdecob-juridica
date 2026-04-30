@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   X, Calendar as CalendarIcon, User as UserIcon, CheckCircle2, 
   Clock, Tag, Paperclip, MessageSquare, Plus, ChevronRight, 
   Send, Trash2, ListChecks, Zap, Flag, AlertCircle, Edit3,
   UserCheck, Search, Activity, CornerDownRight, Smile, MoreHorizontal,
-  ChevronDown, Layout, CalendarDays
+  ChevronDown, CalendarDays
 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +20,7 @@ import {
   updateTask, addComment, deleteComment,
   addChecklistItem, updateChecklistItem, deleteChecklistItem,
   getUsers, getTags, getTaskDetail, createTask,
-  type Task as TaskType, type User, type Tag as TagType, type TaskComment, type ChecklistItem
+  type Task as TaskType, type User, type Tag as TagType
 } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { format, isValid } from "date-fns";
@@ -37,7 +39,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { motion, AnimatePresence } from "framer-motion";
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -97,7 +98,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       onTaskUpdate(updated);
       setFullTask(updated);
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo actualizar la tarea", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo actualizar" });
     }
   };
 
@@ -113,12 +114,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
         status: 'to do'
       });
       setNewSubtaskTitle("");
-      setNewSubtaskDate("");
       setShowSubtaskForm(false);
       refreshTask();
       toast({ title: "Subtarea creada" });
     } catch (error) {
-      toast({ title: "Error al crear subtarea", variant: "destructive" });
+      toast({ title: "Error al crear", variant: "destructive" });
     }
   };
 
@@ -129,7 +129,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setNewComment('');
       refreshTask();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo añadir el comentario" });
+      toast({ title: "Error al comentar" });
     }
   };
 
@@ -140,360 +140,177 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setNewChecklist("");
       refreshTask();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo añadir el item" });
+      toast({ title: "Error al añadir item" });
     }
-  };
-
-  const handleToggleAssignee = (userId: number) => {
-    if (!displayTask) return;
-    const currentIds = displayTask.assignees?.map(a => a.id) || [];
-    let newIds: number[];
-    if (currentIds.includes(userId)) {
-      newIds = currentIds.filter(id => id !== userId);
-    } else {
-      newIds = [...currentIds, userId];
-    }
-    handleSave({ assignee_ids: newIds } as any);
-  };
-
-  const handleTagToggle = async (tagName: string) => {
-    if (!displayTask) return;
-    const currentTags = displayTask.tags?.map(t => t.name) || [];
-    let newTags: string[];
-    if (currentTags.includes(tagName)) {
-      newTags = currentTags.filter(t => t !== tagName);
-    } else {
-      newTags = [...currentTags, tagName];
-    }
-    handleSave({ tags: newTags } as any);
   };
 
   if (!displayTask) return null;
 
-  const getStatusStyle = (status?: string) => {
-    const s = (status || '').toLowerCase();
-    if (s.includes('abierto') || s.includes('todo') || s.includes('almp')) return { bg: 'bg-slate-400/30', text: 'text-slate-100', border: 'border-slate-400/50', dot: 'bg-slate-400' };
-    if (s.includes('proceso') || s.includes('curso') || s.includes('468')) return { bg: 'bg-blue-500/40', text: 'text-blue-50', border: 'border-blue-500/60', dot: 'bg-blue-500' };
-    if (s.includes('presentar') || s.includes('inscripcion')) return { bg: 'bg-purple-500/40', text: 'text-purple-50', border: 'border-purple-500/60', dot: 'bg-purple-500' };
-    if (s.includes('retiro') || s.includes('not personal')) return { bg: 'bg-red-500/40', text: 'text-red-50', border: 'border-red-500/60', dot: 'bg-red-500' };
-    if (s.includes('completado') || s.includes('finalizado') || s.includes('cerrado')) return { bg: 'bg-green-500/40', text: 'text-green-50', border: 'border-green-500/60', dot: 'bg-green-500' };
-    return { bg: 'bg-amber-500/40', text: 'text-amber-50', border: 'border-amber-500/60', dot: 'bg-amber-500' };
-  };
+  const statusOptions = Array.from(new Set([
+    'ABIERTO', 'TO DO', 'IN PROGRESS', 'PENDIENTE', 'ALMP', '468', 'COMPLETO', 'CLOSED',
+    ...(allStatuses || [])
+  ])).filter(Boolean);
 
-  const statusOptions = useMemo(() => {
-    const base = ['ALMP', 'INSCRIPCION MEDIDAS', 'NOT PERSONAL', 'NOT AVISO', 'EMPLAZAMIENTO', '468', 'LIQUIDACION', 'AVALUO', 'REMATE', 'COMPLETO'];
-    return Array.from(new Set([...base, ...allStatuses])).filter(Boolean);
-  }, [allStatuses]);
-
-  const style = getStatusStyle(displayTask.status);
+  const currentStatus = (displayTask.status || 'ABIERTO').toUpperCase();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[1250px] p-0 bg-[#252833] border-white/20 text-slate-100 overflow-hidden flex flex-col shadow-2xl">
+      <SheetContent className="sm:max-w-[1200px] p-0 bg-[#252833] border-white/20 text-slate-100 flex flex-col">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Detalle de Tarea</SheetTitle>
+        </SheetHeader>
+        
         <div className="flex flex-1 overflow-hidden h-full">
           <div className="flex-[2] flex flex-col border-r border-white/10 overflow-hidden bg-[#1e2128]">
              <ScrollArea className="flex-1">
-                <div className="p-10 space-y-10">
+                <div className="p-8 space-y-8">
                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                         <Badge variant="outline" className="bg-primary/30 text-primary border-primary/50 font-black text-[11px] uppercase tracking-widest px-4 py-2 shadow-md">
-                           ID: {displayTask.clickup_id || displayTask.id}
-                         </Badge>
-                         <div className="flex items-center gap-2 text-[10px] text-slate-300 bg-white/10 px-4 py-2 rounded-full border border-white/20 shadow-inner font-bold">
-                           <Activity className="h-4 w-4 text-primary" />
-                           <span>CONSOLA JURÍDICA</span>
-                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full hover:bg-white/20 ml-2 h-10 w-10">
-                          <X className="h-6 w-6" />
-                        </Button>
-                      </div>
+                      <Badge className="bg-primary/30 text-primary border-primary/50 font-black">
+                        ID: {displayTask.clickup_id || displayTask.id}
+                      </Badge>
+                      <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full hover:bg-white/20 h-10 w-10">
+                        <X className="h-6 w-6" />
+                      </Button>
                    </div>
 
-                   <div className="space-y-8">
+                   <div className="space-y-6">
                       <div className="flex items-center gap-4 flex-wrap">
-                        <Select value={displayTask.status || 'ABIERTO'} onValueChange={(v) => handleSave({ status: v })}>
-                          <SelectTrigger className={`w-auto min-w-[160px] h-11 px-5 rounded-2xl border-2 font-black text-[11px] uppercase tracking-[0.15em] transition-all shadow-xl ${style.bg} ${style.text} ${style.border} hover:scale-105`}>
-                            <div className="flex items-center gap-3">
-                               <div className={`h-3 w-3 rounded-full border border-white/30 ${style.dot}`} />
-                               <SelectValue />
-                            </div>
+                        <Select value={statusOptions.includes(currentStatus) ? currentStatus : undefined} onValueChange={(v) => handleSave({ status: v })}>
+                          <SelectTrigger className="w-auto min-w-[160px] h-10 px-4 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest bg-white/5 border-white/20">
+                            <SelectValue placeholder={currentStatus} />
                           </SelectTrigger>
-                          <SelectContent className="bg-slate-800 border-white/20 text-white max-h-[500px] shadow-2xl">
+                          <SelectContent className="bg-slate-800 border-white/20 text-white">
                             {statusOptions.map(s => (
-                              <SelectItem key={s} value={s} className="uppercase text-[11px] font-black tracking-widest py-3 hover:bg-white/5">{s}</SelectItem>
+                              <SelectItem key={s} value={s} className="uppercase text-[10px] font-bold">{s}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
 
                         <Popover>
                           <PopoverTrigger asChild>
-                            <div className="flex items-center gap-3 px-5 py-2.5 bg-white/10 rounded-2xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all shadow-lg group">
-                               <UserIcon className="h-5 w-5 text-primary" />
-                               <span className="text-[11px] font-black text-slate-100 uppercase tracking-widest ml-1">
-                                 {displayTask.assignees?.map(a => a.nombre || a.username).join(', ') || displayTask.assignee_name || 'Sin Asignar'}
-                               </span>
-                               <ChevronDown className="h-4 w-4 text-slate-500" />
+                            <div className="flex items-center gap-3 px-4 py-2 bg-white/10 rounded-xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all font-bold text-xs">
+                               <UserIcon className="h-4 w-4 text-primary" />
+                               {displayTask.assignees?.map(a => a.nombre || a.username).join(', ') || displayTask.assignee_name || 'Sin Asignar'}
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent className="w-72 p-3 bg-slate-800 border-white/20 text-white rounded-3xl shadow-2xl">
-                             <ScrollArea className="h-[300px]">
-                                <div className="space-y-1.5">
+                          <PopoverContent className="w-64 p-2 bg-slate-800 border-white/20 text-white rounded-2xl">
+                             <ScrollArea className="h-[250px]">
+                                <div className="space-y-1">
                                    {users.map(u => (
-                                     <div key={u.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent hover:border-white/10" onClick={() => handleToggleAssignee(u.id)}>
-                                        <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-5 w-5 border-white/30 data-[state=checked]:bg-primary" />
-                                        <span className="text-sm font-bold">{(u.nombre || u.username)}</span>
+                                     <div key={u.id} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-xl cursor-pointer" onClick={() => (displayTask) && handleSave({ assignee_ids: [u.id] } as any)}>
+                                        <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-4 w-4 border-white/30" />
+                                        <span className="text-sm font-medium">{(u.nombre || u.username)}</span>
                                      </div>
                                    ))}
                                 </div>
                              </ScrollArea>
                           </PopoverContent>
                         </Popover>
-
-                        <Select value={displayTask.priority || 'normal'} onValueChange={(v) => handleSave({ priority: v })}>
-                          <SelectTrigger className={`w-auto h-11 px-5 rounded-2xl bg-white/10 border border-white/20 font-black text-[11px] uppercase tracking-[0.15em] transition-all shadow-lg ${displayTask.priority === 'urgent' ? 'text-red-400 border-red-500/50' : 'text-slate-300'}`}>
-                            <div className="flex items-center gap-3">
-                              <Flag className={`h-4 w-4 ${displayTask.priority === 'urgent' ? 'fill-red-500' : 'fill-slate-500'}`} />
-                              <SelectValue />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent className="bg-slate-800 border-white/20 text-white rounded-2xl shadow-2xl">
-                            <SelectItem value="urgent" className="text-red-400 font-black">URGENTE</SelectItem>
-                            <SelectItem value="high">ALTA</SelectItem>
-                            <SelectItem value="normal">NORMAL</SelectItem>
-                            <SelectItem value="low">BAJA</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <div className="flex-1 min-w-[250px]">
-                           <div className="flex flex-wrap gap-2.5 items-center bg-white/5 p-2 rounded-2xl border border-white/10 shadow-inner">
-                              {displayTask.tags?.map(tag => (
-                                <Badge 
-                                  key={tag.id}
-                                  style={{ backgroundColor: tag.color || '#3b82f6', color: 'white' }}
-                                  className="text-[10px] py-2 px-4 border-none shadow-xl font-black uppercase tracking-widest rounded-xl flex items-center gap-2 group cursor-pointer hover:brightness-125"
-                                  onClick={() => handleTagToggle(tag.name)}
-                                >
-                                  {tag.name}
-                                  <X className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100" />
-                                </Badge>
-                              ))}
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-9 px-5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] font-black text-slate-100 uppercase tracking-widest shadow-md flex items-center gap-2">
-                                    <Tag className="h-4 w-4 text-primary" /> ETIQUETAS
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-72 p-3 bg-slate-800 border-white/20 text-white rounded-3xl shadow-2xl">
-                                   <ScrollArea className="h-[300px]">
-                                      <div className="space-y-1.5">
-                                         {allTags.map(t => (
-                                           <div key={t.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer text-sm font-bold transition-all" onClick={() => handleTagToggle(t.name)}>
-                                              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: t.color }} />
-                                              <span className="flex-1">{t.name}</span>
-                                              {displayTask.tags?.some(gt => gt.name === t.name) && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                                           </div>
-                                         ))}
-                                      </div>
-                                   </ScrollArea>
-                                </PopoverContent>
-                              </Popover>
-                           </div>
+                        
+                        <div className="flex flex-wrap gap-2">
+                           {displayTask.tags?.map(tag => (
+                             <Badge key={tag.id} style={{ backgroundColor: tag.color || '#3b82f6', color: 'white' }} className="text-[9px] py-1 px-3 border-none font-black uppercase">
+                               {tag.name}
+                             </Badge>
+                           ))}
                         </div>
                       </div>
 
                       <input 
-                        className="w-full bg-transparent text-5xl font-black tracking-tighter border-none focus:ring-0 p-0 text-white placeholder:text-slate-700 shadow-none"
+                        className="w-full bg-transparent text-4xl font-black tracking-tighter border-none focus:ring-0 p-0 text-white placeholder:text-slate-700"
                         value={editedTitle}
                         onChange={(e) => setEditedTitle(e.target.value)}
                         onBlur={() => handleSave({ title: editedTitle })}
-                        placeholder="Sin título..."
                       />
                    </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-white/5 p-10 rounded-[2.5rem] border border-white/20 shadow-2xl relative overflow-hidden group">
-                      <div className="space-y-8">
-                         <div className="text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-3">
-                           <Layout className="h-4 w-4 text-primary" /> INFORMACIÓN DE CARPETA
-                         </div>
-                         <div className="space-y-5">
-                            {(() => {
-                               try {
-                                 const fields = JSON.parse(displayTask.custom_fields || '[]');
-                                 if (Array.isArray(fields) && fields.length > 0) {
-                                   return fields.map((f: any, idx: number) => (
-                                     <div key={idx} className="flex justify-between items-center py-3.5 border-b border-white/10">
-                                        <span className="text-[11px] text-slate-400 font-black uppercase tracking-tight">{f.name}</span>
-                                        <span className="text-[13px] text-white font-black bg-white/10 px-3 py-1 rounded-xl shadow-sm">{f.value || f.text_value || '-'}</span>
-                                     </div>
-                                   ));
-                                 }
-                               } catch (e) {}
-                               return <div className="p-8 text-center text-[11px] text-slate-500 uppercase font-black italic tracking-widest bg-black/20 rounded-3xl border border-dashed border-white/10">Sin campos personalizados</div>;
-                            })()}
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white/5 p-8 rounded-[2rem] border border-white/10">
+                      <div className="space-y-4 text-xs">
+                         <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">Información</div>
+                         <div className="space-y-2">
+                            <div className="flex justify-between border-b border-white/5 py-2">
+                               <span className="text-slate-500">Obligación</span>
+                               <span className="font-mono text-white">{displayTask.custom_fields || '-'}</span>
+                            </div>
                          </div>
                       </div>
-                      <div className="space-y-8">
-                        <div className="text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-3">
-                           <Zap className="h-4 w-4 text-yellow-500" /> EXPEDIENTE VINCULADO
-                         </div>
-                         <div className="p-7 bg-black/40 rounded-3xl border border-white/20 hover:border-primary/50 transition-all cursor-pointer group shadow-2xl relative">
-                            <div className="text-lg font-black text-primary truncate mb-3">{displayTask.case_radicado || '11001400305420250052800'}</div>
-                            <div className="flex items-center gap-3 text-[11px] text-slate-300 uppercase tracking-widest font-black">
-                               <div className="h-8 w-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/20">
-                                  <UserCheck className="h-4 w-4" />
-                               </div>
-                               <span>Ver Detalles del Proceso</span>
-                               <ChevronRight className="h-4 w-4 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
-                            </div>
+                      <div className="space-y-4">
+                         <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">Vínculo</div>
+                         <div className="p-4 bg-black/40 rounded-2xl border border-white/10 text-primary font-black text-sm truncate">
+                            {displayTask.case_radicado || 'Radicado Vinculado'}
                          </div>
                       </div>
                    </div>
 
-                   <div className="space-y-6">
-                      <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">
-                        <Edit3 className="h-5 w-5 text-primary" /> NOTAS DE GESTIÓN
-                      </div>
+                   <div className="space-y-4">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Notas</div>
                       <Textarea 
-                        className="min-h-[220px] bg-white/5 border-2 border-white/10 focus:border-primary/50 rounded-[2rem] p-10 text-[15px] font-medium leading-relaxed text-slate-100 resize-none transition-all placeholder:text-slate-700 shadow-xl"
-                        placeholder="Ingresa la actualización jurídica..."
+                        className="min-h-[180px] bg-white/5 border-2 border-white/10 rounded-2xl p-6 text-sm text-slate-100"
                         value={editedDesc}
                         onChange={(e) => setEditedDesc(e.target.value)}
                         onBlur={() => handleSave({ description: editedDesc })}
                       />
                    </div>
 
-                   <div className="space-y-10">
-                      <div className="space-y-8">
-                         <div className="flex items-center justify-between bg-white/5 p-6 rounded-3xl border border-white/10">
-                            <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-300 flex items-center gap-3">
-                               <Layout className="h-6 w-6 text-primary" /> SUBTAREAS Y CRONOGRAMA
-                            </div>
-                            <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="rounded-2xl bg-primary text-primary-foreground font-black uppercase text-[11px] tracking-widest px-8 h-10 shadow-lg shadow-primary/30">
-                               <Plus className="h-5 w-5 mr-2" /> NUEVA SUBTAREA
-                            </Button>
-                         </div>
-                         
-                         <div className="space-y-5">
-                            <AnimatePresence>
-                              {showSubtaskForm && (
-                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-10 bg-primary/10 border-2 border-primary/30 rounded-[2.5rem] space-y-8 shadow-2xl relative">
-                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                      <Input 
-                                        placeholder="Nombre de la subtarea..." 
-                                        value={newSubtaskTitle} 
-                                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                                        className="bg-black/30 border-white/20 h-12 rounded-2xl text-sm font-bold"
-                                      />
-                                      <Input 
-                                        type="date"
-                                        value={newSubtaskDate}
-                                        onChange={(e) => setNewSubtaskDate(e.target.value)}
-                                        className="bg-black/30 border-white/20 h-12 rounded-2xl pl-4 text-sm font-bold"
-                                      />
-                                   </div>
-                                   <div className="flex justify-end gap-4">
-                                      <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="rounded-2xl text-xs font-black uppercase tracking-widest">Cancelar</Button>
-                                      <Button onClick={handleCreateSubtask} className="rounded-2xl bg-primary text-primary-foreground font-black uppercase text-xs tracking-widest px-10">CREAR</Button>
-                                   </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-
-                            {displayTask.checklists?.map(item => (
-                              <div key={item.id} className="flex items-center gap-6 p-6 bg-white/5 border-2 border-white/10 rounded-3xl group hover:bg-white/[0.08] transition-all shadow-xl">
-                                 <Checkbox 
-                                   checked={item.is_completed} 
-                                   onCheckedChange={(v) => updateChecklistItem(item.id, { is_completed: !!v }).then(refreshTask)} 
-                                   className="h-6 w-6 border-2 border-white/30 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500 shadow-sm"
-                                 />
-                                 <span className={`text-[15px] flex-1 font-bold tracking-tight ${item.is_completed ? 'line-through text-slate-500' : 'text-slate-100'}`}>{item.content}</span>
-                                 <Button variant="ghost" size="icon" onClick={() => deleteChecklistItem(item.id).then(refreshTask)} className="h-10 w-10 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded-2xl">
-                                    <Trash2 className="h-5 w-5" />
-                                 </Button>
+                   <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                         <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pasos de Gestión</div>
+                         <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="rounded-xl h-8 text-[10px] font-black">NUEVA SUBTAREA</Button>
+                      </div>
+                      <div className="space-y-3">
+                         {showSubtaskForm && (
+                           <div className="p-6 bg-primary/10 border border-primary/30 rounded-2xl space-y-4">
+                              <Input placeholder="Título..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/20" />
+                              <div className="flex justify-end gap-2">
+                                 <Button variant="ghost" size="sm" onClick={() => setShowSubtaskForm(false)}>Cancelar</Button>
+                                 <Button size="sm" onClick={handleCreateSubtask}>Crear</Button>
                               </div>
-                            ))}
-
-                            <div className="flex items-center gap-5 bg-white/[0.03] border-2 border-dashed border-white/20 rounded-3xl p-3 pl-8 hover:border-primary/50 transition-all group shadow-inner">
-                               <Plus className="h-6 w-6 text-slate-600 group-hover:text-primary transition-colors" />
-                               <Input 
-                                 placeholder="Añadir paso rápido..." 
-                                 value={newChecklist} 
-                                 onChange={(e) => setNewChecklist(e.target.value)}
-                                 onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()}
-                                 className="bg-transparent border-none focus:ring-0 text-[15px] font-bold p-0 h-14 placeholder:text-slate-700"
-                               />
-                               <Button size="lg" onClick={handleAddChecklist} className="rounded-2xl h-12 px-8 bg-primary/20 text-primary hover:bg-primary/30 border-2 border-primary/20 font-black uppercase text-[11px] tracking-widest shadow-md">AÑADIR</Button>
-                            </div>
-                         </div>
+                           </div>
+                         )}
+                         {displayTask.checklists?.map(item => (
+                           <div key={item.id} className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-xl">
+                              <Checkbox checked={item.is_completed} onCheckedChange={(v) => updateChecklistItem(item.id, { is_completed: !!v }).then(refreshTask)} />
+                              <span className={`text-sm flex-1 ${item.is_completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>{item.content}</span>
+                           </div>
+                         ))}
                       </div>
                    </div>
                 </div>
              </ScrollArea>
           </div>
 
-          <div className="flex-1 flex flex-col bg-[#1a1c23] overflow-hidden border-l border-white/10 shadow-2xl">
-             <div className="h-20 flex items-center px-10 border-b-2 border-white/10 gap-10 bg-white/5">
-                <button 
-                  onClick={() => setActiveRightTab('activity')}
-                  className={`text-[11px] font-black uppercase tracking-[0.25em] transition-all h-full flex items-center border-b-4 ${activeRightTab === 'activity' ? 'text-primary border-primary' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
-                >
-                  ACTIVIDAD
-                </button>
-                <button 
-                  onClick={() => setActiveRightTab('comments')}
-                  className={`text-[11px] font-black uppercase tracking-[0.25em] transition-all h-full flex items-center border-b-4 ${activeRightTab === 'comments' ? 'text-primary border-primary' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
-                >
-                  MENSAJES
-                </button>
+          <div className="flex-1 flex flex-col bg-[#1a1c23]">
+             <div className="h-16 flex items-center px-6 border-b border-white/10 font-black text-[10px] uppercase tracking-widest gap-4 text-slate-500">
+                <span className="text-primary border-b-2 border-primary h-full flex items-center">Actividad</span>
              </div>
-
-             <ScrollArea className="flex-1 bg-black/10">
-                <div className="p-10 space-y-12">
+             <ScrollArea className="flex-1 p-6">
+                <div className="space-y-6">
                    {displayTask.comments?.map(comment => (
-                     <div key={comment.id} className="flex gap-5 group">
-                        <div className="h-12 w-12 flex-shrink-0 shadow-2xl ring-4 ring-white/5 rounded-full bg-primary flex items-center justify-center text-white font-black uppercase">
-                           {(comment.user_name || 'U')[0]}
-                        </div>
-                        <div className="space-y-3 flex-1">
-                           <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-slate-200 uppercase tracking-widest">{comment.user_name}</span>
-                              <span className="text-[10px] text-slate-500 font-bold bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">
-                                 {isValid(new Date(comment.created_at)) ? format(new Date(comment.created_at), "d MMM, h:mm a", { locale: es }) : ''}
-                              </span>
+                     <div key={comment.id} className="flex gap-3">
+                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-xs font-black">{comment.user_name?.[0] || 'U'}</div>
+                        <div className="flex-1 space-y-1">
+                           <div className="flex justify-between text-[10px] font-bold">
+                              <span className="text-slate-300">{comment.user_name}</span>
+                              <span className="text-slate-600">{isValid(new Date(comment.created_at)) ? format(new Date(comment.created_at), "d MMM", { locale: es }) : ''}</span>
                            </div>
-                           <div className="p-6 bg-white/[0.07] border-2 border-white/10 rounded-[2rem] rounded-tl-none text-[14px] font-medium text-slate-100 leading-relaxed shadow-xl group-hover:border-primary/20">
+                           <div className="p-4 bg-white/5 border border-white/10 rounded-2xl rounded-tl-none text-xs text-slate-300 leading-relaxed">
                               {comment.content}
                            </div>
                         </div>
                      </div>
                    ))}
-
-                   {(!displayTask.comments || displayTask.comments.length === 0) && (
-                     <div className="h-[400px] flex flex-col items-center justify-center text-slate-700 opacity-20">
-                        <MessageSquare className="h-24 w-24 stroke-1 mb-8" />
-                        <p className="text-[13px] font-black uppercase tracking-[0.3em]">SIN MENSAJES</p>
-                     </div>
-                   )}
                 </div>
              </ScrollArea>
-
-             <div className="p-10 border-t-2 border-white/10 bg-[#252833]/80">
-                <div className="relative group/input">
+             <div className="p-6 border-t border-white/10">
+                <div className="relative">
                    <Textarea 
                      value={newComment}
                      onChange={(e) => setNewComment(e.target.value)}
-                     placeholder="Escribe un mensaje técnico..."
-                     className="bg-black/40 border-2 border-white/20 focus:border-primary/60 rounded-[2.5rem] pr-20 min-h-[140px] resize-none text-[15px] font-bold p-8 shadow-2xl relative z-10 transition-all placeholder:text-slate-600 focus:bg-black/60"
+                     placeholder="Mensaje..."
+                     className="bg-black/30 border-white/10 rounded-2xl pr-12 min-h-[100px] text-sm"
                    />
-                   <Button 
-                     size="icon" 
-                     onClick={handleAddComment}
-                     disabled={!newComment.trim()}
-                     className="absolute bottom-6 right-6 h-12 w-12 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl transform hover:scale-110 active:scale-95 transition-all z-20"
-                   >
-                     <Send className="h-6 w-6" />
+                   <Button size="icon" onClick={handleAddComment} className="absolute bottom-3 right-3 h-8 w-8 rounded-xl bg-primary">
+                     <Send className="h-4 w-4" />
                    </Button>
                 </div>
              </div>
