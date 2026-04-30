@@ -896,6 +896,20 @@ export function updateTask(taskId: number, data: Partial<Task>) {
   });
 }
 
+export function addComment(taskId: number, content: string) {
+  return apiFetch<TaskComment>(`/projects/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function addChecklistItem(taskId: number, content: string) {
+  return apiFetch<ChecklistItem>(`/projects/tasks/${taskId}/checklists`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
 export function importClickUp(token: string) {
   return apiFetch<{ ok: boolean; message: string }>("/projects/import-clickup", {
     method: "POST",

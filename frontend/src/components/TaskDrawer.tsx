@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, CheckCircle2, Clock, Tag, User as UserIcon, CheckSquare, Plus, LayoutGrid, MessageSquare } from 'lucide-react';
-import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, type CaseRow } from '@/services/api';
+import { Task as TaskType, updateTask, createTask, getUsers, User, getTaskDetail, getCases, addComment, addChecklistItem, type CaseRow } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -24,9 +24,10 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   onTaskUpdate: (updatedTask: TaskType) => void;
   clickupToken?: string;
+  allAssignees?: string[];
 }
 
-export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken, allAssignees = [] }: TaskDrawerProps) {
   const { toast } = useToast();
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
@@ -36,6 +37,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const [caseSearch, setCaseSearch] = useState('');
   const [caseResults, setCaseResults] = useState<CaseRow[]>([]);
   const [linkedCase, setLinkedCase] = useState<CaseRow | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [newChecklist, setNewChecklist] = useState('');
 
   useEffect(() => {
     if (task && open) {
@@ -110,6 +113,38 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     }
   };
 
+  const handleAddComment = async () => {
+    if (!task || !newComment.trim()) return;
+    setIsLoading(true);
+    try {
+      await addComment(task.id, newComment);
+      setNewComment('');
+      const updated = await getTaskDetail(task.id, clickupToken);
+      onTaskUpdate(updated);
+      setFullTask(updated);
+    } catch(e) {
+      toast({ title: 'Error', description: 'No se pudo agregar el comentario' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddChecklist = async () => {
+    if (!task || !newChecklist.trim()) return;
+    setIsLoading(true);
+    try {
+      await addChecklistItem(task.id, newChecklist);
+      setNewChecklist('');
+      const updated = await getTaskDetail(task.id, clickupToken);
+      onTaskUpdate(updated);
+      setFullTask(updated);
+    } catch(e) {
+      toast({ title: 'Error', description: 'No se pudo agregar item' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const displayTask = fullTask || task;
   if (!displayTask) return null;
 
@@ -143,8 +178,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3"/> Asignado</label>
               <Select 
-                value={displayTask.assignee_id ? String(displayTask.assignee_id) : "unassigned"} 
-                onValueChange={(val) => handleSave({ assignee_id: val === "unassigned" ? undefined : Number(val) })}
+                value={displayTask.assignee_name || "unassigned"} 
+                onValueChange={(val) => handleSave({ assignee_name: val === "unassigned" ? undefined : val })}
                 disabled={isLoading}
               >
                 <SelectTrigger className="h-9 bg-muted/40 border-border/50 hover:bg-muted transition-colors rounded-lg">
@@ -152,13 +187,13 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned" className="text-muted-foreground">Sin asignar</SelectItem>
-                  {users.map(u => (
-                    <SelectItem key={u.id} value={String(u.id)}>
+                  {Array.from(new Set([...allAssignees, displayTask.assignee_name].filter(Boolean))).map(name => (
+                    <SelectItem key={name!} value={name!}>
                       <div className="flex items-center gap-2">
                         <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold">
-                          {u.nombre ? u.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '??'}
+                          {name![0].toUpperCase()}
                         </div>
-                        <span>{u.nombre || u.username}</span>
+                        <span>{name}</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -168,14 +203,13 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
             
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarIcon className="h-3 w-3"/> Vencimiento</label>
-              <div className="text-sm font-medium">
-                {displayTask.due_date ? (() => {
-                  try {
-                    const d = new Date(displayTask.due_date);
-                    return isNaN(d.getTime()) ? 'No definida' : format(d, "d 'de' MMMM, yyyy", { locale: es });
-                  } catch(e) { return 'No definida'; }
-                })() : 'No definida'}
-              </div>
+              <Input 
+                type="date"
+                className="h-9 bg-muted/40 border-border/50 text-xs rounded-lg"
+                value={displayTask.due_date ? displayTask.due_date.split('T')[0] : ''}
+                onChange={(e) => handleSave({ due_date: e.target.value })}
+                disabled={isLoading}
+              />
             </div>
           </div>
 
@@ -296,10 +330,20 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
           <div className="space-y-3 pt-4 border-t border-border/50">
             <label className="text-sm font-semibold flex items-center gap-2 justify-between">
               <span className="flex items-center gap-2"><CheckSquare className="h-4 w-4 text-primary"/> Listas de control</span>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs hover:bg-primary/10 hover:text-primary"><Plus className="h-3 w-3 mr-1"/> Añadir</Button>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs hover:bg-primary/10 hover:text-primary" onClick={handleAddChecklist}><Plus className="h-3 w-3 mr-1"/> Añadir</Button>
             </label>
             
             <div className="space-y-2">
+              <div className="flex gap-2 mb-2">
+                <Input 
+                  placeholder="Nuevo item..." 
+                  className="h-8 text-xs bg-muted/20" 
+                  value={newChecklist}
+                  onChange={(e) => setNewChecklist(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()}
+                />
+                <Button size="sm" className="h-8 h-8 px-2" onClick={handleAddChecklist}><Plus className="h-3 w-3" /></Button>
+              </div>
               {displayTask.checklists && displayTask.checklists.length > 0 ? (
                 displayTask.checklists.map(item => (
                   <div key={item.id} className="flex items-center gap-3 group">
@@ -350,8 +394,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
               )}
               
               <div className="flex gap-2 pt-2">
-                <Input placeholder="Escribe un comentario..." className="h-9 text-xs bg-muted/20" />
-                <Button size="sm" className="h-9 px-3"><Plus className="h-4 w-4" /></Button>
+                <Input 
+                  placeholder="Escribe un comentario..." 
+                  className="h-9 text-xs bg-muted/20" 
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                />
+                <Button size="sm" className="h-9 px-3" onClick={handleAddComment}><Plus className="h-4 w-4" /></Button>
               </div>
             </div>
           </div>

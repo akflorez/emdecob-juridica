@@ -634,6 +634,7 @@ export default function ProjectDashboardPage() {
           setSelectedTask(t);
         }}
         clickupToken={clickupToken}
+        allAssignees={Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))) as string[]}
       />
     </div>
   );

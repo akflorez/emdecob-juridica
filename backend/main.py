@@ -3939,6 +3939,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
     assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = None
     case_id: Optional[int] = None
     
     class Config:
@@ -4248,9 +4249,52 @@ async def create_task(
         creator_id=current_user.id
     )
     db.add(task)
+    if "assignee_name" in update_data:
+        task.assignee_name = update_data["assignee_name"]
+    
     db.commit()
     db.refresh(task)
     return task
+
+@app.post("/projects/tasks/{task_id}/comments")
+@app.post("/api/projects/tasks/{task_id}/comments")
+@app.post("/api/tasks/{task_id}/comments")
+@app.post("/tasks/{task_id}/comments")
+async def add_task_comment(
+    task_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    comment = TaskComment(
+        task_id=task_id,
+        content=data.get("content"),
+        user_id=current_user.id
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+@app.post("/projects/tasks/{task_id}/checklists")
+@app.post("/api/projects/tasks/{task_id}/checklists")
+@app.post("/api/tasks/{task_id}/checklists")
+@app.post("/tasks/{task_id}/checklists")
+async def add_task_checklist_item(
+    task_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    item = TaskChecklistItem(
+        task_id=task_id,
+        content=data.get("content"),
+        is_completed=False
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 @app.patch("/api/projects/tasks/{task_id}")
 @app.patch("/projects/tasks/{task_id}")
@@ -4272,6 +4316,7 @@ async def update_task(
     if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
     if t_data.priority is not None: task.priority = t_data.priority
     if t_data.due_date is not None: task.due_date = t_data.due_date
+    if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
     if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
     
     db.commit()
