@@ -102,6 +102,30 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     }
   };
 
+  const toggleAssignee = (userId: number) => {
+    if (!displayTask) return;
+    const currentIds = displayTask.assignees?.map(a => a.id) || [];
+    let newIds: number[];
+    if (currentIds.includes(userId)) {
+      newIds = currentIds.filter(id => id !== userId);
+    } else {
+      newIds = [...currentIds, userId];
+    }
+    handleSave({ assignee_ids: newIds } as any);
+  };
+
+  const toggleTag = (tagName: string) => {
+    if (!displayTask) return;
+    const currentTags = displayTask.tags?.map(t => t.name) || [];
+    let newTags: string[];
+    if (currentTags.includes(tagName)) {
+      newTags = currentTags.filter(t => t !== tagName);
+    } else {
+      newTags = [...currentTags, tagName];
+    }
+    handleSave({ tags: newTags } as any);
+  };
+
   const handleCreateSubtask = async () => {
     if (!displayTask || !newSubtaskTitle.trim()) return;
     try {
@@ -155,7 +179,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[1200px] p-0 bg-[#252833] border-white/20 text-slate-100 flex flex-col">
+      <SheetContent className="sm:max-w-[1200px] p-0 bg-[#252833] border-white/20 text-slate-100 flex flex-col shadow-2xl">
         <SheetHeader className="sr-only">
           <SheetTitle>Detalle de Tarea</SheetTitle>
         </SheetHeader>
@@ -168,6 +192,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                       <Badge className="bg-primary/30 text-primary border-primary/50 font-black px-4 py-2 uppercase tracking-widest text-[11px]">
                         ID: {displayTask.clickup_id || displayTask.id}
                       </Badge>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-300 bg-white/10 px-4 py-2 rounded-full border border-white/20 font-bold">
+                        <Activity className="h-4 w-4 text-primary" />
+                        <span>CONSOLA DE MANDO</span>
+                      </div>
                       <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full hover:bg-white/20 h-10 w-10">
                         <X className="h-6 w-6" />
                       </Button>
@@ -190,16 +218,27 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                           <PopoverTrigger asChild>
                             <div className="flex items-center gap-3 px-5 py-2.5 bg-white/10 rounded-2xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all font-black text-[11px] uppercase tracking-widest shadow-lg">
                                <UserIcon className="h-4 w-4 text-primary" />
-                               {displayTask.assignees?.map(a => a.nombre || a.username).join(', ') || displayTask.assignee_name || 'Sin Asignar'}
+                               <span className="max-w-[300px] truncate">
+                                 {displayTask.assignees && displayTask.assignees.length > 0 
+                                   ? displayTask.assignees.map(a => a.nombre || a.username).join(', ') 
+                                   : displayTask.assignee_name || 'Asignar Abogados'}
+                               </span>
+                               <ChevronDown className="h-4 w-4 text-slate-500" />
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent className="w-72 p-3 bg-slate-800 border-white/20 text-white rounded-3xl shadow-2xl">
-                             <ScrollArea className="h-[300px]">
-                                <div className="space-y-1.5">
+                          <PopoverContent className="w-80 p-3 bg-slate-800 border-white/20 text-white rounded-3xl shadow-2xl">
+                             <div className="px-3 pb-3 border-b border-white/10 mb-2">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Listado de Abogados</span>
+                             </div>
+                             <ScrollArea className="h-[350px]">
+                                <div className="space-y-1">
                                    {users.map(u => (
-                                     <div key={u.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent hover:border-white/10" onClick={() => (displayTask) && handleSave({ assignee_ids: [u.id] } as any)}>
+                                     <div key={u.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent" onClick={() => toggleAssignee(u.id)}>
                                         <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-5 w-5 border-white/30 data-[state=checked]:bg-primary" />
-                                        <span className="text-sm font-bold">{(u.nombre || u.username)}</span>
+                                        <div className="flex flex-col">
+                                           <span className="text-sm font-bold">{(u.nombre || u.username)}</span>
+                                           <span className="text-[9px] text-slate-500 font-black uppercase">{u.is_admin ? 'Administrador' : 'Abogado'}</span>
+                                        </div>
                                      </div>
                                    ))}
                                 </div>
@@ -207,24 +246,49 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                           </PopoverContent>
                         </Popover>
                         
-                        <div className="flex flex-wrap gap-2.5">
-                           {displayTask.tags?.map(tag => (
-                             <Badge key={tag.id} style={{ backgroundColor: tag.color || '#3b82f6', color: 'white' }} className="text-[10px] py-2 px-4 border-none font-black uppercase tracking-widest rounded-xl shadow-md">
-                               {tag.name}
-                             </Badge>
-                           ))}
+                        <div className="flex-1 min-w-[200px]">
+                           <div className="flex flex-wrap gap-2.5 items-center bg-white/5 p-2 rounded-2xl border border-white/10">
+                              {displayTask.tags?.map(tag => (
+                                <Badge key={tag.id} style={{ backgroundColor: tag.color || '#3b82f6', color: 'white' }} className="text-[10px] py-2 px-4 border-none font-black uppercase tracking-widest rounded-xl shadow-md group cursor-pointer hover:brightness-110" onClick={() => toggleTag(tag.name)}>
+                                  {tag.name}
+                                  <X className="h-3 w-3 ml-2 opacity-50 group-hover:opacity-100" />
+                                </Badge>
+                              ))}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-9 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-[10px] font-black text-slate-100 uppercase tracking-widest shadow-md">
+                                    <Tag className="h-4 w-4 mr-2 text-primary" /> + ETIQUETAS
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-72 p-3 bg-slate-800 border-white/20 text-white rounded-3xl shadow-2xl">
+                                   <ScrollArea className="h-[300px]">
+                                      <div className="space-y-1">
+                                         {allTags.map(t => (
+                                           <div key={t.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer text-sm font-bold transition-all" onClick={() => toggleTag(t.name)}>
+                                              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: t.color }} />
+                                              <span className="flex-1">{t.name}</span>
+                                              {displayTask.tags?.some(gt => gt.name === t.name) && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                                           </div>
+                                         ))}
+                                         {allTags.length === 0 && <p className="p-6 text-center text-[10px] text-slate-500 font-black uppercase italic">Cargando etiquetas...</p>}
+                                      </div>
+                                   </ScrollArea>
+                                </PopoverContent>
+                              </Popover>
+                           </div>
                         </div>
                       </div>
 
                       <input 
-                        className="w-full bg-transparent text-5xl font-black tracking-tighter border-none focus:ring-0 p-0 text-white placeholder:text-slate-700 shadow-none"
+                        className="w-full bg-transparent text-4xl font-black tracking-tighter border-none focus:ring-0 p-0 text-white placeholder:text-slate-700 shadow-none selection:bg-primary/30"
                         value={editedTitle}
                         onChange={(e) => setEditedTitle(e.target.value)}
                         onBlur={() => handleSave({ title: editedTitle })}
+                        placeholder="Sin título..."
                       />
                    </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-white/5 p-10 rounded-[2.5rem] border border-white/20 shadow-2xl">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-white/5 p-10 rounded-[2.5rem] border border-white/20 shadow-2xl relative overflow-hidden group">
                       <div className="space-y-6">
                          <div className="text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] flex items-center gap-3">
                            <Layout className="h-4 w-4 text-primary" /> INFORMACIÓN DE CARPETA
@@ -268,8 +332,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                         <Edit3 className="h-5 w-5 text-primary" /> NOTAS DE GESTIÓN
                       </div>
                       <Textarea 
-                        className="min-h-[220px] bg-white/5 border-2 border-white/10 focus:border-primary/50 rounded-[2.5rem] p-8 text-[15px] font-medium leading-relaxed text-slate-100 shadow-xl"
-                        placeholder="Ingresa la actualización jurídica..."
+                        className="min-h-[220px] bg-white/5 border-2 border-white/10 focus:border-primary/50 rounded-[2.5rem] p-8 text-[15px] font-medium leading-relaxed text-slate-100 shadow-xl placeholder:text-slate-700 selection:bg-primary/30"
+                        placeholder="Ingresa la actualización jurídica o detalles relevantes..."
                         value={editedDesc}
                         onChange={(e) => setEditedDesc(e.target.value)}
                         onBlur={() => handleSave({ description: editedDesc })}
@@ -281,7 +345,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-300 flex items-center gap-3">
                             <Activity className="h-6 w-6 text-primary" /> SUBTAREAS Y CRONOGRAMA
                          </div>
-                         <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="rounded-2xl bg-primary text-primary-foreground font-black uppercase text-[11px] tracking-widest px-8 h-10 shadow-lg shadow-primary/30">
+                         <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="rounded-2xl bg-primary text-primary-foreground font-black uppercase text-[11px] tracking-widest px-8 h-10 shadow-lg shadow-primary/30 hover:scale-105 transition-transform">
                             <Plus className="h-5 w-5 mr-2" /> NUEVA SUBTAREA
                          </Button>
                       </div>
@@ -289,11 +353,17 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          {showSubtaskForm && (
                            <div className="p-10 bg-primary/10 border-2 border-primary/30 rounded-[2.5rem] space-y-8 shadow-2xl">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                 <Input placeholder="Título de la subtarea..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/30 border-white/20 h-12 rounded-2xl text-sm font-bold" />
-                                 <Input type="date" value={newSubtaskDate} onChange={(e) => setNewSubtaskDate(e.target.value)} className="bg-black/30 border-white/20 h-12 rounded-2xl pl-4 text-sm font-bold" />
+                                 <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-primary/70 uppercase ml-2">Título de la Gestión</label>
+                                    <Input placeholder="Título de la subtarea..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/30 border-white/20 h-12 rounded-2xl text-sm font-bold" />
+                                 </div>
+                                 <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-primary/70 uppercase ml-2">Fecha Límite</label>
+                                    <Input type="date" value={newSubtaskDate} onChange={(e) => setNewSubtaskDate(e.target.value)} className="bg-black/30 border-white/20 h-12 rounded-2xl pl-4 text-sm font-bold" />
+                                 </div>
                               </div>
                               <div className="flex justify-end gap-4">
-                                 <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="rounded-2xl text-xs font-black uppercase tracking-widest">Cancelar</Button>
+                                 <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white">Cancelar</Button>
                                  <Button onClick={handleCreateSubtask} className="rounded-2xl bg-primary text-primary-foreground font-black uppercase text-xs tracking-widest px-10">CREAR GESTIÓN</Button>
                               </div>
                            </div>
@@ -309,8 +379,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          ))}
                          <div className="flex items-center gap-5 bg-white/[0.03] border-2 border-dashed border-white/20 rounded-3xl p-3 pl-8 hover:border-primary/50 transition-all group shadow-inner">
                             <Plus className="h-6 w-6 text-slate-600" />
-                            <Input placeholder="Añadir paso rápido..." value={newChecklist} onChange={(e) => setNewChecklist(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()} className="bg-transparent border-none focus:ring-0 text-[15px] font-bold p-0 h-14" />
-                            <Button size="lg" onClick={handleAddChecklist} className="rounded-2xl h-12 px-8 bg-primary/20 text-primary hover:bg-primary/30 border-2 border-primary/20 font-black uppercase text-[11px] tracking-widest shadow-md">AÑADIR</Button>
+                            <Input placeholder="Añadir paso rápido a la lista de gestión..." value={newChecklist} onChange={(e) => setNewChecklist(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()} className="bg-transparent border-none focus:ring-0 text-[15px] font-bold p-0 h-14" />
+                            <Button size="lg" onClick={handleAddChecklist} className="rounded-2xl h-12 px-8 bg-primary/20 text-primary hover:bg-primary/30 border-2 border-primary/20 font-black uppercase text-[11px] tracking-widest shadow-md">AÑADIR PASO</Button>
                          </div>
                       </div>
                    </div>
