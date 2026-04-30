@@ -106,7 +106,7 @@ export default function ProjectDashboardPage() {
   const [clickupToken, setClickupToken] = useState<string>(localStorage.getItem('clickup_token') || '');
 
   useEffect(() => {
-    console.log("🚀 Judicial Dashboard Expert Engine v2.1 Loaded");
+    console.log("🚀 Judicial Dashboard Expert Engine v2.2 Loaded");
     fetchInitialData();
     getUsers().then(setUsers).catch(console.error);
   }, []);
@@ -171,7 +171,8 @@ export default function ProjectDashboardPage() {
     setDateRange({ start, end });
   };
 
-  const filteredTasks = useMemo(() => {
+  // Tareas filtradas por jerarquía y búsqueda (SIN FECHA para el calendario)
+  const baseFilteredTasks = useMemo(() => {
     return (tasks || []).filter(t => {
       if (selectedListId && t.list_id !== selectedListId) return false;
       
@@ -197,7 +198,14 @@ export default function ProjectDashboardPage() {
         const matchesList = t.assignees?.some(a => (a.nombre || a.username) === responsibleFilter);
         if (!matchesName && !matchesList) return false;
       }
-      
+
+      return true;
+    });
+  }, [tasks, selectedListId, selectedFolderId, selectedWorkspaceId, workspaces, searchTerm, responsibleFilter]);
+
+  // Tareas filtradas por jerarquía, búsqueda Y FECHA (Para Tablero, Lista y Dashboard)
+  const filteredTasks = useMemo(() => {
+    return baseFilteredTasks.filter(t => {
       if (dateFilterType !== "all" && t.due_date) {
         const d = new Date(t.due_date);
         if (dateRange.start && d < startOfDay(new Date(dateRange.start))) return false;
@@ -205,10 +213,9 @@ export default function ProjectDashboardPage() {
       } else if (dateFilterType !== "all" && !t.due_date) {
         return false;
       }
-
       return true;
     });
-  }, [tasks, selectedListId, selectedFolderId, selectedWorkspaceId, workspaces, searchTerm, responsibleFilter, dateRange, dateFilterType]);
+  }, [baseFilteredTasks, dateRange, dateFilterType]);
 
   const dynamicBoardColumns = useMemo(() => {
     const allStatuses = Array.from(new Set(tasks.map(t => t.status || 'ABIERTO')));
@@ -239,13 +246,6 @@ export default function ProjectDashboardPage() {
   }, [tasks]);
 
   const parentTasks = filteredTasks.filter(t => !t.parent_id);
-  const subtasksMap = filteredTasks.reduce((acc, t) => {
-    if (t.parent_id) {
-       if (!acc[t.parent_id]) acc[t.parent_id] = [];
-       acc[t.parent_id].push(t);
-    }
-    return acc;
-  }, {} as Record<number, TaskType[]>);
 
   const statsByAssignee = useMemo(() => {
     const map: Record<string, number> = {};
@@ -272,7 +272,7 @@ export default function ProjectDashboardPage() {
   }, [filteredTasks, dynamicBoardColumns]);
 
   const calendarEvents = useMemo(() => {
-    return filteredTasks
+    return baseFilteredTasks // El calendario usa las tareas SIN el filtro de fecha del header
       .filter(t => t.due_date && !isNaN(new Date(t.due_date).getTime()))
       .map(t => ({
         id: t.id,
@@ -281,7 +281,7 @@ export default function ProjectDashboardPage() {
         end: new Date(t.due_date!),
         resource: t,
       }));
-  }, [filteredTasks]);
+  }, [baseFilteredTasks]);
 
   const dashboardMetrics = useMemo(() => {
     const now = new Date();
@@ -684,7 +684,7 @@ export default function ProjectDashboardPage() {
                                       <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Carga por Abogado</CardTitle>
                                    </CardHeader>
                                    <CardContent className="p-4 flex-1 h-[450px]">
-                                      <ResponsiveContainer width="100%" height="100%">
+                                      <ResponsiveContainer width="100%" height="100%" key={`pie-${activeTab}`}>
                                          <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                             <Pie data={statsByAssignee} cx="50%" cy="45%" innerRadius={70} outerRadius={100} paddingAngle={2} dataKey="value" stroke="none">
                                                {statsByAssignee.map((entry, index) => (
@@ -709,7 +709,7 @@ export default function ProjectDashboardPage() {
                                       <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Distribución de Estados</CardTitle>
                                    </CardHeader>
                                    <CardContent className="p-4 flex-1 h-[450px]">
-                                      <ResponsiveContainer width="100%" height="100%">
+                                      <ResponsiveContainer width="100%" height="100%" key={`bar-${activeTab}`}>
                                          <BarChart data={statsByStatus} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
                                             <XAxis 
