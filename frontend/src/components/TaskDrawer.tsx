@@ -4,7 +4,8 @@ import {
   Clock, Tag, Paperclip, MessageSquare, Plus, ChevronRight, 
   Send, Trash2, ListChecks, Zap, Flag, AlertCircle, Edit3,
   UserCheck, Search, Activity, CornerDownRight, Smile, MoreHorizontal,
-  ChevronDown, CalendarDays, Layout, Check, Trash, RefreshCw
+  ChevronDown, CalendarDays, Layout, Check, Trash, RefreshCw,
+  Play, Settings, Hash, Paperclip as AttachmentIcon, MessageCircle
 } from "lucide-react";
 import {
   Sheet,
@@ -39,6 +40,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -79,21 +81,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setEditedDueDate(task.due_date ? format(new Date(task.due_date), 'yyyy-MM-dd') : '');
       refreshTask();
       
-      // Cargar TODOS los usuarios para asignación (Abogados)
       getUsers().then(res => setUsers(Array.isArray(res) ? res : [])).catch(console.error);
-      
-      // Cargar Etiquetas con fallback
-      getTags().then(res => {
-        if (res && Array.isArray(res) && res.length > 0) {
-          setAllTags(res);
-        } else if (task.tags) {
-          setAllTags(task.tags);
-        }
-      }).catch(() => {
-        if (task.tags) setAllTags(task.tags);
-      });
-
-      // Cargar Estados
+      getTags().then(res => setAllTags(Array.isArray(res) ? res : [])).catch(console.error);
       getStatuses().then(res => setAllSystemStatuses(Array.isArray(res) ? res : [])).catch(console.error);
     }
   }, [task, open]);
@@ -192,330 +181,407 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   if (!displayTask) return null;
 
   const statusOptions = Array.from(new Set([
-    'ABIERTO', 'TO DO', 'IN PROGRESS', 'PENDIENTE', 'ALMP', '468', 'NOT PERSONAL', 'NOT AVISO', 'EMPLAZAMIENTO', 'LIQUIDACION', 'AVALUO', 'REMATE', 'COMPLETO', 'CLOSED',
+    'ABIERTO', 'TO DO', 'IN PROGRESS', 'PENDIENTE', 'ALMP', '468', 'NOT PERSONAL', 'LIQUIDACION', 'REMATE', 'COMPLETO', 'CLOSED',
     ...(allSystemStatuses || []),
     ...(propStatuses || [])
   ])).filter(Boolean);
 
   const currentStatus = (displayTask.status || 'ABIERTO').toUpperCase();
+  
+  const completedChecklist = displayTask.checklists?.filter(c => c.is_completed).length || 0;
+  const totalChecklist = displayTask.checklists?.length || 0;
+  const checklistProgress = totalChecklist > 0 ? (completedChecklist / totalChecklist) * 100 : 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[1100px] p-0 bg-[#0f1115] border-white/10 text-slate-100 flex flex-col shadow-2xl">
+      <SheetContent className="sm:max-w-[1200px] p-0 bg-[#111111] border-none text-[#d1d1d1] flex flex-col shadow-2xl font-sans">
         <SheetHeader className="sr-only">
-          <SheetTitle>Consola de Gestión Judicial Expert</SheetTitle>
+          <SheetTitle>ClickUp Interface Sync</SheetTitle>
         </SheetHeader>
         
         <div className="flex flex-1 overflow-hidden h-full">
-          <div className="flex-[1.8] flex flex-col border-r border-white/5 overflow-hidden bg-[#0f1115]">
-             <ScrollArea className="flex-1">
-                <div className="p-8 space-y-10">
-                   {/* Top Header Row */}
-                   <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                         <Badge className="bg-primary/20 text-primary border-primary/30 font-black px-4 py-1.5 uppercase text-[9px] rounded-lg shadow-lg">
-                           ID: {displayTask.clickup_id || displayTask.id}
-                         </Badge>
-                         <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20 text-[9px] font-black text-green-400">
-                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                            SINCRONIZADO
-                         </div>
-                      </div>
+          {/* LEFT COLUMN: TASK DETAILS */}
+          <div className="flex-[2.2] flex flex-col overflow-hidden bg-[#111111]">
+             <ScrollArea className="flex-1 px-10 pt-8 pb-20">
+                <div className="space-y-10 max-w-[900px] mx-auto">
+                   
+                   {/* Top Breadcrumb & Actions */}
+                   <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
                       <div className="flex items-center gap-2">
-                         <Button variant="ghost" size="sm" onClick={refreshTask} disabled={isLoading} className="h-8 rounded-lg text-[9px] font-black uppercase text-slate-500">
-                            <RefreshCw className={cn("h-3 w-3 mr-2", isLoading && "animate-spin")} /> Refrescar
-                         </Button>
-                         <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="rounded-full hover:bg-white/5">
-                           <X className="h-6 w-6" />
+                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#1a1a1a] rounded hover:bg-[#252525] cursor-pointer transition-colors border border-transparent hover:border-white/10">
+                            <Badge className="h-4 w-4 bg-[#2da44e] rounded-sm p-0 flex items-center justify-center text-[10px] text-white">
+                               <Check className="h-3 w-3" />
+                            </Badge>
+                            <span className="text-gray-300">Tarea</span>
+                            <ChevronDown className="h-3 w-3" />
+                         </div>
+                         <span className="opacity-30">/</span>
+                         <span className="text-gray-400 font-bold">{displayTask.clickup_id || displayTask.id}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                         <RefreshCw className={cn("h-4 w-4 cursor-pointer hover:text-white transition-all", isLoading && "animate-spin")} onClick={refreshTask} />
+                         <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 text-gray-500 hover:text-white">
+                           <X className="h-5 w-5" />
                          </Button>
                       </div>
                    </div>
 
-                   {/* Main Selector Row */}
-                   <div className="space-y-8">
-                      <div className="flex items-center gap-4 flex-wrap">
-                        {/* Estado Selector */}
-                        <Select value={statusOptions.includes(currentStatus) ? currentStatus : undefined} onValueChange={(v) => handleSave({ status: v })}>
-                          <SelectTrigger className="w-auto min-w-[160px] h-10 px-5 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest bg-primary/10 text-primary shadow-xl hover:bg-primary/20 transition-all">
-                            <SelectValue placeholder={currentStatus} />
-                          </SelectTrigger>
-                          <SelectContent className="bg-[#1c1f26] border-white/10 text-white shadow-2xl">
-                            {statusOptions.map(s => (
-                              <SelectItem key={s} value={s} className="uppercase text-[10px] font-black py-3 tracking-widest">{s}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                   {/* Task Title (Radicado) */}
+                   <div className="space-y-1">
+                      <input 
+                        className="w-full bg-transparent text-3xl font-bold tracking-tight border-none focus:ring-0 p-0 text-white placeholder:text-gray-800"
+                        value={editedTitle}
+                        onChange={(e) => setEditedTitle(e.target.value)}
+                        onBlur={() => handleSave({ title: editedTitle })}
+                      />
+                   </div>
 
-                        {/* Abogados Selector */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="flex items-center gap-3 px-5 py-2.5 bg-white/5 rounded-2xl hover:bg-white/10 transition-all text-[11px] font-black uppercase tracking-widest text-slate-200 border border-white/10 shadow-lg">
-                               <UserIcon className="h-4 w-4 text-primary" />
-                               <span className="max-w-[300px] truncate">
-                                 {displayTask.assignees && displayTask.assignees.length > 0 
-                                   ? displayTask.assignees.map(a => a.nombre || a.username).join(', ') 
-                                   : displayTask.assignee_name || 'Asignar Abogados'}
-                               </span>
-                               <ChevronDown className="h-4 w-4 opacity-50" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-80 p-3 bg-[#1c1f26] border-white/10 text-white rounded-[2rem] shadow-2xl">
-                             <div className="px-3 pb-3 border-b border-white/5 mb-2">
-                                <span className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Seleccionar Abogados</span>
-                             </div>
-                             <ScrollArea className="h-[350px]">
-                                <div className="space-y-1">
-                                   {users.map(u => (
-                                     <div key={u.id} className="flex items-center gap-3 p-3 hover:bg-white/10 rounded-2xl cursor-pointer transition-all border border-transparent" onClick={() => toggleAssignee(u.id)}>
-                                        <Checkbox checked={displayTask.assignees?.some(a => a.id === u.id)} className="h-5 w-5 border-white/30 data-[state=checked]:bg-primary" />
-                                        <div className="flex flex-col">
-                                           <span className="text-sm font-bold">{(u.nombre || u.username)}</span>
-                                           <span className="text-[9px] text-slate-500 font-black uppercase">{u.is_admin ? 'Administrador' : 'Abogado'}</span>
-                                        </div>
-                                     </div>
-                                   ))}
-                                   {users.length === 0 && <div className="p-10 text-center text-[10px] font-black text-slate-600 uppercase italic">Cargando equipo...</div>}
-                                </div>
-                             </ScrollArea>
-                          </PopoverContent>
-                        </Popover>
+                   {/* Meta-info Grid (ClickUp Style) */}
+                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-4 text-[13px]">
+                      {/* Estado */}
+                      <div className="flex items-center gap-4 group">
+                         <div className="w-24 text-gray-500 flex items-center gap-2">
+                            <Activity className="h-3.5 w-3.5" /> Estado
+                         </div>
+                         <Select value={statusOptions.includes(currentStatus) ? currentStatus : undefined} onValueChange={(v) => handleSave({ status: v })}>
+                            <SelectTrigger className="h-7 w-auto min-w-[120px] bg-[#2da44e] hover:bg-[#34bc5a] text-white text-[11px] font-bold uppercase rounded-md border-none px-3 transition-colors flex items-center gap-1">
+                               <SelectValue placeholder={currentStatus} />
+                               <ChevronDown className="h-3 w-3" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#1e1e1e] border-white/10 text-white">
+                               {statusOptions.map(s => (
+                                 <SelectItem key={s} value={s} className="uppercase text-[11px] font-bold py-2 tracking-widest">{s}</SelectItem>
+                               ))}
+                            </SelectContent>
+                         </Select>
+                      </div>
 
-                        {/* Fecha Vencimiento */}
-                        <div className="flex items-center gap-3 px-5 py-2.5 bg-white/5 rounded-2xl border border-white/10 shadow-lg hover:bg-white/10 transition-all">
-                            <CalendarIcon className="h-4 w-4 text-primary" />
+                      {/* Personas Asignadas */}
+                      <div className="flex items-center gap-4 group">
+                         <div className="w-24 text-gray-500 flex items-center gap-2">
+                            <UserIcon className="h-3.5 w-3.5" /> Personas
+                         </div>
+                         <Popover>
+                            <PopoverTrigger asChild>
+                               <div className="flex items-center gap-1.5 cursor-pointer hover:bg-white/5 p-1 rounded pr-2 transition-colors">
+                                  <div className="flex -space-x-1.5">
+                                     {displayTask.assignees && displayTask.assignees.length > 0 ? (
+                                        displayTask.assignees.map(a => (
+                                          <div key={a.id} className="h-6 w-6 rounded-full bg-[#ff7b72] flex items-center justify-center text-[10px] font-black text-white ring-2 ring-[#111]">{(a.nombre || a.username)[0]}</div>
+                                        ))
+                                     ) : (
+                                        <div className="h-6 w-6 rounded-full bg-gray-800 border-2 border-dashed border-gray-600 flex items-center justify-center"><UserIcon className="h-3 w-3 text-gray-500" /></div>
+                                     )}
+                                  </div>
+                                  <span className="text-[11px] text-gray-300 font-medium truncate max-w-[100px]">
+                                     {displayTask.assignees && displayTask.assignees.length > 0 
+                                       ? displayTask.assignees.map(a => a.nombre || a.username).join(', ') 
+                                       : 'Sin asignar'}
+                                  </span>
+                               </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-2 bg-[#1e1e1e] border-white/10 text-white rounded-lg shadow-2xl">
+                               <ScrollArea className="h-[250px]">
+                                  {users.map(u => (
+                                    <div key={u.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded cursor-pointer transition-colors" onClick={() => toggleAssignee(u.id)}>
+                                       <div className="flex items-center gap-2">
+                                          <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px]">{u.nombre?.[0]}</div>
+                                          <span className="text-xs">{u.nombre || u.username}</span>
+                                       </div>
+                                       {displayTask.assignees?.some(a => a.id === u.id) && <Check className="h-3 w-3 text-[#2da44e]" />}
+                                    </div>
+                                  ))}
+                               </ScrollArea>
+                            </PopoverContent>
+                         </Popover>
+                      </div>
+
+                      {/* Fechas */}
+                      <div className="flex items-center gap-4">
+                         <div className="w-24 text-gray-500 flex items-center gap-2">
+                            <CalendarIcon className="h-3.5 w-3.5" /> Fechas
+                         </div>
+                         <div className="flex items-center gap-2 bg-[#1a1a1a] p-1.5 rounded-md border border-white/5 hover:border-white/20 transition-all">
                             <input 
                               type="date" 
-                              className="bg-transparent border-none focus:ring-0 text-[11px] font-black uppercase text-slate-200 p-0 w-[120px]"
+                              className="bg-transparent border-none focus:ring-0 text-[11px] font-bold text-gray-300 p-0 w-[100px]"
                               value={editedDueDate}
                               onChange={(e) => {
                                 setEditedDueDate(e.target.value);
                                 handleSave({ due_date: e.target.value } as any);
                               }}
                             />
-                        </div>
-
-                        {/* Etiquetas Selector */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="flex items-center gap-2 px-5 py-2.5 bg-white/5 rounded-2xl hover:bg-white/10 transition-all text-[10px] font-black uppercase tracking-widest text-slate-400 border border-white/10 shadow-lg">
-                               <Tag className="h-4 w-4" /> + ETIQUETAS
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-72 p-3 bg-[#1c1f26] border-white/10 text-white rounded-[2rem] shadow-2xl">
-                             <ScrollArea className="h-[300px]">
-                                <div className="space-y-1">
-                                   {allTags.map(t => (
-                                     <div key={t.id} className="flex items-center justify-between p-3 hover:bg-white/10 rounded-2xl cursor-pointer transition-all" onClick={() => toggleTag(t.name)}>
-                                        <div className="flex items-center gap-3">
-                                           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color || '#3b82f6' }} />
-                                           <span className="text-xs font-bold">{t.name}</span>
-                                        </div>
-                                        {displayTask.tags?.some(gt => gt.name === t.name) && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                                     </div>
-                                   ))}
-                                   {allTags.length === 0 && <div className="p-10 text-center text-[10px] font-black text-slate-600 uppercase italic">Sin etiquetas disponibles</div>}
-                                </div>
-                             </ScrollArea>
-                          </PopoverContent>
-                        </Popover>
+                         </div>
                       </div>
 
-                      {/* Radicado / Title */}
-                      <div className="space-y-1 relative">
-                        <input 
-                          className="w-full bg-transparent text-2xl font-black tracking-tight border-none focus:ring-0 p-0 text-white placeholder:text-slate-800"
-                          value={editedTitle}
-                          onChange={(e) => setEditedTitle(e.target.value)}
-                          onBlur={() => handleSave({ title: editedTitle })}
-                        />
-                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                           <Activity className="h-4 w-4 text-primary" /> EXPEDIENTE RADICADO
-                        </div>
+                      {/* Etiquetas */}
+                      <div className="flex items-center gap-4">
+                         <div className="w-24 text-gray-500 flex items-center gap-2">
+                            <Tag className="h-3.5 w-3.5" /> Etiquetas
+                         </div>
+                         <Popover>
+                            <PopoverTrigger asChild>
+                               <div className="flex flex-wrap gap-1.5 cursor-pointer">
+                                  {displayTask.tags && displayTask.tags.length > 0 ? (
+                                     displayTask.tags.map(t => (
+                                       <Badge key={t.id} style={{ backgroundColor: t.color || '#3b82f6', color: '#fff' }} className="h-6 text-[10px] font-bold px-2.5 rounded-full border-none">
+                                          {t.name}
+                                       </Badge>
+                                     ))
+                                  ) : (
+                                     <div className="text-gray-600 hover:text-gray-400 flex items-center gap-1 transition-colors"><Plus className="h-3 w-3" /> Añadir</div>
+                                  )}
+                               </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-2 bg-[#1e1e1e] border-white/10 text-white rounded-lg">
+                               <ScrollArea className="h-[200px]">
+                                  {allTags.map(t => (
+                                    <div key={t.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded cursor-pointer transition-colors" onClick={() => toggleTag(t.name)}>
+                                       <div className="flex items-center gap-2">
+                                          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color || '#3b82f6' }} />
+                                          <span className="text-xs">{t.name}</span>
+                                       </div>
+                                       {displayTask.tags?.some(gt => gt.name === t.name) && <Check className="h-3 w-3 text-[#2da44e]" />}
+                                    </div>
+                                  ))}
+                               </ScrollArea>
+                            </PopoverContent>
+                         </Popover>
                       </div>
                    </div>
 
-                   {/* Tags Cloud */}
-                   <div className="flex flex-wrap gap-2.5">
-                      {displayTask.tags?.map(tag => (
-                        <Badge key={tag.id} style={{ backgroundColor: `${tag.color || '#3b82f6'}33`, color: tag.color || '#3b82f6', borderColor: `${tag.color || '#3b82f6'}55` }} className="text-[9px] py-1.5 px-4 font-black uppercase tracking-widest rounded-xl border-2 shadow-md">
-                          {tag.name}
-                        </Badge>
-                      ))}
-                   </div>
-
-                   {/* Info Matrix */}
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      <div className="p-10 bg-white/[0.03] border border-white/10 rounded-[2.5rem] space-y-6 shadow-2xl">
-                         <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] flex items-center gap-3">
-                           <Layout className="h-5 w-5 text-primary" /> DATOS DE CARPETA
-                         </div>
-                         <div className="space-y-5">
-                            {(() => {
-                               try {
-                                 const fields = JSON.parse(displayTask.custom_fields || '[]');
-                                 if (Array.isArray(fields) && fields.length > 0) {
-                                   return fields.map((f: any, idx: number) => (
-                                     <div key={idx} className="flex justify-between items-center py-4 border-b border-white/5 group">
-                                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-tight group-hover:text-slate-300 transition-colors">{f.name}</span>
-                                        <span className="text-[13px] text-white font-black bg-white/5 px-4 py-1.5 rounded-xl border border-white/10 shadow-inner">{f.value || f.text_value || '-'}</span>
-                                     </div>
-                                   ));
-                                 }
-                               } catch (e) {}
-                               return <div className="p-10 text-center text-[10px] font-black text-slate-600 uppercase italic tracking-widest bg-black/20 rounded-3xl border border-dashed border-white/10">No se encontraron campos técnicos</div>;
-                            })()}
-                         </div>
-                      </div>
-                      <div className="p-10 bg-white/[0.03] border border-white/10 rounded-[2.5rem] space-y-6 flex flex-col justify-between shadow-2xl relative overflow-hidden group">
-                         <div className="absolute -right-10 -top-10 h-40 w-40 bg-primary/5 rounded-full blur-[60px] group-hover:bg-primary/10 transition-all" />
-                         <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] flex items-center gap-3">
-                           <Zap className="h-5 w-5 text-yellow-500" /> VÍNCULO JURÍDICO
-                         </div>
-                         <div className="space-y-5">
-                            <div className="text-lg font-black text-primary font-mono tracking-wider bg-black/40 p-6 rounded-3xl border border-primary/20 shadow-inner truncate">
-                               {displayTask.case_radicado || '11001400305420250052800'}
-                            </div>
-                            <Button variant="outline" className="w-full h-12 rounded-2xl bg-white/5 border-white/10 text-[11px] font-black uppercase tracking-widest text-slate-300 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all flex items-center gap-3">
-                               <UserCheck className="h-5 w-5" /> VER DETALLES DEL PROCESO <ChevronRight className="h-4 w-4 ml-auto" />
-                            </Button>
-                         </div>
-                      </div>
-                   </div>
-
-                   {/* Actualización Jurídica */}
-                   <div className="space-y-6">
-                      <div className="flex items-center gap-3 text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">
-                        <Edit3 className="h-5 w-5 text-primary" /> ACTUALIZACIÓN JURÍDICA
+                   {/* Description (Rich text feel) */}
+                   <div className="space-y-4 pt-4 border-t border-white/5">
+                      <div className="flex items-center gap-2 text-gray-500 group cursor-pointer hover:text-gray-300 transition-colors">
+                         <MoreHorizontal className="h-4 w-4" />
+                         <span className="text-xs font-medium italic opacity-50">Resumen inteligente de Brain...</span>
                       </div>
                       <Textarea 
-                        className="min-h-[200px] bg-white/[0.03] border-2 border-white/10 rounded-[2.5rem] p-10 text-[15px] font-medium leading-relaxed text-slate-100 focus:border-primary/50 transition-all shadow-2xl placeholder:text-slate-800"
-                        placeholder="Ingresa los avances técnicos o memoriales radicados..."
+                        className="min-h-[160px] bg-transparent border-none p-0 text-[14px] leading-relaxed text-gray-300 focus:ring-0 placeholder:text-gray-700 font-sans"
+                        placeholder="Escribe una descripción o pulsa '/' para comandos..."
                         value={editedDesc}
                         onChange={(e) => setEditedDesc(e.target.value)}
                         onBlur={() => handleSave({ description: editedDesc })}
                       />
                    </div>
 
-                   {/* Listado Gestión */}
-                   <div className="space-y-10">
-                      <div className="flex items-center justify-between bg-white/[0.02] p-8 rounded-[2rem] border border-white/10 shadow-2xl">
-                         <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] flex items-center gap-3">
-                            <ListChecks className="h-6 w-6 text-primary" /> LISTADO DE GESTIÓN TÉCNICA
+                   {/* Campos Section */}
+                   <div className="space-y-4 pt-6 border-t border-white/5">
+                      <div className="flex items-center justify-between group">
+                         <div className="flex items-center gap-2 text-gray-400 font-bold text-[13px]">
+                            <ChevronDown className="h-4 w-4" /> Campos
                          </div>
-                         <Button size="sm" onClick={() => setShowSubtaskForm(true)} className="h-10 rounded-2xl bg-primary text-primary-foreground font-black text-[11px] uppercase tracking-widest px-8 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
-                            + NUEVA GESTIÓN
-                         </Button>
+                         <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                            <Search className="h-3.5 w-3.5 text-gray-500" />
+                            <Plus className="h-3.5 w-3.5 text-gray-500" />
+                         </div>
                       </div>
-                      
-                      <div className="space-y-5">
-                         {showSubtaskForm && (
-                           <div className="p-10 bg-primary/5 border-2 border-primary/20 rounded-[3rem] space-y-8 shadow-2xl animate-in fade-in zoom-in duration-300">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-primary uppercase ml-3 tracking-widest">Actividad</label>
-                                    <Input placeholder="Ej: Radicar memorial de embargo..." value={newSubtaskTitle} onChange={(e) => setNewSubtaskTitle(e.target.value)} className="bg-black/50 border-white/10 h-14 rounded-2xl px-6 text-sm font-bold" />
-                                 </div>
-                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-primary uppercase ml-3 tracking-widest">Fecha Límite</label>
-                                    <Input type="date" value={newSubtaskDate} onChange={(e) => setNewSubtaskDate(e.target.value)} className="bg-black/50 border-white/10 h-14 rounded-2xl px-6 text-sm font-bold" />
-                                 </div>
-                              </div>
-                              <div className="flex justify-end gap-5">
-                                 <Button variant="ghost" onClick={() => setShowSubtaskForm(false)} className="rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-400">Cancelar</Button>
-                                 <Button onClick={handleCreateSubtask} className="h-12 rounded-2xl bg-primary text-primary-foreground font-black text-[11px] uppercase tracking-widest px-10 shadow-xl shadow-primary/20">GUARDAR GESTIÓN</Button>
-                              </div>
-                           </div>
-                         )}
+                      <div className="space-y-0.5">
+                         {(() => {
+                            try {
+                              const fields = JSON.parse(displayTask.custom_fields || '[]');
+                              if (Array.isArray(fields) && fields.length > 0) {
+                                return fields.map((f: any, idx: number) => (
+                                  <div key={idx} className="grid grid-cols-[160px_1fr] group hover:bg-white/5 p-2 rounded transition-colors text-[13px]">
+                                     <div className="flex items-center gap-3 text-gray-500">
+                                        <Hash className="h-3.5 w-3.5 opacity-40" />
+                                        <span className="truncate">{f.name}</span>
+                                     </div>
+                                     <div className="text-gray-200 font-medium px-4">{f.value || f.text_value || '-'}</div>
+                                  </div>
+                                ));
+                              }
+                            } catch (e) {}
+                            return <div className="text-[12px] text-gray-600 italic px-8">Sin campos personalizados</div>;
+                         })()}
+                      </div>
+                   </div>
 
+                   {/* Subtareas Section */}
+                   <div className="space-y-4 pt-6 border-t border-white/5">
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 text-gray-400 font-bold text-[13px]">
+                               <ChevronDown className="h-4 w-4" /> Subtareas
+                            </div>
+                            <span className="text-[11px] text-gray-600 font-medium">0 completada —</span>
+                            <div className="w-20 h-1 bg-gray-800 rounded-full overflow-hidden">
+                               <div className="h-full bg-[#2da44e]" style={{ width: '0%' }} />
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-4 text-gray-500">
+                            <div className="flex items-center gap-1 text-[11px] hover:text-white cursor-pointer"><Settings className="h-3.5 w-3.5" /> Ordenar</div>
+                            <div className="flex items-center gap-1 text-[11px] hover:text-white cursor-pointer"><Zap className="h-3.5 w-3.5 text-purple-400" /> Sugerir</div>
+                            <Plus className="h-4 w-4 hover:text-white cursor-pointer" onClick={() => setShowSubtaskForm(true)} />
+                         </div>
+                      </div>
+
+                      <div className="w-full">
+                         {/* Subtasks Header */}
+                         <div className="grid grid-cols-[1fr_100px_80px_100px] gap-4 px-4 py-2 border-b border-white/5 text-[10px] font-black uppercase text-gray-600 tracking-wider">
+                            <div>Nombre</div>
+                            <div className="text-center">Persona asig.</div>
+                            <div className="text-center">Prioridad</div>
+                            <div className="text-right">Fecha límite</div>
+                         </div>
+                         
+                         {/* Subtasks List */}
+                         <div className="space-y-1 mt-2">
+                            {displayTask.subtasks?.map(st => (
+                              <div key={st.id} className="grid grid-cols-[1fr_100px_80px_100px] gap-4 px-4 py-2.5 hover:bg-white/5 transition-all rounded cursor-pointer group text-[13px]">
+                                 <div className="flex items-center gap-3 text-gray-300">
+                                    <CheckCircle2 className="h-4 w-4 text-[#2da44e]" />
+                                    <span className="truncate">{st.title}</span>
+                                 </div>
+                                 <div className="flex justify-center">
+                                    <div className="h-6 w-6 rounded-full bg-gray-800 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-700">JS</div>
+                                 </div>
+                                 <div className="flex justify-center">
+                                    <Flag className="h-4 w-4 text-gray-600 group-hover:text-gray-400" />
+                                 </div>
+                                 <div className="text-right text-[11px] font-bold text-[#2da44e]">
+                                    {st.due_date ? format(new Date(st.due_date), 'd/M/yy') : '-'}
+                                 </div>
+                              </div>
+                            ))}
+                            <div className="px-4 py-3 text-gray-600 hover:text-gray-400 text-[13px] flex items-center gap-3 cursor-pointer group" onClick={() => setShowSubtaskForm(true)}>
+                               <Plus className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                               <span>Add Tarea</span>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Listas de control (Checklists) */}
+                   <div className="space-y-4 pt-6 border-t border-white/5">
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 text-gray-400 font-bold text-[13px]">
+                               <ChevronDown className="h-4 w-4" /> Listas de control
+                            </div>
+                            <span className="text-[11px] text-gray-600 font-medium">{completedChecklist} abierta —</span>
+                            <div className="w-24 h-1 bg-gray-800 rounded-full overflow-hidden">
+                               <div className="h-full bg-[#3b82f6] transition-all duration-500" style={{ width: `${checklistProgress}%` }} />
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-4 text-gray-500">
+                            <Layout className="h-4 w-4 hover:text-white cursor-pointer" />
+                            <Plus className="h-4 w-4 hover:text-white cursor-pointer" />
+                         </div>
+                      </div>
+
+                      <div className="px-6 space-y-1">
+                         <div className="text-[11px] font-black text-gray-600 uppercase tracking-widest mb-3">Checklist</div>
                          {displayTask.checklists?.map(item => (
-                           <div key={item.id} className="flex items-center gap-6 p-7 bg-white/[0.03] border-2 border-white/5 rounded-[2rem] group hover:bg-white/[0.06] hover:border-white/10 transition-all shadow-xl">
+                           <div key={item.id} className="flex items-center gap-4 py-2 group hover:bg-white/[0.02] rounded px-2 transition-colors">
                               <Checkbox 
                                 checked={item.is_completed} 
                                 onCheckedChange={(v) => updateChecklistItem(item.id, { is_completed: !!v }).then(refreshTask)} 
-                                className="h-7 w-7 border-2 border-white/20 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500" 
+                                className="h-4 w-4 border-gray-600 data-[state=checked]:bg-[#3b82f6] data-[state=checked]:border-[#3b82f6]" 
                               />
-                              <span className={cn("text-[15px] flex-1 font-bold tracking-tight transition-all", item.is_completed ? "line-through text-slate-600" : "text-slate-100")}>
+                              <span className={cn("text-[13px] flex-1 font-medium text-gray-300", item.is_completed && "line-through text-gray-600")}>
                                 {item.content}
                               </span>
-                              <Button variant="ghost" size="icon" onClick={() => deleteChecklistItem(item.id).then(refreshTask)} className="h-10 w-10 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded-xl">
-                                 <Trash2 className="h-5 w-5" />
-                              </Button>
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                 <UserIcon className="h-3.5 w-3.5 text-gray-600 hover:text-gray-400 cursor-pointer" />
+                                 <Trash2 className="h-3.5 w-3.5 text-gray-600 hover:text-red-400 cursor-pointer" onClick={() => deleteChecklistItem(item.id).then(refreshTask)} />
+                              </div>
                            </div>
                          ))}
-
-                         <div className="flex items-center gap-5 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[2rem] p-3 pl-10 group hover:border-primary/40 transition-all shadow-inner">
-                            <Plus className="h-6 w-6 text-slate-700 group-hover:text-primary transition-colors" />
-                            <Input 
-                              placeholder="Añadir paso rápido a la lista de tareas..." 
-                              value={newChecklist} 
-                              onChange={(e) => setNewChecklist(e.target.value)} 
-                              onKeyDown={(e) => e.key === 'Enter' && handleAddChecklist()} 
-                              className="bg-transparent border-none focus:ring-0 text-sm font-bold h-14" 
-                            />
-                            <Button onClick={handleAddChecklist} className="h-12 rounded-2xl bg-white/5 hover:bg-white/10 text-[11px] font-black uppercase tracking-widest px-8 shadow-md">AÑADIR</Button>
+                         <div className="py-2 text-gray-600 hover:text-gray-400 text-[13px] flex items-center gap-3 cursor-pointer group px-2">
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Agregar elemento</span>
                          </div>
+                      </div>
+                   </div>
+
+                   {/* Footer Actions */}
+                   <div className="pt-10 border-t border-white/5 flex items-center gap-6">
+                      <div className="flex items-center gap-2 text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-[13px] font-medium">
+                         <AttachmentIcon className="h-4 w-4" /> Adjuntar archivo
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-[13px] font-medium">
+                         <Plus className="h-4 w-4" /> Relacionar elementos o agregar dependencias
                       </div>
                    </div>
                 </div>
              </ScrollArea>
           </div>
 
-          {/* Historial Panel */}
-          <div className="flex-1 flex flex-col bg-[#0b0d10] border-l border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden">
-             <div className="h-20 flex items-center px-10 border-b-2 border-white/5 font-black text-[11px] uppercase tracking-[0.3em] gap-10 bg-white/[0.02]">
-                <span className="text-primary border-b-4 border-primary h-full flex items-center">HISTORIAL DE ACTIVIDAD</span>
+          {/* RIGHT COLUMN: ACTIVITY */}
+          <div className="flex-1 flex flex-col bg-[#111111] border-l border-white/5">
+             {/* Activity Header */}
+             <div className="h-14 flex items-center justify-between px-6 border-b border-white/5">
+                <span className="text-[13px] font-bold text-gray-300">Activity</span>
+                <div className="flex items-center gap-3 text-gray-500">
+                   <Search className="h-4 w-4 hover:text-white cursor-pointer" />
+                   <RefreshCw className="h-4 w-4 hover:text-white cursor-pointer" />
+                   <Settings className="h-4 w-4 hover:text-white cursor-pointer" />
+                </div>
              </div>
 
-             <ScrollArea className="flex-1">
-                <div className="p-10 space-y-12">
+             <ScrollArea className="flex-1 px-6 py-6">
+                <div className="space-y-6">
                    {displayTask.comments?.map(comment => (
                      <div key={comment.id} className="group relative">
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.15em] text-slate-600 mb-4">
-                           <div className="flex items-center gap-3">
-                              <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20">{comment.user_name?.[0]}</div>
-                              <span className="text-slate-300">{(comment.user_name || 'Usuario System')}</span>
+                        <div className="flex items-center gap-2 text-[11px] mb-2">
+                           <div className="h-5 w-5 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-400">
+                              {comment.user_name?.[0]}
                            </div>
-                           <span className="opacity-50">{isValid(new Date(comment.created_at)) ? format(new Date(comment.created_at), "d MMM, h:mm a", { locale: es }) : ''}</span>
+                           <span className="text-gray-300 font-bold">{comment.user_name}</span>
+                           <span className="text-gray-500 text-[10px]">{isValid(new Date(comment.created_at)) ? format(new Date(comment.created_at), "d MMM 'a la(s)' p", { locale: es }) : ''}</span>
                         </div>
-                        {editingCommentId === comment.id ? (
-                           <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-                              <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-black/60 text-sm min-h-[100px] rounded-2xl border-primary/30 p-5 font-medium leading-relaxed" />
-                              <div className="flex justify-end gap-3">
-                                 <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)} className="rounded-xl text-[10px] font-black uppercase">Cancelar</Button>
-                                 <Button size="sm" onClick={() => handleUpdateComment(comment.id)} className="rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase px-6">Guardar Cambios</Button>
-                              </div>
-                           </div>
-                        ) : (
-                           <div className="p-7 bg-white/[0.04] border-2 border-white/5 rounded-[2.5rem] rounded-tl-none text-[14px] font-medium text-slate-200 leading-relaxed relative shadow-2xl group-hover:bg-white/[0.06] transition-all">
-                              {comment.content}
-                              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all flex gap-2">
-                                 <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="h-8 w-8 rounded-xl bg-black/40 flex items-center justify-center hover:text-primary transition-colors border border-white/5"><Edit3 className="h-4 w-4" /></button>
-                                 <button onClick={() => handleDeleteComment(comment.id)} className="h-8 w-8 rounded-xl bg-black/40 flex items-center justify-center hover:text-red-500 transition-colors border border-white/5"><Trash className="h-4 w-4" /></button>
-                              </div>
-                           </div>
-                        )}
+                        
+                        <div className="p-4 bg-[#1e1e1e] border border-white/5 rounded-lg text-[13px] text-gray-300 leading-relaxed relative group-hover:border-white/10 transition-all">
+                           {editingCommentId === comment.id ? (
+                             <div className="space-y-2">
+                                <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-black/40 text-xs border-none focus:ring-1 focus:ring-primary/40" />
+                                <div className="flex justify-end gap-2">
+                                   <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)} className="h-6 text-[10px]">Cancelar</Button>
+                                   <Button size="sm" onClick={() => handleUpdateComment(comment.id)} className="h-6 text-[10px] bg-primary">OK</Button>
+                               </div>
+                             </div>
+                           ) : (
+                             <>
+                               {comment.content}
+                               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all flex gap-1">
+                                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="p-1 hover:text-white text-gray-500"><Edit3 className="h-3 w-3" /></button>
+                                  <button onClick={() => handleDeleteComment(comment.id)} className="p-1 hover:text-red-500 text-gray-500"><Trash2 className="h-3 w-3" /></button>
+                               </div>
+                               <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-4 text-gray-500 text-[11px]">
+                                  <div className="flex items-center gap-1 hover:text-white cursor-pointer"><Smile className="h-3.5 w-3.5" /></div>
+                                  <div className="hover:text-white cursor-pointer font-medium">Respuesta</div>
+                               </div>
+                             </>
+                           )}
+                        </div>
                      </div>
                    ))}
-                   {(!displayTask.comments || displayTask.comments.length === 0) && (
-                      <div className="p-20 text-center space-y-4 opacity-20">
-                         <MessageSquare className="h-16 w-16 mx-auto text-slate-500" />
-                         <p className="text-[10px] font-black uppercase tracking-widest">Sin actividad registrada</p>
-                      </div>
-                   )}
                 </div>
              </ScrollArea>
 
-             <div className="p-10 border-t-2 border-white/5 bg-[#16181d]/90 backdrop-blur-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
-                <div className="relative group/input">
+             {/* Comment Input Footer */}
+             <div className="p-4 bg-[#111111] border-t border-white/5">
+                <div className="bg-[#1e1e1e] border border-white/5 rounded-lg p-3 space-y-3 shadow-inner focus-within:border-white/20 transition-all">
                    <Textarea 
                      value={newComment}
                      onChange={(e) => setNewComment(e.target.value)}
-                     placeholder="Escribe una actualización técnica..."
-                     className="bg-black/60 border-2 border-white/10 focus:border-primary/40 rounded-[2.5rem] pr-20 min-h-[140px] resize-none text-[15px] font-bold p-8 shadow-2xl transition-all placeholder:text-slate-800"
+                     placeholder="Escribe un comentario..."
+                     className="bg-transparent border-none focus:ring-0 p-0 text-[13px] min-h-[40px] resize-none text-gray-300"
                    />
-                   <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()} className="absolute bottom-6 right-6 h-14 w-14 rounded-[1.75rem] bg-primary shadow-2xl shadow-primary/40 hover:scale-110 active:scale-95 transition-all">
-                     <Send className="h-7 w-7 text-white" />
-                   </Button>
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-gray-500">
+                         <Plus className="h-4 w-4 hover:text-white cursor-pointer" />
+                         <div className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/5 cursor-pointer text-[11px] font-bold">
+                            <MessageCircle className="h-3.5 w-3.5" /> Comentario <ChevronDown className="h-3 w-3" />
+                         </div>
+                         <Zap className="h-4 w-4 text-purple-400 hover:text-purple-300 cursor-pointer" />
+                         <AttachmentIcon className="h-4 w-4 hover:text-white cursor-pointer" />
+                      </div>
+                      <Button size="icon" onClick={handleAddComment} disabled={!newComment.trim()} className={cn("h-7 w-7 rounded bg-transparent text-gray-600 hover:bg-primary hover:text-white transition-all", newComment.trim() && "text-primary hover:bg-primary/20")}>
+                        <Send className="h-4 w-4" />
+                      </Button>
+                   </div>
                 </div>
              </div>
           </div>
