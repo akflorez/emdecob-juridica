@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sqlalchemy import create_engine, text
-from backend.database import DATABASE_URL
+from backend.db import DATABASE_URL
 from backend.models import Base
 
 def migrate():
