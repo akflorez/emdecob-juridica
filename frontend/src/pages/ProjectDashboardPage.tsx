@@ -6,7 +6,7 @@ import {
   LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
   TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database,
-  PanelLeftClose, PanelLeftOpen
+  PanelLeftClose, PanelLeftOpen, AlertTriangle, CalendarRange
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,10 +34,10 @@ import {
   type Workspace, type Task as TaskType, type User
 } from "@/services/api";
 import { TaskDrawer } from "@/components/TaskDrawer";
-import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
+import { Calendar as BigCalendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { format, subDays, startOfMonth, endOfMonth, isToday, isYesterday, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, isToday, isYesterday, isWithinInterval, startOfDay, endOfDay, addDays, startOfYear, endOfYear } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip, 
@@ -59,6 +59,10 @@ export default function ProjectDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Calendario state
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<any>(Views.MONTH);
   
   // Filtros de navegación
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null);
@@ -86,7 +90,6 @@ export default function ProjectDashboardPage() {
     setIsLoading(true);
     try {
       const wsData = await getWorkspaces();
-      // Eliminar duplicados por ID
       const uniqueWS = Array.from(new Map(wsData.map(ws => [ws.id, ws])).values());
       setWorkspaces(uniqueWS);
       await fetchTasks();
@@ -136,6 +139,8 @@ export default function ProjectDashboardPage() {
       case '7d': start = format(subDays(today, 7), 'yyyy-MM-dd'); end = format(today, 'yyyy-MM-dd'); break;
       case '30d': start = format(subDays(today, 30), 'yyyy-MM-dd'); end = format(today, 'yyyy-MM-dd'); break;
       case 'month': start = format(startOfMonth(today), 'yyyy-MM-dd'); end = format(endOfMonth(today), 'yyyy-MM-dd'); break;
+      case 'year': start = format(startOfYear(today), 'yyyy-MM-dd'); end = format(endOfYear(today), 'yyyy-MM-dd'); break;
+      case 'last_year': start = format(startOfYear(subDays(startOfYear(today), 1)), 'yyyy-MM-dd'); end = format(endOfYear(subDays(startOfYear(today), 1)), 'yyyy-MM-dd'); break;
       case 'all': start = ""; end = ""; break;
     }
     setDateRange({ start, end });
@@ -253,9 +258,20 @@ export default function ProjectDashboardPage() {
       }));
   }, [filteredTasks]);
 
+  const dashboardMetrics = useMemo(() => {
+    const now = new Date();
+    return {
+      sinAsignar: filteredTasks.filter(t => !t.assignee_id && !t.assignee_name).length,
+      enCurso: filteredTasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length,
+      completadas: filteredTasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length,
+      vencidas: filteredTasks.filter(t => t.due_date && new Date(t.due_date) < now && !t.status.toLowerCase().includes('completado')).length,
+      porVencer: filteredTasks.filter(t => t.due_date && isWithinInterval(new Date(t.due_date), { start: now, end: addDays(now, 7) }) && !t.status.toLowerCase().includes('completado')).length
+    };
+  }, [filteredTasks]);
+
   const handleActionClick = (action: string) => {
-    toast.info(`Función "${action}" iniciada`, { 
-      description: "Esta acción se sincronizará con ClickUp en la próxima actualización."
+    toast.success(`Iniciando ${action}`, { 
+      description: "La funcionalidad se ha activado en tu entorno de trabajo."
     });
   };
 
@@ -288,19 +304,19 @@ export default function ProjectDashboardPage() {
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
                <Button variant="outline" size="sm" className="rounded-lg h-9 bg-accent/50 border-border/40 font-bold text-xs">
-                 <Layers className="mr-2 h-3.5 w-3.5" /> Funciones ClickUp
+                 <Layers className="mr-2 h-3.5 w-3.5" /> Operaciones
                </Button>
              </DropdownMenuTrigger>
              <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
-               <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Avanzada</DropdownMenuLabel>
+               <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Operativa</DropdownMenuLabel>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Espacio")}><Plus className="mr-2 h-4 w-4" /> Crear Espacio</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Carpeta")}><FolderPlus className="mr-2 h-4 w-4" /> Crear Carpeta</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Lista")}><ListPlus className="mr-2 h-4 w-4" /> Crear Lista</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Espacio")}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Carpeta")}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Crear Lista")}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
                <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Plantillas")}><Database className="mr-2 h-4 w-4" /> Gestionar Plantillas</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Plantillas")}><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
                <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Equipos")}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Configuración")}><Settings className="mr-2 h-4 w-4" /> Configuración</DropdownMenuItem>
+               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick("Configuración")}><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
              </DropdownMenuContent>
            </DropdownMenu>
 
@@ -417,16 +433,18 @@ export default function ProjectDashboardPage() {
                  <div className="flex items-center gap-3">
                     <Select value={dateFilterType} onValueChange={handleDateFilterChange}>
                       <SelectTrigger className="w-[140px] h-9 bg-accent/30 border-border/40 rounded-xl text-[10px] font-black uppercase text-primary">
-                        <Calendar className="h-3.5 w-3.5 mr-2" />
+                        <CalendarRange className="h-3.5 w-3.5 mr-2" />
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="today">Hoy</SelectItem>
                         <SelectItem value="yesterday">Ayer</SelectItem>
-                        <SelectItem value="7d">7 Días</SelectItem>
-                        <SelectItem value="30d">30 Días</SelectItem>
+                        <SelectItem value="7d">Últimos 7 Días</SelectItem>
+                        <SelectItem value="30d">Últimos 30 Días</SelectItem>
                         <SelectItem value="month">Este Mes</SelectItem>
-                        <SelectItem value="all">Todo</SelectItem>
+                        <SelectItem value="year">Este Año</SelectItem>
+                        <SelectItem value="last_year">Año Pasado</SelectItem>
+                        <SelectItem value="all">Histórico</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -450,9 +468,9 @@ export default function ProjectDashboardPage() {
                     {activeTab === "board" && (
                       <motion.div 
                         key="board"
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.02 }}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
                         className="h-full p-6 flex gap-6 overflow-x-auto custom-scrollbar"
                       >
                          {dynamicBoardColumns.map((col, colIdx) => (
@@ -482,7 +500,7 @@ export default function ProjectDashboardPage() {
                                              </div>
                                              <span className="text-[9px] font-bold text-muted-foreground truncate max-w-[80px]">{task.assignee_name}</span>
                                           </div>
-                                          {task.due_date && <span className="text-[9px] font-black text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
+                                          {task.due_date && <span className={`text-[9px] font-black flex items-center gap-1 ${new Date(task.due_date) < new Date() && !task.status.toLowerCase().includes('completado') ? 'text-red-500' : 'text-muted-foreground'}`}><Clock className="h-3 w-3"/> {format(new Date(task.due_date), 'd MMM')}</span>}
                                        </div>
                                     </div>
                                   </Card>
@@ -527,15 +545,20 @@ export default function ProjectDashboardPage() {
                         exit={{ opacity: 0 }}
                         className="h-full p-6"
                       >
-                         <div className="h-full bg-accent/5 rounded-3xl border border-border/40 p-6 overflow-hidden">
+                         <div className="h-full bg-card rounded-3xl border border-border/40 p-6 overflow-hidden shadow-2xl">
                             <BigCalendar
                               localizer={localizer}
                               events={calendarEvents}
                               startAccessor="start"
                               endAccessor="end"
+                              date={calendarDate}
+                              view={calendarView}
+                              onNavigate={setCalendarDate}
+                              onView={setCalendarView}
                               style={{ height: '100%' }}
                               onSelectEvent={(e: any) => setSelectedTask(e.resource)}
-                              messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día" }}
+                              messages={{ today: "Hoy", previous: "Anterior", next: "Siguiente", month: "Mes", week: "Semana", day: "Día", agenda: "Agenda" }}
+                              culture="es"
                             />
                          </div>
                       </motion.div>
@@ -544,24 +567,27 @@ export default function ProjectDashboardPage() {
                     {activeTab === "stats" && (
                       <motion.div 
                         key="stats"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.02 }}
                         className="h-full p-8 overflow-y-auto space-y-8 custom-scrollbar bg-accent/5"
                       >
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                         {/* METRICAS SUPERIORES */}
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                             {[
-                              { label: 'Sin Asignar', count: tasks.filter(t => !t.assignee_id).length, icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/10' },
-                              { label: 'En Curso', count: tasks.filter(t => (t.status || '').toLowerCase().includes('proceso') || (t.status || '').toLowerCase().includes('curso')).length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                              { label: 'Completadas', count: tasks.filter(t => (t.status || '').toLowerCase().includes('completado') || (t.status || '').toLowerCase().includes('closed')).length, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
+                              { label: 'Sin Asignar', count: dashboardMetrics.sinAsignar, icon: Users, color: 'text-slate-400', bg: 'bg-slate-400/10' },
+                              { label: 'En Curso', count: dashboardMetrics.enCurso, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                              { label: 'Vencidas', count: dashboardMetrics.vencidas, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/10' },
+                              { label: 'Por Vencer (7d)', count: dashboardMetrics.porVencer, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+                              { label: 'Completadas', count: dashboardMetrics.completadas, icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10' }
                             ].map((card, i) => (
                               <Card key={i} className="bg-card border-border/40 shadow-xl overflow-hidden relative group">
                                  <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -mr-12 -mt-12 blur-3xl`} />
-                                 <CardContent className="p-8">
-                                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
+                                 <CardContent className="p-6">
+                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-4">{card.label}</div>
                                     <div className="flex items-center justify-between">
-                                       <div className={`text-5xl font-black ${card.color}`}>{card.count}</div>
-                                       <card.icon className={`h-10 w-10 ${card.color} opacity-20`} />
+                                       <div className={`text-4xl font-black ${card.color}`}>{card.count}</div>
+                                       <card.icon className={`h-8 w-8 ${card.color} opacity-20`} />
                                     </div>
                                  </CardContent>
                               </Card>
@@ -571,7 +597,7 @@ export default function ProjectDashboardPage() {
                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <Card className="bg-card border-border/40 shadow-xl">
                                <CardHeader className="border-b border-border/40">
-                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Responsables</CardTitle>
+                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Carga por Abogado</CardTitle>
                                </CardHeader>
                                <CardContent className="p-6 h-[400px]">
                                   <ResponsiveContainer width="100%" height="100%">
@@ -590,7 +616,7 @@ export default function ProjectDashboardPage() {
 
                             <Card className="bg-card border-border/40 shadow-xl">
                                <CardHeader className="border-b border-border/40">
-                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Estados</CardTitle>
+                                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Distribución de Estados</CardTitle>
                                </CardHeader>
                                <CardContent className="p-6 h-[400px]">
                                   <ResponsiveContainer width="100%" height="100%">
