@@ -17,12 +17,16 @@ async def fetch_clickup(endpoint: str, api_token: str):
             return None
         if resp.status_code != 200:
             print(f"[ClickUp API Error] {endpoint}: {resp.status_code} - {resp.text}")
-            resp.raise_for_status()
+            return None
         return resp.json()
 
-def normalize_status(clickup_status: str) -> str:
+def normalize_status(status_data: any) -> str:
     # Retornar el estado original de ClickUp para mantener fidelidad total
-    return clickup_status
+    if isinstance(status_data, dict):
+        return status_data.get('status', 'To Do')
+    if isinstance(status_data, str):
+        return status_data
+    return 'To Do'
 
 def extract_radicado(text: str) -> str:
     if not text: return None
@@ -68,7 +72,6 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             case_id = matching_case.id
         else:
             # SI NO EXISTE, lo creamos para que Juricob empiece a trackearlo
-            # No le ponemos juzgado para que aparezca en "Pendientes" y el validador lo tome
             target_user_id = owner_id
             if assignee_id:
                 target_user_id = assignee_id
@@ -89,10 +92,13 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     # 4. Crear o Actualizar Tarea Local (Master)
     existing_task = db.query(Task).filter(Task.clickup_id == task_data['id']).first()
     
+    # Extraer status de forma robusta
+    clickup_status = normalize_status(task_data.get('status'))
+    
     if existing_task:
         existing_task.title = task_data['name']
         existing_task.description = task_data.get('description')
-        existing_task.status = normalize_status(task_data['status']['status'])
+        existing_task.status = clickup_status
         existing_task.priority = task_data.get('priority', {}).get('priority') if task_data.get('priority') else None
         existing_task.due_date = due_date
         existing_task.case_id = case_id or existing_task.case_id
@@ -105,7 +111,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         db_task = Task(
             title=task_data['name'],
             description=task_data.get('description'),
-            status=normalize_status(task_data['status']['status']),
+            status=clickup_status,
             priority=task_data.get('priority', {}).get('priority') if task_data.get('priority') else None,
             clickup_id=task_data['id'],
             due_date=due_date,
@@ -120,12 +126,11 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         )
         db.add(db_task)
     
-    db.flush() # Para tener el ID local de la tarea para las subtareas
+    db.flush() 
 
     # 5. Procesar Checklists (Listas de control)
     checklists = task_data.get('checklists', [])
     for cl in checklists:
-        # Los items de checklist en ClickUp vienen en cl['items']
         for item in cl.get('items', []):
             existing_cl = db.query(TaskChecklistItem).filter(
                 TaskChecklistItem.task_id == db_task.id,
@@ -139,18 +144,29 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                 )
                 db.add(new_cl)
 
-    # 6. Procesar Comentarios (Solo si ClickUp indica que hay comentarios)
-    if task_data.get('comment_count', 0) > 0:
-        try:
-            comments_data = await fetch_clickup(f"task/{task_data['id']}/comment", api_token)
+    # 6. Procesar Comentarios (Fidelidad de Histórico)
+    try:
+        # Intentamos traer comentarios siempre para asegurar histórico completo
+        comments_data = await fetch_clickup(f"task/{task_data['id']}/comment", api_token)
+        if comments_data and 'comments' in comments_data:
             for comm in comments_data.get('comments', []):
                 text_comm = comm.get('comment_text', '')
                 if not text_comm: continue
+                # Evitar duplicados por contenido
                 existing_comm = db.query(TaskComment).filter(TaskComment.task_id == db_task.id, TaskComment.content == text_comm).first()
                 if not existing_comm:
-                    new_comm = TaskComment(task_id=db_task.id, content=text_comm, user_id=owner_id)
+                    # Intentamos usar el nombre del usuario de ClickUp si está disponible
+                    user_info = comm.get('user', {})
+                    u_name = user_info.get('username', 'SISTEMA (CU)')
+                    new_comm = TaskComment(
+                        task_id=db_task.id, 
+                        content=text_comm, 
+                        user_id=owner_id,
+                        user_name=u_name
+                    )
                     db.add(new_comm)
-        except: pass
+    except Exception as e:
+        print(f"[ClickUp Sync] Error en comentarios: {e}")
 
     # 6.2 Procesar Adjuntos (Attachments) de ClickUp
     attachments = task_data.get('attachments', [])
@@ -163,7 +179,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             new_att = TaskAttachment(
                 task_id=db_task.id,
                 name=att['title'],
-                file_path=att['url'], # URL de ClickUp
+                file_path=att['url'],
                 file_type=att.get('extension')
             )
             db.add(new_att)
@@ -171,27 +187,23 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
     # 6.5 Procesar Etiquetas (Tags)
     clickup_tags = task_data.get('tags', [])
     if clickup_tags:
-        # Asegurarnos de que las etiquetas existen en nuestra DB
         db_tags = []
         for tag_data in clickup_tags:
             tag_name = tag_data.get('name')
             if not tag_name: continue
-            
-            # Buscar o crear tag
             db_tag = db.query(Tag).filter(Tag.name == tag_name).first()
             if not db_tag:
                 db_tag = Tag(name=tag_name, color=tag_data.get('tag_bg', '#3b82f6'))
                 db.add(db_tag)
                 db.flush()
             db_tags.append(db_tag)
-        
-        # Vincular tags a la tarea
         db_task.tags = db_tags
         db.flush()
 
-    # 7. Procesar Subtareas
+    # 7. Procesar Subtareas (Recursividad con fidelidad de estado)
     subtasks = task_data.get('subtasks', [])
     for sub in subtasks:
+        # Aseguramos que la subtarea herede el radicado si no tiene uno propio
         await process_task(sub, list_id, db, owner_id, user_map, api_token, parent_id=db_task.id, inherited_case_id=case_id)
 
 async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int):
@@ -201,11 +213,14 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
     
     # Cache de usuarios
     all_users = db.query(User).all()
-    user_map = {u.nombre.lower().strip(): u.id for u in all_users if u.nombre}
+    user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
+    user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users if u.username })
     
     try:
         # 1. Teams (Workspaces)
         teams_data = await fetch_clickup("team", api_token)
+        if not teams_data: return
+        
         for team in teams_data['teams']:
             # --- SINCRONIZACIÓN DE ABOGADOS (ClickUp Members) ---
             for member in team.get('members', []):
@@ -215,10 +230,8 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                 
                 m_name_clean = m_name.lower().strip()
                 if m_name_clean not in user_map:
-                    # Buscar si ya existe por nombre exacto para evitar duplicados
                     existing = db.query(User).filter(User.nombre == m_name).first()
                     if not existing:
-                        # Creamos el usuario abogado si no existe
                         new_u = User(
                             username=f"cu_{m_user.get('id')}", 
                             nombre=m_name,
@@ -230,7 +243,6 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                         db.add(new_u)
                         db.flush()
                         user_map[m_name_clean] = new_u.id
-                        print(f"[ClickUp Sync] Abogado '{m_name}' sincronizado.")
                     else:
                         user_map[m_name_clean] = existing.id
 
@@ -240,62 +252,55 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                 db.add(db_ws)
                 db.flush()
 
-            # 2. Spaces (Mapeados como Carpetas Raíz o Filtros)
+            # 2. Spaces
             spaces_data = await fetch_clickup(f"team/{team['id']}/space", api_token)
+            if not spaces_data: continue
+            
             for space in spaces_data['spaces']:
-                # Nota: Si el space tiene Carpetas, bajamos a ese nivel. Si tiene Listas directas, las tratamos.
-                
-                # 3. Folders (Abogados / Meses)
+                # 3. Folders
                 folders_data = await fetch_clickup(f"space/{space['id']}/folder", api_token)
-                for folder in folders_data['folders']:
-                    db_folder = db.query(Folder).filter(Folder.clickup_id == folder['id']).first()
-                    if not db_folder:
-                        db_folder = Folder(name=folder['name'], clickup_id=folder['id'], workspace_id=db_ws.id)
-                        db.add(db_folder)
-                        db.flush()
-                    
-                    # 4. Lists
-                    lists_data = await fetch_clickup(f"folder/{folder['id']}/list", api_token)
-                    for lst in lists_data['lists']:
-                        db_list = db.query(ProjectList).filter(ProjectList.clickup_id == lst['id']).first()
-                        if not db_list:
-                            db_list = ProjectList(name=lst['name'], clickup_id=lst['id'], folder_id=db_folder.id, workspace_id=db_ws.id)
-                            db.add(db_list)
-                            db.flush()
-                        
-                        # 5. Tasks & Subtasks
-                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true&include_closed=true", api_token)
-                        for t_data in tasks_data['tasks']:
-                            await asyncio.sleep(0.1) # Pequeña pausa para evitar rate limits
-                            await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
-                        
-                        db.commit() # Commit granular por lista
-                        print(f"[Master Sync] Lista '{lst['name']}' procesada.")
-
-                # 3.1 Listas sin carpeta (directas en el Space)
-                space_lists_data = await fetch_clickup(f"space/{space['id']}/list", api_token)
-                for lst in space_lists_data['lists']:
-                    db_list = db.query(ProjectList).filter(ProjectList.clickup_id == lst['id']).first()
-                    if not db_list:
-                        # Creamos una carpeta 'General' para estas listas si no existe
-                        db_folder = db.query(Folder).filter(Folder.name == "General", Folder.workspace_id == db_ws.id).first()
+                if folders_data:
+                    for folder in folders_data['folders']:
+                        db_folder = db.query(Folder).filter(Folder.clickup_id == folder['id']).first()
                         if not db_folder:
-                            db_folder = Folder(name="General", workspace_id=db_ws.id)
+                            db_folder = Folder(name=folder['name'], clickup_id=folder['id'], workspace_id=db_ws.id)
                             db.add(db_folder)
                             db.flush()
                         
-                        db_list = ProjectList(name=lst['name'], clickup_id=lst['id'], folder_id=db_folder.id, workspace_id=db_ws.id)
-                        db.add(db_list)
-                        db.flush()
-                    
-                    tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true", api_token)
-                    for t_data in tasks_data['tasks']:
-                        await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
-                    db.commit()
+                        # 4. Lists
+                        lists_data = await fetch_clickup(f"folder/{folder['id']}/list", api_token)
+                        if lists_data:
+                            for lst in lists_data['lists']:
+                                db_list = db.query(ProjectList).filter(ProjectList.clickup_id == lst['id']).first()
+                                if not db_list:
+                                    db_list = ProjectList(name=lst['name'], clickup_id=lst['id'], folder_id=db_folder.id, workspace_id=db_ws.id)
+                                    db.add(db_list)
+                                    db.flush()
+                                
+                                # 5. Tasks & Subtasks (IMPORTANTE: include_closed=true)
+                                tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true&include_closed=true", api_token)
+                                if tasks_data and 'tasks' in tasks_data:
+                                    for t_data in tasks_data['tasks']:
+                                        await asyncio.sleep(0.05)
+                                        await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
+                                    db.commit()
 
-        return {"status": "success", "message": "Importación maestra completada con éxito en Juricob."}
-    
+                # 3.1 Listas sin carpeta
+                space_lists_data = await fetch_clickup(f"space/{space['id']}/list", api_token)
+                if space_lists_data:
+                    for lst in space_lists_data['lists']:
+                        db_list = db.query(ProjectList).filter(ProjectList.clickup_id == lst['id']).first()
+                        if not db_list:
+                            db_list = ProjectList(name=lst['name'], clickup_id=lst['id'], workspace_id=db_ws.id)
+                            db.add(db_list)
+                            db.flush()
+                        
+                        tasks_data = await fetch_clickup(f"list/{lst['id']}/task?subtasks=true&include_checklists=true&include_closed=true", api_token)
+                        if tasks_data and 'tasks' in tasks_data:
+                            for t_data in tasks_data['tasks']:
+                                await process_task(t_data, db_list.id, db, owner_id, user_map, api_token)
+                            db.commit()
+
     except Exception as e:
+        print(f"[Master Sync Error] {e}")
         db.rollback()
-        print(f"[Master Sync Error] {str(e)}")
-        raise e
