@@ -83,7 +83,7 @@ class LoginRequest(BaseModel):
 from backend.models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
-    ProjectList, Task, TaskComment, TaskAttachment, IntegrationConfig
+    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig
 )
 from backend.service.rama import (
     consulta_por_radicado,
