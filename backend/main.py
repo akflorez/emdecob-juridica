@@ -860,6 +860,12 @@ HARDCODED_USERS = {
         "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
+    "juricob": {
+        "password": "emdecob2027$",
+        "id": 2,
+        "nombre": "Juridico Emdecob",
+        "is_admin": False,
+    },
 }
 
 
@@ -923,7 +929,7 @@ def _ensure_default_user():
             ))
             db.commit()
         
-        u2 = db.query(User).filter(User.username == "jurico_emdecob").first()
+        u2 = db.query(User).filter(User.username.in_(["jurico_emdecob", "juricob"])).first()
         if not u2:
             print("[DB] Creando usuario jurico_emdecob por defecto...")
             db.add(User(
@@ -1458,12 +1464,12 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
             q_validos = q_validos.filter(Case.user_id == current_user.id)
             q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
             q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
             if emdecob_user:
                 q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
                 q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
@@ -1491,11 +1497,11 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
             q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
             q_hoy = q_hoy.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
             if emdecob_user:
                 q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
                 q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
@@ -2173,11 +2179,11 @@ def list_cases(
 
     # Multi-tenancy filter
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
-            # EMDECOB solo ve sus casos VALIDOS (con juzgado)
-            q = q.filter(Case.user_id == current_user.id, Case.juzgado.isnot(None))
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
+            # EMDECOB solo ve sus casos
+            q = q.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
             if emdecob_user:
                 q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
 
@@ -2246,10 +2252,10 @@ def list_cases(
     )
 
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob"]:
+        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
             q_unread = q_unread.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob"])).first()
+            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
             if emdecob_user:
                 q_unread = q_unread.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
     

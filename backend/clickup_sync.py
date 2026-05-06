@@ -50,9 +50,9 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         name_clean = a_name.lower().strip()
         uid = user_map.get(name_clean)
         
-        # Lógica específica: Juan Jose Escobar -> jurico_emdecob
+        # Lógica específica: Juan Jose Escobar -> juricob / jurico_emdecob
         if not uid and "juan" in name_clean and "escobar" in name_clean:
-            juridico_user = db.query(User).filter(User.username == 'jurico_emdecob').first()
+            juridico_user = db.query(User).filter(User.username.in_(["juricob", "jurico_emdecob"])).first()
             if juridico_user: uid = juridico_user.id
             
         if uid:
