@@ -1477,13 +1477,16 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     # Multi-tenancy filter: Detección flexible para Jurico
     is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
     
-    if is_jurico:
-        # EMDECOB solo ve sus casos
+    if current_user.is_admin:
+        # Admin ve TODO sin filtros
+        pass
+    elif is_jurico:
+        # Juridico solo ve sus casos asignados (ID 2)
         q_validos = q_validos.filter(Case.user_id == current_user.id)
         q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
         q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
-    elif not current_user.is_admin:
-        # FNA y otros no-admin ven todo menos lo de Jurico (ID 2)
+    else:
+        # Otros usuarios (ej: FNA) ven todo menos lo de Jurico (ID 2)
         q_validos = q_validos.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
         q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id.is_(None)))
         q_pendientes = q_pendientes.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
@@ -2199,13 +2202,14 @@ def list_cases(
     # Multi-tenancy filter: Detección flexible para Jurico
     is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
     
-    print(f"[DEBUG-LIST] User: {current_user.username} (ID: {current_user.id}), is_jurico: {is_jurico}")
-
-    if is_jurico:
-        # EMDECOB solo ve sus casos, sea admin o no
+    if current_user.is_admin:
+        # Admin ve TODO
+        pass
+    elif is_jurico:
+        # Juridico solo ve sus casos (ID 2)
         q = q.filter(Case.user_id == current_user.id)
-    elif not current_user.is_admin:
-        # FNA y otros no-admin ven todo menos lo de Jurico (ID 2)
+    else:
+        # FNA y otros ven todo menos Jurico
         q = q.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
 
     # Default filtering logic:
@@ -4526,11 +4530,15 @@ async def get_advanced_dashboard_stats(
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     q_month = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str)
     
-    is_jurico = current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]
-    if is_jurico:
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    
+    if current_user.is_admin:
+        # Admin ve TODO
+        pass
+    elif is_jurico:
         q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id == current_user.id)
-    elif not current_user.is_admin:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id != 2)
+    else:
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
         
     month_actions = q_month.count()
     
@@ -4538,10 +4546,13 @@ async def get_advanced_dashboard_stats(
     
     # 2. Conteo de casos por Abogado (desglose)
     q_abogados = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado.isnot(None), Case.abogado != "")
-    if is_jurico:
+    if current_user.is_admin:
+        # Admin ve TODO
+        pass
+    elif is_jurico:
         q_abogados = q_abogados.filter(Case.user_id == current_user.id)
-    elif not current_user.is_admin:
-        q_abogados = q_abogados.filter(Case.user_id != 2) # Filtro simple para FNA
+    else:
+        q_abogados = q_abogados.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
     
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
@@ -4555,10 +4566,13 @@ async def get_advanced_dashboard_stats(
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
         )
     )
-    if is_jurico:
+    if current_user.is_admin:
+        # Admin ve TODO
+        pass
+    elif is_jurico:
         q_unread = q_unread.filter(Case.user_id == current_user.id)
-    elif not current_user.is_admin:
-        q_unread = q_unread.filter(Case.user_id != 2)
+    else:
+        q_unread = q_unread.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
         
     unread_total = q_unread.count()
     
