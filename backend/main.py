@@ -1448,6 +1448,17 @@ def get_migration_status(db: Session = Depends(get_db)):
 def get_version():
     return {"version": "afc9789f5e68060483ce72910d7b73ab3cada7f0", "database": "juricob"}
 
+@app.get("/api/diagnostic/my-cases")
+@app.get("/diagnostic/my-cases")
+def diagnostic_my_cases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    count = db.query(Case).filter(Case.user_id == current_user.id).count()
+    return {
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "cases_count": count,
+        "db_url_redacted": engine.url.database
+    }
+
 @app.get("/")
 def read_root():
     return {"status": "ok", "version": "afc9789f5e68060483ce72910d7b73ab3cada7f0", "app": "EMDECOB Consultas"}
@@ -1463,22 +1474,24 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_invalidos = db.query(InvalidRadicado)
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
-    if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
-            q_validos = q_validos.filter(Case.user_id == current_user.id)
-            q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
-            q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
-        else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
-            if emdecob_user:
-                q_validos = q_validos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
-                q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != emdecob_user.id, InvalidRadicado.user_id.is_(None)))
-                q_pendientes = q_pendientes.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+    # Multi-tenancy filter: Detección flexible para Jurico
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    
+    if is_jurico:
+        # EMDECOB solo ve sus casos
+        q_validos = q_validos.filter(Case.user_id == current_user.id)
+        q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
+        q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        # FNA y otros no-admin ven todo menos lo de Jurico (ID 2)
+        q_validos = q_validos.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id.is_(None)))
+        q_pendientes = q_pendientes.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
     total_pendientes = q_pendientes.count()
-
+    
     hoy = today_colombia()
     ayer = hoy - timedelta(days=1)
 
@@ -1497,14 +1510,13 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
+        if is_jurico:
             q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
             q_hoy = q_hoy.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
-            if emdecob_user:
-                q_no_leidos = q_no_leidos.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
-                q_hoy = q_hoy.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+            # FNA y otros excluyen a Jurico (ID 2)
+            q_no_leidos = q_no_leidos.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+            q_hoy = q_hoy.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -1515,6 +1527,11 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         "total_pendientes": total_pendientes,
         "total_no_leidos": total_no_leidos,
         "total_actualizados_hoy": total_actualizados_hoy,
+        "debug_info": {
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "is_jurico": is_jurico
+        }
     }
 
 
@@ -1543,6 +1560,7 @@ def login(data: LoginRequest):
             token = create_access_token(user_db.id)
             return {
                 "token": token,
+                "access_token": token, # Estándar OAuth2
                 "token_type": "bearer",
                 "user": {
                     "id": user_db.id,
@@ -1568,13 +1586,14 @@ def login(data: LoginRequest):
         
         token = create_access_token(user_id)
         return {
-            "token": token,
+            "access_token": token,
+            "token": token, # Compatibilidad con el frontend
             "token_type": "bearer",
             "user": {
                 "id": user_id,
                 "username": data.username,
-                "nombre": hc["nombre"],
-                "is_admin": hc["is_admin"],
+                "is_admin": hc.get("is_admin", False),
+                "nombre": hc.get("nombre", data.username)
             }
         }
 
@@ -2177,15 +2196,17 @@ def list_cases(
 ):
     q = db.query(Case)
 
-    # Multi-tenancy filter
-    if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
-            # EMDECOB solo ve sus casos
-            q = q.filter(Case.user_id == current_user.id)
-        else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
-            if emdecob_user:
-                q = q.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+    # Multi-tenancy filter: Detección flexible para Jurico
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    
+    print(f"[DEBUG-LIST] User: {current_user.username} (ID: {current_user.id}), is_jurico: {is_jurico}")
+
+    if is_jurico:
+        # EMDECOB solo ve sus casos, sea admin o no
+        q = q.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        # FNA y otros no-admin ven todo menos lo de Jurico (ID 2)
+        q = q.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2252,12 +2273,10 @@ def list_cases(
     )
 
     if not current_user.is_admin:
-        if current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]:
+        if is_jurico:
             q_unread = q_unread.filter(Case.user_id == current_user.id)
         else:
-            emdecob_user = db.query(User).filter(User.username.in_(["jurico_emdecob", "jurico.emdecob", "juricob"])).first()
-            if emdecob_user:
-                q_unread = q_unread.filter(or_(Case.user_id != emdecob_user.id, Case.user_id.is_(None)))
+            q_unread = q_unread.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
     
     unread_count = q_unread.count()
 
@@ -2304,6 +2323,12 @@ def list_cases(
         "page": page,
         "page_size": page_size,
         "unread_count": unread_count,
+        "debug_info": {
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "is_jurico": is_jurico,
+            "sql_count": total
+        }
     }
 
 
@@ -2322,7 +2347,15 @@ def download_cases_excel(
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
 ):
+    # Multi-tenancy filter
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    
     q = db.query(Case).filter(Case.juzgado.isnot(None))
+
+    if is_jurico:
+        q = q.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        q = q.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
 
     if solo_no_leidos:
         q = q.filter(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash)
@@ -2358,13 +2391,13 @@ def download_cases_excel(
             "Radicado": c.radicado,
             "Demandante": c.demandante or "",
             "Demandado": c.demandado or "",
-            "Cdula": c.cedula or "",
+            "Cédula": c.cedula or "",
             "Abogado": c.abogado or "",
             "Juzgado": c.juzgado or "",
-            "Fecha Radicacin": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
-            "ltima Actuacin": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-            "ltima Verificacin": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
-            "Estado": "No ledo" if is_unread_case(c) else "Ledo",
+            "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
+            "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+            "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
+            "Estado": "No leído" if is_unread_case(c) else "Leído",
         }
         for c in cases
     ]
@@ -2736,7 +2769,11 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
         print(f"[sync-pub] Error sincronizando publicaciones: {e}")
 
 @app.get("/cases/by-radicado/{radicado}")
-async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
+async def get_case_by_radicado_endpoint(
+    radicado: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Busca un caso por radicado. Primero en BD local, luego en Rama Judicial.
     Esto alimenta la p?gina de 'Consultar Caso'.
@@ -2745,13 +2782,23 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
     if not r:
         raise HTTPException(400, "Radicado inv?lido")
 
+    # Multi-tenancy filter para búsqueda individual
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+
     # 1. Buscar en BD local
     existing_items = db.query(Case).filter(Case.radicado == r).all()
     if existing_items:
-        # Aplicar el mismo filtro de FNA/TRIADA a los resultados locales
         local_results = []
         for c in existing_items:
-            if _es_fna(c.demandante or ""):
+            # Si es Jurico, ve sus casos. Si es FNA, ve los de FNA.
+            visible = False
+            if is_jurico:
+                if c.user_id == 2: visible = True
+            else:
+                # Otros (FNA) solo ven si es explícitamente FNA
+                if _es_fna(c.demandante or ""): visible = True
+            
+            if visible:
                 local_results.append({
                     "id": c.id,
                     "radicado": c.radicado,
@@ -2810,10 +2857,12 @@ async def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get
         # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
         results = await asyncio.gather(*[fetch_process_data(p) for p in items[:15]])
         
-        # FILTRO DIN?MICO: Preferir FNA o TRIADA, pero mostrar otros si no hay coincidencias
-        filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
-        if not filtered_results:
-            filtered_results = results
+        # FILTRO DINÁMICO: Preferir FNA o TRIADA para usuarios FNA, o mostrar todo para Jurico
+        filtered_results = results
+        if not is_jurico:
+            filtered_results = [r for r in results if _es_fna(r.get("demandante", ""))]
+            if not filtered_results:
+                filtered_results = results
         
         # ORDENAMIENTO: Fecha de radicaci?n m?s reciente primero
         # La fecha de radicaci?n es la que el usuario prefiere como criterio principal
@@ -3971,6 +4020,7 @@ class CommentCreate(BaseModel):
     task_id: int
     content: str
 
+@app.get("/api/projects/workspaces")
 @app.get("/projects/workspaces")
 async def get_workspaces(
     db: Session = Depends(get_db),
@@ -4024,6 +4074,7 @@ async def get_workspaces(
     
     return results
 
+@app.post("/api/projects/workspaces")
 @app.post("/projects/workspaces")
 async def create_workspace(
     ws_data: WorkspaceCreate,
@@ -4036,6 +4087,7 @@ async def create_workspace(
     db.refresh(ws)
     return ws
 
+@app.post("/api/projects/folders")
 @app.post("/projects/folders")
 async def create_folder(
     f_data: FolderCreate,
@@ -4048,6 +4100,7 @@ async def create_folder(
     db.refresh(f)
     return f
 
+@app.post("/api/projects/lists")
 @app.post("/projects/lists")
 async def create_list(
     l_data: ListCreate,
@@ -4179,6 +4232,17 @@ async def get_tasks(
         query = query.filter(Task.assignee_id == assignee_id)
     if status:
         query = query.filter(Task.status.ilike(f"%{status}%"))
+        
+    # Multi-tenancy filter: Detección flexible para Jurico
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    if is_jurico:
+        query = query.join(Case, Task.case_id == Case.id)
+        query = query.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        # Otros usuarios no-admin (FNA) ven todo menos lo de Jurico
+        # Si el caso no tiene user_id o es != 2
+        query = query.join(Case, Task.case_id == Case.id)
+        query = query.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
         
     return query.order_by(desc(Task.created_at)).all()
 
@@ -4378,7 +4442,8 @@ async def delete_task_checklist_item(item_id: int, db: Session = Depends(get_db)
 
 
 @app.patch("/api/projects/tasks/{task_id}")
-@app.patch("/projects/tasks/{task_id}")
+@app.put("/api/projects/tasks/{task_id}")
+@app.put("/projects/tasks/{task_id}")
 @app.patch("/api/tasks/{task_id}")
 @app.patch("/tasks/{task_id}")
 async def update_task(
@@ -4458,18 +4523,30 @@ async def get_advanced_dashboard_stats(
     ayer = hoy - timedelta(days=1)
     
     # 1. Conteo de actuaciones en el mes actual
-    # month_actions: eventos filtrados manualmente si el formato String var?a
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
-    month_actions = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str).count()
+    q_month = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str)
+    
+    is_jurico = current_user.username in ["jurico_emdecob", "jurico.emdecob", "juricob"]
+    if is_jurico:
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id != 2)
+        
+    month_actions = q_month.count()
+    
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     
     # 2. Conteo de casos por Abogado (desglose)
     q_abogados = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado.isnot(None), Case.abogado != "")
-    if not current_user.is_admin:
+    if is_jurico:
         q_abogados = q_abogados.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        q_abogados = q_abogados.filter(Case.user_id != 2) # Filtro simple para FNA
+    
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
     
-    # 3. Alertas (casos sin leer) calculando la misma l?gica que en list_cases
+    # 3. Alertas (casos sin leer)
     q_unread = db.query(Case).filter(
         Case.juzgado.isnot(None),
         Case.current_hash.isnot(None),
@@ -4478,8 +4555,10 @@ async def get_advanced_dashboard_stats(
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
         )
     )
-    if not current_user.is_admin:
+    if is_jurico:
         q_unread = q_unread.filter(Case.user_id == current_user.id)
+    elif not current_user.is_admin:
+        q_unread = q_unread.filter(Case.user_id != 2)
         
     unread_total = q_unread.count()
     
