@@ -53,55 +53,81 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F4F7F9] font-sans antialiased overflow-hidden">
+    <div className="min-h-screen flex bg-white font-sans antialiased overflow-hidden">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Outfit:wght@300;400;500;600&display=swap');
         .font-serif-juricob { font-family: 'Cinzel', serif; }
         .font-sans-juricob { font-family: 'Outfit', sans-serif; }
-        .curve-divider {
-          clip-path: ellipse(100% 100% at 0% 50%);
+        
+        .premium-curve {
+          position: relative;
+          width: 55%;
+          height: 100vh;
+          overflow: hidden;
+          background: #021C33;
         }
+        
+        .premium-curve::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          right: -150px;
+          width: 300px;
+          height: 100%;
+          background: white;
+          border-left: 8px solid #4ade80; /* The emerald green edge */
+          border-radius: 100% 0 0 100% / 50%;
+          box-shadow: -20px 0 50px rgba(0,0,0,0.3);
+          z-index: 25;
+        }
+
         .login-card {
-          box-shadow: 0 15px 50px rgba(0,0,0,0.06);
-          border-radius: 40px;
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
+          box-shadow: 0 25px 60px rgba(0,0,0,0.1);
+          border-radius: 45px;
+          background: white;
         }
+
         .btn-gradient {
           background: linear-gradient(90deg, #021C33 0%, #044D29 100%);
         }
       `}</style>
 
-      {/* Left Panel - Branding Area */}
-      <div className="hidden lg:flex lg:w-[60%] relative curve-divider z-20">
+      {/* Left Panel - The real arc design */}
+      <div className="hidden lg:block premium-curve z-20">
         <div 
-          className="absolute inset-0 bg-cover bg-left"
+          className="absolute inset-0 bg-cover bg-left scale-110"
           style={{ backgroundImage: `url(${LOGIN_BG})` }}
         />
-        {/* We keep the branding part from the original image as it's already there */}
+        {/* Deep blue overlay for text readability */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(90deg, rgba(2, 28, 51, 0.4) 0%, rgba(2, 28, 51, 0.8) 100%)',
+          }}
+        />
       </div>
 
-      {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-[40%] flex flex-col justify-between items-center py-12 px-8 relative z-30">
-        <div className="w-full max-w-md flex flex-col items-center flex-1 justify-center">
-          <Card className="login-card border-none w-full p-10 space-y-8">
-            <CardContent className="p-0 space-y-8">
+      {/* Right Panel - Login Card */}
+      <div className="w-full lg:w-[45%] flex flex-col justify-center items-center py-12 px-8 bg-white z-30">
+        <div className="w-full max-w-md flex flex-col items-center">
+          <Card className="login-card border-none w-full p-12 space-y-8">
+            <CardContent className="p-0 space-y-10">
               
-              <div className="text-center space-y-1">
-                 <h2 className="text-2xl font-normal text-[#021C33] font-serif-juricob">Acceso seguro</h2>
+              <div className="text-center">
+                 <h2 className="text-2xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest opacity-80">Acceso seguro</h2>
               </div>
 
               {/* Icon Section with Lines */}
               <div className="flex items-center justify-center gap-6">
-                 <div className="h-[1px] flex-1 bg-gray-200"></div>
-                 <div className="w-14 h-14 rounded-full border border-emerald-500 flex items-center justify-center bg-white shadow-sm">
-                    <Lock className="w-5 h-5 text-emerald-600" />
+                 <div className="h-[1.5px] flex-1 bg-gray-100"></div>
+                 <div className="w-16 h-16 rounded-full border-[2px] border-[#4ade80] flex items-center justify-center bg-white shadow-sm">
+                    <Lock className="w-6 h-6 text-[#021C33]" />
                  </div>
-                 <div className="h-[1px] flex-1 bg-gray-200"></div>
+                 <div className="h-[1.5px] flex-1 bg-gray-100"></div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="space-y-3">
                   <Label htmlFor="username" className="text-sm font-bold text-[#021C33] ml-1">Correo electrónico</Label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -111,12 +137,12 @@ export default function LoginPage() {
                       placeholder="ejemplo@correo.com"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="pl-12 h-14 bg-gray-50 border-gray-100 focus:border-emerald-500 rounded-xl font-sans-juricob text-sm"
+                      className="pl-12 h-14 bg-gray-50/50 border-gray-100 focus:border-[#4ade80] rounded-2xl font-sans-juricob"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label htmlFor="password" className="text-sm font-bold text-[#021C33] ml-1">Contraseña</Label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -126,7 +152,7 @@ export default function LoginPage() {
                       placeholder="••••••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-12 pr-12 h-14 bg-gray-50 border-gray-100 focus:border-emerald-500 rounded-xl font-sans-juricob text-sm"
+                      className="pl-12 pr-12 h-14 bg-gray-50/50 border-gray-100 focus:border-[#4ade80] rounded-2xl font-sans-juricob"
                     />
                     <button
                       type="button"
@@ -145,13 +171,13 @@ export default function LoginPage() {
                       id="remember" 
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      className="w-4 h-4 rounded border-gray-300 text-[#044D29] focus:ring-[#044D29]"
                     />
                     <label htmlFor="remember" className="text-xs text-slate-500 cursor-pointer font-medium">Recordarme</label>
                   </div>
                   <button
                     type="button"
-                    className="text-xs font-bold text-emerald-700 hover:opacity-80"
+                    className="text-xs font-bold text-[#044D29] hover:opacity-80"
                   >
                     ¿Olvidaste tu contraseña?
                   </button>
@@ -164,12 +190,12 @@ export default function LoginPage() {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="btn-gradient w-full h-14 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-lg hover:shadow-emerald-900/20 transition-all"
+                  className="btn-gradient w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl hover:shadow-emerald-900/20 transition-all hover:scale-[1.01]"
                 >
                   {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                     <>
                       <span>Iniciar sesión</span>
-                      <ArrowRight className="h-5 w-5" />
+                      <ArrowRight className="h-6 w-6" />
                     </>
                   )}
                 </button>
@@ -179,36 +205,36 @@ export default function LoginPage() {
                       <div className="w-full border-t border-gray-100"></div>
                    </div>
                    <div className="relative flex justify-center text-[10px]">
-                      <span className="bg-white px-2 text-gray-400 font-medium uppercase tracking-wider">¿No tienes una cuenta?</span>
+                      <span className="bg-white px-3 text-gray-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span>
                    </div>
                 </div>
 
                 <Button 
                    variant="outline" 
-                   className="w-full h-14 border-emerald-500/20 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                   className="w-full h-16 border-gray-100 text-[#021C33] font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
                 >
-                   <User className="w-5 h-5" />
+                   <User className="w-5 h-5 text-gray-400" />
                    Solicitar acceso
                 </Button>
               </form>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Bottom Footer Section */}
-        <div className="flex items-center gap-10 text-slate-500 font-medium mt-auto">
-           <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-[#021C33]" />
-              <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
-           </div>
-           <div className="w-[1px] h-8 bg-gray-200" />
-           <div className="flex items-center gap-2">
-              <Headphones className="w-5 h-5 text-[#021C33]" />
-              <div className="flex flex-col text-[9px] leading-tight font-bold">
-                 <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
-                 <span className="text-slate-400 font-normal">Asistencia profesional.</span>
-              </div>
-           </div>
+          {/* Footer exactly like image */}
+          <div className="flex items-center gap-12 text-slate-400 text-sm font-medium mt-16">
+             <div className="flex items-center gap-3">
+                <Shield className="w-6 h-6 text-[#021C33]" />
+                <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
+             </div>
+             <div className="w-[1.5px] h-10 bg-gray-100" />
+             <div className="flex items-center gap-3">
+                <Headphones className="w-6 h-6 text-[#021C33]" />
+                <div className="flex flex-col text-[10px] leading-tight font-bold">
+                   <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
+                   <span className="text-slate-400 font-normal">Asistencia profesional.</span>
+                </div>
+             </div>
+          </div>
         </div>
       </div>
     </div>
