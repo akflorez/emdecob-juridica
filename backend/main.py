@@ -2331,7 +2331,9 @@ def list_cases(
             "user_id": current_user.id,
             "username": current_user.username,
             "is_jurico": is_jurico,
-            "sql_count": total
+            "sql_count": total,
+            "db_name": engine.url.database,
+            "is_admin": current_user.is_admin
         }
     }
 
