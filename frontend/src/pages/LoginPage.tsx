@@ -59,32 +59,44 @@ export default function LoginPage() {
         .font-serif-juricob { font-family: 'Cinzel', serif; }
         .font-sans-juricob { font-family: 'Outfit', sans-serif; }
         
-        .premium-curve {
-          position: relative;
-          width: 55%;
+        .left-branding-container {
+          width: 58%;
           height: 100vh;
-          overflow: hidden;
+          position: relative;
           background: #021C33;
+          z-index: 10;
         }
-        
-        .premium-curve::after {
-          content: "";
+
+        .bg-image-wrapper {
+          position: absolute;
+          inset: 0;
+          background-image: url(${LOGIN_BG});
+          background-size: cover;
+          background-position: left center;
+          /* We zoom in a bit to ensure the mockup login part is hidden */
+          width: 140%; 
+          height: 100%;
+        }
+
+        .curve-overlay {
           position: absolute;
           top: 0;
-          right: -150px;
-          width: 300px;
+          right: -120px;
+          width: 240px;
           height: 100%;
           background: white;
-          border-left: 8px solid #4ade80; /* The emerald green edge */
+          border-left: 10px solid #4ade80; /* The emerald green line */
           border-radius: 100% 0 0 100% / 50%;
-          box-shadow: -20px 0 50px rgba(0,0,0,0.3);
-          z-index: 25;
+          z-index: 20;
+          box-shadow: -15px 0 30px rgba(0,0,0,0.2);
         }
 
         .login-card {
-          box-shadow: 0 25px 60px rgba(0,0,0,0.1);
-          border-radius: 45px;
+          box-shadow: 0 30px 70px rgba(0,0,0,0.1);
+          border-radius: 40px;
           background: white;
+          width: 100%;
+          max-width: 480px;
         }
 
         .btn-gradient {
@@ -92,25 +104,22 @@ export default function LoginPage() {
         }
       `}</style>
 
-      {/* Left Panel - The real arc design */}
-      <div className="hidden lg:block premium-curve z-20">
+      {/* Left Branding Area */}
+      <div className="hidden lg:block left-branding-container">
+        <div className="bg-image-wrapper" />
         <div 
-          className="absolute inset-0 bg-cover bg-left scale-110"
-          style={{ backgroundImage: `url(${LOGIN_BG})` }}
-        />
-        {/* Deep blue overlay for text readability */}
-        <div 
-          className="absolute inset-0"
+          className="absolute inset-0 z-15"
           style={{
-            background: 'linear-gradient(90deg, rgba(2, 28, 51, 0.4) 0%, rgba(2, 28, 51, 0.8) 100%)',
+            background: 'linear-gradient(90deg, rgba(2, 28, 51, 0.2) 0%, rgba(2, 28, 51, 0.7) 100%)',
           }}
         />
+        <div className="curve-overlay" />
       </div>
 
-      {/* Right Panel - Login Card */}
-      <div className="w-full lg:w-[45%] flex flex-col justify-center items-center py-12 px-8 bg-white z-30">
-        <div className="w-full max-w-md flex flex-col items-center">
-          <Card className="login-card border-none w-full p-12 space-y-8">
+      {/* Right Login Area */}
+      <div className="flex-1 flex flex-col justify-center items-center py-12 px-8 bg-white z-30">
+        <div className="w-full flex flex-col items-center">
+          <Card className="login-card border-none p-12 space-y-8 animate-in fade-in duration-500">
             <CardContent className="p-0 space-y-10">
               
               <div className="text-center">
@@ -120,7 +129,7 @@ export default function LoginPage() {
               {/* Icon Section with Lines */}
               <div className="flex items-center justify-center gap-6">
                  <div className="h-[1.5px] flex-1 bg-gray-100"></div>
-                 <div className="w-16 h-16 rounded-full border-[2px] border-[#4ade80] flex items-center justify-center bg-white shadow-sm">
+                 <div className="w-16 h-16 rounded-full border-[2px] border-emerald-400 flex items-center justify-center bg-white shadow-sm">
                     <Lock className="w-6 h-6 text-[#021C33]" />
                  </div>
                  <div className="h-[1.5px] flex-1 bg-gray-100"></div>
@@ -137,7 +146,7 @@ export default function LoginPage() {
                       placeholder="ejemplo@correo.com"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="pl-12 h-14 bg-gray-50/50 border-gray-100 focus:border-[#4ade80] rounded-2xl font-sans-juricob"
+                      className="pl-12 h-14 bg-gray-50/50 border-gray-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
                     />
                   </div>
                 </div>
@@ -152,7 +161,7 @@ export default function LoginPage() {
                       placeholder="••••••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-12 pr-12 h-14 bg-gray-50/50 border-gray-100 focus:border-[#4ade80] rounded-2xl font-sans-juricob"
+                      className="pl-12 pr-12 h-14 bg-gray-50/50 border-gray-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
                     />
                     <button
                       type="button"
@@ -171,13 +180,13 @@ export default function LoginPage() {
                       id="remember" 
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#044D29] focus:ring-[#044D29]"
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
                     />
                     <label htmlFor="remember" className="text-xs text-slate-500 cursor-pointer font-medium">Recordarme</label>
                   </div>
                   <button
                     type="button"
-                    className="text-xs font-bold text-[#044D29] hover:opacity-80"
+                    className="text-xs font-bold text-emerald-700 hover:opacity-80"
                   >
                     ¿Olvidaste tu contraseña?
                   </button>
@@ -190,7 +199,7 @@ export default function LoginPage() {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="btn-gradient w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl hover:shadow-emerald-900/20 transition-all hover:scale-[1.01]"
+                  className="btn-gradient w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl hover:opacity-90 transition-all hover:scale-[1.01]"
                 >
                   {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                     <>
@@ -205,7 +214,7 @@ export default function LoginPage() {
                       <div className="w-full border-t border-gray-100"></div>
                    </div>
                    <div className="relative flex justify-center text-[10px]">
-                      <span className="bg-white px-3 text-gray-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span>
+                      <span className="bg-white px-4 text-gray-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span>
                    </div>
                 </div>
 
@@ -220,7 +229,7 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          {/* Footer exactly like image */}
+          {/* Footer Branding */}
           <div className="flex items-center gap-12 text-slate-400 text-sm font-medium mt-16">
              <div className="flex items-center gap-3">
                 <Shield className="w-6 h-6 text-[#021C33]" />
