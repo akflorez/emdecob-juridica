@@ -14,13 +14,11 @@ import {
   EyeOff,
   Loader2,
   ArrowRight,
-  TrendingUp,
-  Briefcase,
   Mail,
   Headphones
 } from 'lucide-react';
 
-const LOGIN_BG = "/juricob_login_background_1778105003101.png";
+const LOGIN_BG = "/login.png";
 
 export default function LoginPage() {
   const [username, setUsername] = useState('juricob');
@@ -64,91 +62,46 @@ export default function LoginPage() {
           clip-path: ellipse(100% 100% at 0% 50%);
         }
         .login-card {
-          box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+          box-shadow: 0 15px 50px rgba(0,0,0,0.06);
           border-radius: 40px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
         }
         .btn-gradient {
           background: linear-gradient(90deg, #021C33 0%, #044D29 100%);
         }
       `}</style>
 
-      {/* Left Panel - Curve Design */}
-      <div className="hidden lg:flex lg:w-[55%] relative curve-divider z-20">
+      {/* Left Panel - Branding Area */}
+      <div className="hidden lg:flex lg:w-[60%] relative curve-divider z-20">
         <div 
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-cover bg-left"
           style={{ backgroundImage: `url(${LOGIN_BG})` }}
         />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(90deg, rgba(2, 28, 51, 0.4) 0%, rgba(2, 28, 51, 0.9) 100%)',
-          }}
-        />
-
-        <div className="relative z-30 flex flex-col justify-center items-center w-full px-16 text-white text-center">
-          {/* Logo with specific Icon from image */}
-          <div className="mb-12 flex flex-col items-center">
-             <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center mb-4 shadow-xl">
-                <div className="w-10 h-10 border-[3px] border-[#023136] rounded-md flex items-center justify-center rotate-45">
-                   <div className="w-5 h-5 bg-[#023136] rounded-sm -rotate-45" />
-                </div>
-             </div>
-             <h1 className="text-8xl font-bold font-serif-juricob tracking-tighter leading-none">JURICOB</h1>
-             <div className="h-[2px] w-48 bg-gradient-to-r from-transparent via-emerald-400 to-transparent mt-4 opacity-50" />
-          </div>
-
-          {/* Features List exactly as image */}
-          <div className="space-y-12 text-left max-w-md">
-            <div className="flex items-start gap-6">
-              <div className="mt-1 w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center">
-                <Shield className="w-6 h-6 text-white/90" />
-              </div>
-              <div>
-                <h3 className="font-bold text-xl font-sans-juricob">Seguro y confiable</h3>
-                <p className="text-white/60 text-base font-light leading-snug">Protegemos tu información con los más altos estándares.</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-6">
-              <div className="mt-1 w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center">
-                <Briefcase className="w-6 h-6 text-white/90" />
-              </div>
-              <div>
-                <h3 className="font-bold text-xl font-sans-juricob">Gestión eficiente</h3>
-                <p className="text-white/60 text-base font-light leading-snug">Administra tus casos y documentos de manera ágil y centralizada.</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-6">
-              <div className="mt-1 w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-white/90" />
-              </div>
-              <div>
-                <h3 className="font-bold text-xl font-sans-juricob">Información al día</h3>
-                <p className="text-white/60 text-base font-light leading-snug">Accede a legislación, jurisprudencia y novedades jurídicas.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* We keep the branding part from the original image as it's already there */}
       </div>
 
-      {/* Right Panel - Login Card */}
-      <div className="w-full lg:w-[45%] flex flex-col justify-between items-center py-12 px-8">
-        <div className="w-full max-w-lg flex flex-col items-center">
-          <Card className="login-card border-none bg-white w-full p-12 space-y-8 mt-12">
-            <CardContent className="p-0 space-y-10">
+      {/* Right Panel - Login Form */}
+      <div className="w-full lg:w-[40%] flex flex-col justify-between items-center py-12 px-8 relative z-30">
+        <div className="w-full max-w-md flex flex-col items-center flex-1 justify-center">
+          <Card className="login-card border-none w-full p-10 space-y-8">
+            <CardContent className="p-0 space-y-8">
               
-              {/* Header Icon matching image circle */}
-              <div className="flex items-center justify-center gap-8">
-                 <div className="h-px flex-1 bg-gray-200"></div>
-                 <div className="w-16 h-16 rounded-full border-[1.5px] border-emerald-500 flex items-center justify-center bg-white">
-                    <Lock className="w-6 h-6 text-emerald-600" />
-                 </div>
-                 <div className="h-px flex-1 bg-gray-200"></div>
+              <div className="text-center space-y-1">
+                 <h2 className="text-2xl font-normal text-[#021C33] font-serif-juricob">Acceso seguro</h2>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="space-y-3">
+              {/* Icon Section with Lines */}
+              <div className="flex items-center justify-center gap-6">
+                 <div className="h-[1px] flex-1 bg-gray-200"></div>
+                 <div className="w-14 h-14 rounded-full border border-emerald-500 flex items-center justify-center bg-white shadow-sm">
+                    <Lock className="w-5 h-5 text-emerald-600" />
+                 </div>
+                 <div className="h-[1px] flex-1 bg-gray-200"></div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
                   <Label htmlFor="username" className="text-sm font-bold text-[#021C33] ml-1">Correo electrónico</Label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -158,12 +111,12 @@ export default function LoginPage() {
                       placeholder="ejemplo@correo.com"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="pl-12 h-14 bg-gray-50 border-gray-200 focus:border-emerald-500 rounded-xl font-sans-juricob"
+                      className="pl-12 h-14 bg-gray-50 border-gray-100 focus:border-emerald-500 rounded-xl font-sans-juricob text-sm"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <Label htmlFor="password" className="text-sm font-bold text-[#021C33] ml-1">Contraseña</Label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -173,7 +126,7 @@ export default function LoginPage() {
                       placeholder="••••••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-12 pr-12 h-14 bg-gray-50 border-gray-200 focus:border-emerald-500 rounded-xl font-sans-juricob"
+                      className="pl-12 pr-12 h-14 bg-gray-50 border-gray-100 focus:border-emerald-500 rounded-xl font-sans-juricob text-sm"
                     />
                     <button
                       type="button"
@@ -194,29 +147,29 @@ export default function LoginPage() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                     />
-                    <label htmlFor="remember" className="text-sm text-slate-500 cursor-pointer font-medium">Recordarme</label>
+                    <label htmlFor="remember" className="text-xs text-slate-500 cursor-pointer font-medium">Recordarme</label>
                   </div>
                   <button
                     type="button"
-                    className="text-sm font-bold text-emerald-600 hover:text-emerald-700"
+                    className="text-xs font-bold text-emerald-700 hover:opacity-80"
                   >
                     ¿Olvidaste tu contraseña?
                   </button>
                 </div>
 
                 {loginError && (
-                  <p className="text-red-500 text-sm text-center font-medium">{loginError}</p>
+                  <p className="text-red-500 text-xs text-center font-semibold">{loginError}</p>
                 )}
 
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="btn-gradient w-full h-16 text-white rounded-xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl hover:opacity-90 transition-all active:scale-[0.98]"
+                  className="btn-gradient w-full h-14 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-lg hover:shadow-emerald-900/20 transition-all"
                 >
                   {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                     <>
                       <span>Iniciar sesión</span>
-                      <ArrowRight className="h-6 w-6" />
+                      <ArrowRight className="h-5 w-5" />
                     </>
                   )}
                 </button>
@@ -225,16 +178,16 @@ export default function LoginPage() {
                    <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-gray-100"></div>
                    </div>
-                   <div className="relative flex justify-center text-sm">
-                      <span className="bg-white px-4 text-gray-400 font-medium">¿No tienes una cuenta?</span>
+                   <div className="relative flex justify-center text-[10px]">
+                      <span className="bg-white px-2 text-gray-400 font-medium uppercase tracking-wider">¿No tienes una cuenta?</span>
                    </div>
                 </div>
 
                 <Button 
                    variant="outline" 
-                   className="w-full h-16 border-emerald-500/30 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-50"
+                   className="w-full h-14 border-emerald-500/20 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                 >
-                   <User className="w-5 h-5 text-emerald-600" />
+                   <User className="w-5 h-5" />
                    Solicitar acceso
                 </Button>
               </form>
@@ -242,18 +195,18 @@ export default function LoginPage() {
           </Card>
         </div>
 
-        {/* Footer exactly like image */}
-        <div className="flex items-center gap-12 text-slate-400 text-sm font-medium mt-8">
-           <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6 text-[#021C33]" />
-              <span className="uppercase tracking-wider text-xs">Plataforma Segura</span>
+        {/* Bottom Footer Section */}
+        <div className="flex items-center gap-10 text-slate-500 font-medium mt-auto">
+           <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-[#021C33]" />
+              <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
            </div>
-           <div className="w-px h-10 bg-gray-200" />
-           <div className="flex items-center gap-3">
-              <Headphones className="w-6 h-6 text-[#021C33]" />
-              <div className="flex flex-col text-[10px] leading-tight">
-                 <span className="uppercase tracking-wider font-bold">Soporte Especializado</span>
-                 <span>Asistencia profesional.</span>
+           <div className="w-[1px] h-8 bg-gray-200" />
+           <div className="flex items-center gap-2">
+              <Headphones className="w-5 h-5 text-[#021C33]" />
+              <div className="flex flex-col text-[9px] leading-tight font-bold">
+                 <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
+                 <span className="text-slate-400 font-normal">Asistencia profesional.</span>
               </div>
            </div>
         </div>
