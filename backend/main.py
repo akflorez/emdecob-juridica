@@ -1530,11 +1530,6 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         "total_pendientes": total_pendientes,
         "total_no_leidos": total_no_leidos,
         "total_actualizados_hoy": total_actualizados_hoy,
-        "debug_info": {
-            "user_id": current_user.id,
-            "username": current_user.username,
-            "is_jurico": is_jurico
-        }
     }
 
 
@@ -2327,14 +2322,6 @@ def list_cases(
         "page": page,
         "page_size": page_size,
         "unread_count": unread_count,
-        "debug_info": {
-            "user_id": current_user.id,
-            "username": current_user.username,
-            "is_jurico": is_jurico,
-            "sql_count": total,
-            "db_name": engine.url.database,
-            "is_admin": current_user.is_admin
-        }
     }
 
 

@@ -5,13 +5,16 @@ from sqlalchemy import or_
 
 def check():
     db = SessionLocal()
-    search = "%FNA%"
+    search = "%emdecob%"
     cases = db.query(Case).filter(or_(
+        Case.radicado.like(search),
         Case.demandante.like(search),
-        Case.demandado.like(search)
+        Case.demandado.like(search),
+        Case.abogado.like(search),
+        Case.alias.like(search)
     )).all()
     
-    print(f"Cases matching 'FNA': {len(cases)}")
+    print(f"Cases matching 'emdecob': {len(cases)}")
     uids = {}
     for c in cases:
         uids[c.user_id] = uids.get(c.user_id, 0) + 1
