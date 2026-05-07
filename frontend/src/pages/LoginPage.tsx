@@ -17,7 +17,7 @@ import {
   Headphones
 } from 'lucide-react';
 
-/* Use the new clean asset provided by the user */
+/* Use the new clean asset provided by the user with cache busting */
 const LOGIN_BG = "/login-2.png?v=2";
 
 export default function LoginPage() {
@@ -83,15 +83,16 @@ export default function LoginPage() {
         .form-area {
           flex: 1;
           display: flex;
+          flex-direction: column;
           justify-content: center;
           align-items: center;
           padding: 2rem;
-          padding-left: 12%; /* Adjusted for the new image to center perfectly in the gray watermark area */
+          padding-left: 12%;
         }
 
         @media (max-width: 1024px) {
           .branding-area-spacer { display: none; }
-          .form-area { flex: 1; padding-right: 2rem; }
+          .form-area { flex: 1; padding-left: 0; }
           .full-bg { background-position: 80% center; }
         }
 
@@ -130,7 +131,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-8">
               <div className="space-y-3">
                 <Label htmlFor="u" className="text-sm font-bold text-slate-700 ml-1">Correo electrónico</Label>
                 <div className="relative group">
@@ -158,7 +159,7 @@ export default function LoginPage() {
                 <button type="button" className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
               </div>
 
-              {loginError && <p className="text-red-500 text-[10px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
+              {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
 
               <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all">
                 {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-6 w-6" /></>}
@@ -172,23 +173,23 @@ export default function LoginPage() {
               <Button variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
             </form>
           </div>
-        </div>
-      </div>
 
-      {/* Global Footer (using absolute to overlay at bottom right) */}
-      <div className="absolute bottom-10 right-10 z-20 hidden lg:flex items-center gap-10 text-slate-400">
-         <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6 text-[#021C33]" />
-            <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
-         </div>
-         <div className="w-[1px] h-8 bg-slate-100" />
-         <div className="flex items-center gap-3">
-            <Headphones className="w-6 h-6 text-[#021C33]" />
-            <div className="flex flex-col text-[10px] leading-tight font-bold">
-               <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
-               <span className="text-slate-400 font-normal">Asistencia profesional.</span>
-            </div>
-         </div>
+          {/* Footer Info - Centered with the card and larger */}
+          <div className="flex items-center gap-12 mt-16 text-slate-400 animate-in fade-in slide-in-from-bottom duration-1000">
+             <div className="flex items-center gap-4 hover:text-[#021C33] transition-colors cursor-default">
+                <Shield className="w-8 h-8 text-[#021C33]" />
+                <span className="uppercase tracking-[0.2em] text-[12px] font-bold">Plataforma Segura</span>
+             </div>
+             <div className="w-[1.5px] h-10 bg-slate-200" />
+             <div className="flex items-center gap-4 hover:text-[#021C33] transition-colors cursor-default">
+                <Headphones className="w-8 h-8 text-[#021C33]" />
+                <div className="flex flex-col text-[12px] leading-tight font-bold">
+                   <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
+                   <span className="text-slate-400 font-normal text-[11px]">Asistencia profesional 24/7</span>
+                </div>
+             </div>
+          </div>
+        </div>
       </div>
     </div>
   );
