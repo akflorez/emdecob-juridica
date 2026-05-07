@@ -77,7 +77,7 @@ export default function LoginPage() {
         }
 
         .branding-area-spacer {
-          flex: 0 0 50%;
+          flex: 0 0 40%;
         }
 
         .form-area {
@@ -86,6 +86,7 @@ export default function LoginPage() {
           justify-content: center;
           align-items: center;
           padding: 2rem;
+          padding-left: 18%; /* Compensate for the smaller branding area to center precisely in the gray zone */
         }
 
         @media (max-width: 1024px) {
