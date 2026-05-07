@@ -330,8 +330,8 @@ export default function ProjectDashboardPage() {
       setNewItemName('');
       setNewDueDate('');
       fetchInitialData();
-    } catch (error) {
-      toast.error("Error al crear el elemento");
+    } catch (error: any) {
+      toast.error("Error al crear el elemento", { description: error.message });
     }
   };
 

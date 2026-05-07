@@ -4093,11 +4093,21 @@ async def create_workspace(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ws = Workspace(name=ws_data.name, description=ws_data.description, visibility=ws_data.visibility, owner_id=current_user.id)
-    db.add(ws)
-    db.commit()
-    db.refresh(ws)
-    return ws
+    try:
+        ws = Workspace(
+            name=ws_data.name, 
+            description=ws_data.description, 
+            visibility=ws_data.visibility, 
+            owner_id=current_user.id
+        )
+        db.add(ws)
+        db.commit()
+        db.refresh(ws)
+        return ws
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error creating workspace: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al crear espacio: {str(e)}")
 
 @app.post("/api/projects/folders")
 @app.post("/projects/folders")
@@ -4106,11 +4116,16 @@ async def create_folder(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    f = Folder(name=f_data.name, workspace_id=f_data.workspace_id)
-    db.add(f)
-    db.commit()
-    db.refresh(f)
-    return f
+    try:
+        f = Folder(name=f_data.name, workspace_id=f_data.workspace_id)
+        db.add(f)
+        db.commit()
+        db.refresh(f)
+        return f
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error creating folder: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al crear carpeta: {str(e)}")
 
 @app.post("/api/projects/lists")
 @app.post("/projects/lists")
@@ -4119,11 +4134,20 @@ async def create_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    l = ProjectList(name=l_data.name, folder_id=l_data.folder_id, workspace_id=l_data.workspace_id)
-    db.add(l)
-    db.commit()
-    db.refresh(l)
-    return l
+    try:
+        l = ProjectList(
+            name=l_data.name, 
+            folder_id=l_data.folder_id, 
+            workspace_id=l_data.workspace_id
+        )
+        db.add(l)
+        db.commit()
+        db.refresh(l)
+        return l
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error creating list: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al crear lista: {str(e)}")
 
 @app.get("/api/cases/id/{case_id}/tasks")
 @app.get("/cases/id/{case_id}/tasks")
