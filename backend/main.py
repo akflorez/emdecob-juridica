@@ -1540,15 +1540,14 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             q_no_leidos = q_no_leidos.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
             q_hoy = q_hoy.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
 
-    total_no_leidos = q_no_leidos.count()
-    total_actualizados_hoy = q_hoy.count()
-
     return {
         "total_validos": total_validos,
+        "total_pendientes": 0 if is_jurico else total_pendientes,
         "total_invalidos": total_invalidos,
-        "total_pendientes": total_pendientes,
-        "total_no_leidos": total_no_leidos,
-        "total_actualizados_hoy": total_actualizados_hoy,
+        "total_no_leidos": q_no_leidos.count(),
+        "total_actualizados_hoy": q_hoy.count(),
+        "debug_uid": current_user.id,
+        "debug_juri": is_jurico
     }
 
 
