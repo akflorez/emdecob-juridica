@@ -1451,7 +1451,11 @@ def get_version():
 @app.get("/api/diagnostic/my-cases")
 @app.get("/diagnostic/my-cases")
 def diagnostic_my_cases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    count = db.query(Case).filter(Case.user_id == current_user.id).count()
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    if is_jurico:
+        count = db.query(Case).filter(or_(Case.user_id == current_user.id, Case.user_id == 2)).count()
+    else:
+        count = db.query(Case).filter(Case.user_id == current_user.id).count()
     return {
         "user_id": current_user.id,
         "username": current_user.username,
@@ -1475,21 +1479,21 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
     # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     
     if current_user.is_admin:
         # Admin ve TODO sin filtros
         pass
     elif is_jurico:
-        # Juridico solo ve sus casos asignados (ID 2)
-        q_validos = q_validos.filter(Case.user_id == current_user.id)
-        q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
-        q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
+        # Juridico ve sus casos asignados (ID 2 o su propio ID)
+        q_validos = q_validos.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
+        q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id == current_user.id, InvalidRadicado.user_id == 2))
+        q_pendientes = q_pendientes.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
         # Otros usuarios (ej: FNA) ven todo menos lo de Jurico (ID 2)
-        q_validos = q_validos.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
-        q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id.is_(None)))
-        q_pendientes = q_pendientes.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q_validos = q_validos.filter(and_(Case.user_id != 2, Case.user_id != current_user.id if current_user.id != 1 else True))
+        q_invalidos = q_invalidos.filter(and_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id != current_user.id if current_user.id != 1 else True))
+        q_pendientes = q_pendientes.filter(and_(Case.user_id != 2, Case.user_id != current_user.id if current_user.id != 1 else True))
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1514,12 +1518,12 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
     if not current_user.is_admin:
         if is_jurico:
-            q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
-            q_hoy = q_hoy.filter(Case.user_id == current_user.id)
+            q_no_leidos = q_no_leidos.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
+            q_hoy = q_hoy.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
         else:
             # FNA y otros excluyen a Jurico (ID 2)
-            q_no_leidos = q_no_leidos.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
-            q_hoy = q_hoy.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+            q_no_leidos = q_no_leidos.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+            q_hoy = q_hoy.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
 
     total_no_leidos = q_no_leidos.count()
     total_actualizados_hoy = q_hoy.count()
@@ -2195,17 +2199,17 @@ def list_cases(
     q = db.query(Case)
 
     # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     
     if current_user.is_admin:
         # Admin ve TODO
         pass
     elif is_jurico:
-        # Juridico solo ve sus casos (ID 2)
-        q = q.filter(Case.user_id == current_user.id)
+        # Juridico ve sus casos (ID 2 o su propio ID)
+        q = q.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
         # FNA y otros ven todo menos Jurico
-        q = q.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q = q.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2273,9 +2277,9 @@ def list_cases(
 
     if not current_user.is_admin:
         if is_jurico:
-            q_unread = q_unread.filter(Case.user_id == current_user.id)
+            q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
         else:
-            q_unread = q_unread.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+            q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
     
     unread_count = q_unread.count()
 
@@ -4230,12 +4234,11 @@ async def get_tasks(
     is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     if is_jurico:
         query = query.join(Case, Task.case_id == Case.id)
-        query = query.filter(Case.user_id == current_user.id)
+        query = query.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     elif not current_user.is_admin:
         # Otros usuarios no-admin (FNA) ven todo menos lo de Jurico
-        # Si el caso no tiene user_id o es != 2
         query = query.join(Case, Task.case_id == Case.id)
-        query = query.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        query = query.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
         
     return query.order_by(desc(Task.created_at)).all()
 
