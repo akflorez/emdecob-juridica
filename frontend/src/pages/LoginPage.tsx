@@ -97,11 +97,11 @@ export default function LoginPage() {
 
         .premium-login-card {
           width: 100%;
-          max-width: 440px;
+          max-width: 520px;
           background: white;
-          border-radius: 2.5rem;
-          box-shadow: 0 30px 60px -12px rgba(0,0,0,0.15);
-          padding: 3.5rem 3rem;
+          border-radius: 3rem;
+          box-shadow: 0 40px 100px -20px rgba(0,0,0,0.15);
+          padding: 4rem 3.5rem;
           border: 1px solid #f1f5f9;
         }
 
@@ -119,31 +119,31 @@ export default function LoginPage() {
 
         <div className="form-area">
           <div className="premium-login-card animate-in fade-in zoom-in duration-700">
-            <div className="text-center mb-10">
-              <h1 className="text-2xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest mb-6">Acceso seguro</h1>
-              <div className="flex items-center justify-center gap-4">
-                <div className="h-[1px] flex-1 bg-slate-100"></div>
-                <div className="w-16 h-16 rounded-full border border-emerald-400 flex items-center justify-center bg-white shadow-sm">
-                  <Lock className="w-7 h-7 text-[#021C33]" />
+            <div className="text-center mb-12">
+              <h1 className="text-3xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-[0.2em] mb-8">Acceso seguro</h1>
+              <div className="flex items-center justify-center gap-6">
+                <div className="h-[1.5px] flex-1 bg-slate-100"></div>
+                <div className="w-20 h-20 rounded-full border border-emerald-400 flex items-center justify-center bg-white shadow-sm">
+                  <Lock className="w-8 h-8 text-[#021C33]" />
                 </div>
-                <div className="h-[1px] flex-1 bg-slate-100"></div>
+                <div className="h-[1.5px] flex-1 bg-slate-100"></div>
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="u" className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</Label>
+              <div className="space-y-3">
+                <Label htmlFor="u" className="text-sm font-bold text-slate-700 ml-1">Correo electrónico</Label>
                 <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
-                  <Input id="u" type="text" placeholder="ejemplo@correo.com" value={username} onChange={(e) => setUsername(e.target.value)} className="pl-12 h-12 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-xl font-sans-juricob" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+                  <Input id="u" type="text" placeholder="ejemplo@correo.com" value={username} onChange={(e) => setUsername(e.target.value)} className="pl-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="p" className="text-xs font-bold text-slate-700 ml-1">Contraseña</Label>
+              <div className="space-y-3">
+                <Label htmlFor="p" className="text-sm font-bold text-slate-700 ml-1">Contraseña</Label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
-                  <Input id="p" type={showPassword ? 'text' : 'password'} placeholder="••••••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 pr-12 h-12 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-xl font-sans-juricob" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+                  <Input id="p" type={showPassword ? 'text' : 'password'} placeholder="••••••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-14 pr-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
@@ -160,16 +160,16 @@ export default function LoginPage() {
 
               {loginError && <p className="text-red-500 text-[10px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
 
-              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-14 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all">
-                {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-5 w-5" /></>}
+              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all">
+                {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-6 w-6" /></>}
               </Button>
 
-              <div className="relative py-2">
+              <div className="relative py-4">
                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-                 <div className="relative flex justify-center text-[10px]"><span className="bg-white px-6 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
+                 <div className="relative flex justify-center text-xs"><span className="bg-white px-8 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
               </div>
 
-              <Button variant="outline" className="w-full h-12 border-slate-200 text-[#021C33] font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
+              <Button variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
             </form>
           </div>
         </div>
