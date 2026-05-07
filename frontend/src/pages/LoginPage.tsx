@@ -64,7 +64,7 @@ export default function LoginPage() {
           inset: 0;
           background-image: url(${LOGIN_BG});
           background-size: cover;
-          background-position: center;
+          background-position: left bottom;
           z-index: 1;
         }
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
         }
 
         .branding-area-spacer {
-          flex: 0 0 58%;
+          flex: 0 0 55%;
         }
 
         .form-area {
