@@ -252,7 +252,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const currentStatus = (displayTask.status || 'ABIERTO').toUpperCase();
   
   const totalSub = displayTask.subtasks?.length || 0;
-  const doneSub = displayTask.subtasks?.filter(s => ['completado', 'closed', 'done'].includes(s.status?.toLowerCase() || '')).length || 0;
+  const doneSub = displayTask.subtasks?.filter(s => ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(s.status?.toLowerCase() || '')).length || 0;
   const progressSub = totalSub > 0 ? (doneSub / totalSub) * 100 : 0;
 
   const totalCheck = displayTask.checklists?.length || 0;
@@ -452,10 +452,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                                    displayTask.subtasks.map(st => (
                                      <div key={st.id} className="grid grid-cols-[1fr_180px_120px_160px] gap-8 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary">
                                         <div className="flex items-center gap-5 text-foreground">
-                                           <div className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all group-hover:border-primary", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}>
-                                              {['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3 w-3 text-white" />}
+                                           <div className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all group-hover:border-primary", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}>
+                                              {['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3 w-3 text-white" />}
                                            </div>
-                                           <span className={cn("font-bold tracking-tight truncate", ['completado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
+                                           <span className={cn("font-bold tracking-tight truncate", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
                                         </div>
                                         <div className="flex justify-center items-center">
                                            <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-black text-primary shadow-lg group-hover:bg-primary group-hover:text-primary-foreground transition-all">{st.assignee_name?.[0] || 'U'}</div>

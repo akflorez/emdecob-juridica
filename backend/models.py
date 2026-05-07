@@ -352,6 +352,7 @@ class TaskComment(Base):
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=False)
+    user_name = Column(String(255), nullable=True) # Nombre del autor (ej: de ClickUp)
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
