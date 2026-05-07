@@ -116,8 +116,13 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       if (detail) {
         setFullTask(detail);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error refreshing task", error);
+      toast({ 
+        title: "Error al refrescar", 
+        description: error.message || "No se pudo sincronizar con ClickUp.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +155,13 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
         setFullTask(updated);
       }
     } catch (error: any) {
-      toast({ title: "Error de sincronización", description: error.message || "Verifica conexión judicial.", variant: "destructive" });
+      console.error("Error in handleSave", error);
+      const detail = error.payload?.detail || error.message || "Error desconocido";
+      toast({ 
+        title: "Error de sincronización", 
+        description: String(detail), 
+        variant: "destructive" 
+      });
     }
   };
 

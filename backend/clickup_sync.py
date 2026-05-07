@@ -216,11 +216,12 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             s_id = task_data['space']['id']
             tags_res = await fetch_clickup(f"space/{s_id}/tag", api_token)
             if tags_res and 'tags' in tags_res:
+                current_tag_names = set(t.name for t in db.query(Tag).all())
                 for t_item in tags_res['tags']:
                     t_n = t_item.get('name')
-                    if t_n:
-                        if not db.query(Tag).filter(Tag.name == t_n).first():
-                            db.add(Tag(name=t_n, color=t_item.get('tag_bg', '#3b82f6')))
+                    if t_n and t_n not in current_tag_names:
+                        db.add(Tag(name=t_n, color=t_item.get('tag_bg', '#3b82f6')))
+                        current_tag_names.add(t_n)
                 db.flush()
         except Exception as e:
             print(f"[ClickUp Sync] Error on-demand space tags: {e}")
@@ -301,13 +302,13 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                 try:
                     tags_data = await fetch_clickup(f"space/{space['id']}/tag", api_token)
                     if tags_data and 'tags' in tags_data:
+                        current_tag_names = set(t.name for t in db.query(Tag).all())
                         for t_item in tags_data['tags']:
                             t_name = t_item.get('name')
-                            if t_name:
-                                existing_tag = db.query(Tag).filter(Tag.name == t_name).first()
-                                if not existing_tag:
-                                    new_tag = Tag(name=t_name, color=t_item.get('tag_bg', '#3b82f6'))
-                                    db.add(new_tag)
+                            if t_name and t_name not in current_tag_names:
+                                new_tag = Tag(name=t_name, color=t_item.get('tag_bg', '#3b82f6'))
+                                db.add(new_tag)
+                                current_tag_names.add(t_name)
                         db.flush()
                 except Exception as e:
                     print(f"[ClickUp Sync] Error syncing tags for space {space['id']}: {e}")
