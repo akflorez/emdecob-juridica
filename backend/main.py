@@ -1446,7 +1446,7 @@ def get_migration_status(db: Session = Depends(get_db)):
 
 @app.get("/api/version")
 def get_version():
-    return {"version": "afc9789f5e68060483ce72910d7b73ab3cada7f0", "database": "juricob"}
+    return {"version": "afc9789f5e68060483ce72910d7b73ab3cada7f0v2", "database": "juricob"}
 
 @app.get("/api/diagnostic/my-cases")
 @app.get("/diagnostic/my-cases")
@@ -2345,14 +2345,14 @@ def download_cases_excel(
     solo_actualizados_hoy: bool = Query(default=False),
 ):
     # Multi-tenancy filter
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     
     q = db.query(Case).filter(Case.juzgado.isnot(None))
 
     if is_jurico:
-        q = q.filter(Case.user_id == current_user.id)
+        q = q.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     elif not current_user.is_admin:
-        q = q.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q = q.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
 
     if solo_no_leidos:
         q = q.filter(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash)
@@ -2790,10 +2790,11 @@ async def get_case_by_radicado_endpoint(
             # Si es Jurico, ve sus casos. Si es FNA, ve los de FNA.
             visible = False
             if is_jurico:
-                if c.user_id == 2: visible = True
+                if c.user_id == 2 or c.user_id == current_user.id: visible = True
             else:
-                # Otros (FNA) solo ven si es explícitamente FNA
-                if _es_fna(c.demandante or ""): visible = True
+                # Otros (FNA) solo ven si es explícitamente FNA o no es de Jurico
+                if _es_fna(c.demandante or "") or (c.user_id != 2 and c.user_id != 1): visible = True
+                if c.user_id == 1: visible = True
             
             if visible:
                 local_results.append({
@@ -4522,15 +4523,15 @@ async def get_advanced_dashboard_stats(
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     q_month = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str)
     
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username == "juricob"
+    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     
     if current_user.is_admin:
         # Admin ve TODO
         pass
     elif is_jurico:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id == current_user.id)
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
         
     month_actions = q_month.count()
     
@@ -4542,9 +4543,9 @@ async def get_advanced_dashboard_stats(
         # Admin ve TODO
         pass
     elif is_jurico:
-        q_abogados = q_abogados.filter(Case.user_id == current_user.id)
+        q_abogados = q_abogados.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_abogados = q_abogados.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q_abogados = q_abogados.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
     
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
