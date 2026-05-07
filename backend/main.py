@@ -4318,18 +4318,12 @@ async def get_task_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).options(
-        joinedload(Task.checklists),
-        joinedload(Task.subtasks),
-        joinedload(Task.comments),
-        joinedload(Task.tags),
-        joinedload(Task.attachments)
-    ).filter(Task.id == task_id).first()
-    
-    if not task:
-        raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    
+    import traceback
     try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Tarea no encontrada")
+        
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
@@ -4345,10 +4339,12 @@ async def get_task_detail(
                     db.commit()
                     db.refresh(task)
         return task
+    except HTTPException as he:
+        raise he
     except Exception as e:
         db.rollback()
-        print(f"[TASKS] Error in get_task_detail for {task_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error al sincronizar tarea: {str(e)}")
+        print(f"[CRITICAL ERROR] get_task_detail: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
