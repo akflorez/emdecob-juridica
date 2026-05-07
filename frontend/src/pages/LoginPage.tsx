@@ -83,10 +83,10 @@ export default function LoginPage() {
         .form-area {
           flex: 1;
           display: flex;
-          justify-content: center;
+          justify-content: flex-end;
           align-items: center;
           padding: 2rem;
-          padding-right: 5%;
+          padding-right: 12%;
         }
 
         @media (max-width: 1024px) {
