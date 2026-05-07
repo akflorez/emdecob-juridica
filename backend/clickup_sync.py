@@ -8,6 +8,13 @@ import json
 
 CLICKUP_API_URL = "https://api.clickup.com/api/v2"
 
+_FNA_KEYWORDS = {"FONDO NACIONAL DEL AHORRO", "FNA", "FONDO NAL DEL AHORRO", "F.N.A.", "TRIADA", "FONDO NACIONAL DEL AHORRO - FNA"}
+
+def _es_fna(nombre: str) -> bool:
+    if not nombre: return False
+    n = nombre.upper()
+    return any(kw in n for kw in _FNA_KEYWORDS)
+
 async def fetch_clickup(endpoint: str, api_token: str):
     headers = {"Authorization": api_token}
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -71,16 +78,26 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         if matching_case:
             case_id = matching_case.id
         else:
-            # SI NO EXISTE, lo creamos para que Juricob empiece a trackearlo
+            # SI NO EXISTE, lo creamos
             target_user_id = owner_id
             if assignee_id:
                 target_user_id = assignee_id
+            
+            # Inteligencia de asignación: Si el nombre de la tarea (demandante/demandado) indica FNA, asignar a ID 1
+            case_title = task_data.get('name', '')
+            if _es_fna(case_title) or _es_fna(task_data.get('description', '')):
+                target_user_id = 1
                 
-            new_case = Case(radicado=radicado, user_id=target_user_id, demandado=task_data['name'])
+            new_case = Case(
+                radicado=radicado, 
+                user_id=target_user_id, 
+                demandado=case_title,
+                demandante="Importado de ClickUp"
+            )
             db.add(new_case)
             db.flush()
             case_id = new_case.id
-            print(f"[ClickUp Sync] Nuevo radicado '{radicado}' creado desde tarea.")
+            print(f"[ClickUp Sync] Nuevo radicado '{radicado}' creado. Asignado a UserID={target_user_id}")
 
     # 3. Mapear fechas
     due_date = None

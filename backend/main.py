@@ -1452,15 +1452,30 @@ def get_version():
 @app.get("/diagnostic/my-cases")
 def diagnostic_my_cases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    
+    q_all = db.query(Case)
     if is_jurico:
-        count = db.query(Case).filter(or_(Case.user_id == current_user.id, Case.user_id == 2)).count()
+        q_pool = q_all.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        count = db.query(Case).filter(Case.user_id == current_user.id).count()
+        q_pool = q_all.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+        
+    count_valid = q_pool.filter(Case.juzgado.isnot(None)).count()
+    count_pending = q_pool.filter(Case.juzgado.is_(None)).count()
+    
     return {
-        "user_id": current_user.id,
-        "username": current_user.username,
-        "cases_count": count,
-        "db_url_redacted": engine.url.database
+        "user": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "is_jurico": is_jurico,
+            "is_admin": current_user.is_admin
+        },
+        "counts": {
+            "valid": count_valid,
+            "pending": count_pending,
+            "total_in_db": db.query(Case).count()
+        },
+        "database": engine.url.database,
+        "host": engine.url.host
     }
 
 @app.get("/")

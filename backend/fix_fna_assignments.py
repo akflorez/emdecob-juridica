@@ -30,12 +30,24 @@ def fix_assignments():
     print(f"Checking {len(jurico_cases)} cases assigned to Juricob...")
     
     for c in jurico_cases:
+        match = False
         if c.demandante:
             name = c.demandante.upper()
             if any(kw in name for kw in fna_keywords):
-                # This belongs to FNA
-                c.user_id = 1
-                moved_count += 1
+                match = True
+        
+        if not match and c.demandado:
+            name = c.demandado.upper()
+            if any(kw in name for kw in fna_keywords):
+                match = True
+        
+        # Any pending case (no juzgado) in Juricob is suspect, move to FNA as per user request
+        if not match and c.juzgado is None:
+            match = True
+            
+        if match:
+            c.user_id = 1
+            moved_count += 1
     
     db.commit()
     print(f"Successfully moved {moved_count} cases to FNA (ID 1).")
