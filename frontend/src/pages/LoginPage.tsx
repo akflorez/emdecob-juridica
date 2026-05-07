@@ -77,16 +77,15 @@ export default function LoginPage() {
         }
 
         .branding-area-spacer {
-          flex: 0 0 55%;
+          flex: 0 0 57%;
         }
 
         .form-area {
           flex: 1;
           display: flex;
-          justify-content: flex-end;
+          justify-content: center;
           align-items: center;
           padding: 2rem;
-          padding-right: 12%;
         }
 
         @media (max-width: 1024px) {
