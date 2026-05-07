@@ -4520,36 +4520,42 @@ async def update_task(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     
-    if t_data.title is not None: task.title = t_data.title
-    if t_data.description is not None: task.description = t_data.description
-    if t_data.status is not None: task.status = t_data.status
-    if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
-    if t_data.priority is not None: task.priority = t_data.priority
-    if t_data.due_date is not None: task.due_date = t_data.due_date
-    if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
-    if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
-    
-    if hasattr(t_data, 'assignee_ids') and t_data.assignee_ids is not None:
-        db_users = db.query(User).filter(User.id.in_(t_data.assignee_ids)).all()
-        task.assignees = db_users
-        if db_users:
-            task.assignee_id = db_users[0].id
-            task.assignee_name = ", ".join([(u.nombre or u.username) for u in db_users])
-    
-    if hasattr(t_data, 'tags') and t_data.tags is not None:
-        # t_data.tags es una lista de nombres de tags
-        db_tags = []
-        for tname in t_data.tags:
-            tag = db.query(Tag).filter(Tag.name == tname).first()
-            if not tag:
-                tag = Tag(name=tname)
-                db.add(tag)
-                db.flush()
-            db_tags.append(tag)
-        task.tags = db_tags
+    try:
+        if t_data.title is not None: task.title = t_data.title
+        if t_data.description is not None: task.description = t_data.description
+        if t_data.status is not None: task.status = t_data.status
+        if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
+        if t_data.priority is not None: task.priority = t_data.priority
+        if t_data.due_date is not None: task.due_date = t_data.due_date
+        if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
+        if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
+        
+        if hasattr(t_data, 'assignee_ids') and t_data.assignee_ids is not None:
+            db_users = db.query(User).filter(User.id.in_(t_data.assignee_ids)).all()
+            task.assignees = db_users
+            if db_users:
+                task.assignee_id = db_users[0].id
+                task.assignee_name = ", ".join([(u.nombre or u.username) for u in db_users])
+        
+        if hasattr(t_data, 'tags') and t_data.tags is not None:
+            # t_data.tags es una lista de nombres de tags
+            db_tags = []
+            for tname in t_data.tags:
+                tag = db.query(Tag).filter(Tag.name == tname).first()
+                if not tag:
+                    tag = Tag(name=tname)
+                    db.add(tag)
+                    db.flush()
+                db_tags.append(tag)
+            task.tags = db_tags
 
-    db.commit()
-    return task
+        db.commit()
+        db.refresh(task)
+        return task
+    except Exception as e:
+        db.rollback()
+        print(f"[TASKS] Error updating task {task_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al actualizar tarea: {str(e)}")
 
     # Endpoint consolidado en la l?nea 3604
     pass

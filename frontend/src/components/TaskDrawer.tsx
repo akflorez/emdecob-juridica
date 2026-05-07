@@ -136,8 +136,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       const updated = await updateTask(displayTask.id, cleanedUpdates);
       onTaskUpdate(updated);
       setFullTask(updated);
-    } catch (error) {
-      toast({ title: "Error de sincronización", description: "Verifica conexión judicial.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Error de sincronización", description: error.message || "Verifica conexión judicial.", variant: "destructive" });
     }
   };
 
