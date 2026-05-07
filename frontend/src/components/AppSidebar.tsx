@@ -139,6 +139,7 @@ export function AppSidebar() {
       {!collapsed && (
         <div className="p-3 border-t border-sidebar-border">
           <p className="text-xs text-muted-foreground text-center">© 2026 EMDECOB</p>
+          <p className="text-[10px] text-primary/40 text-center mt-1 font-mono uppercase tracking-tighter">v1.0.5-MT-FIX</p>
         </div>
       )}
     </aside>
