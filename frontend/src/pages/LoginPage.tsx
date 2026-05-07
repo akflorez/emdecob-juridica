@@ -77,7 +77,7 @@ export default function LoginPage() {
         }
 
         .branding-area-spacer {
-          flex: 0 0 48%;
+          flex: 0 0 50%;
         }
 
         .form-area {
