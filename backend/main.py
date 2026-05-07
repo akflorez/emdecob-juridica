@@ -4429,7 +4429,8 @@ async def add_task_comment(
     comment = TaskComment(
         task_id=task_id,
         content=data.get("content"),
-        user_id=current_user.id
+        user_id=current_user.id,
+        user_name=current_user.nombre or current_user.username
     )
     db.add(comment)
     db.commit()

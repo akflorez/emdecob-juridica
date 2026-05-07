@@ -18,14 +18,17 @@ def _es_fna(nombre: str) -> bool:
 async def fetch_clickup(endpoint: str, api_token: str):
     headers = {"Authorization": api_token}
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(f"{CLICKUP_API_URL}/{endpoint}", headers=headers)
+        url = f"{CLICKUP_API_URL}/{endpoint}"
+        resp = await client.get(url, headers=headers)
         if resp.status_code == 403:
-            print(f"[ClickUp API Forbidden] {endpoint}: Saltando por falta de permisos.")
+            print(f"[ClickUp API Forbidden] {endpoint}")
             return None
         if resp.status_code != 200:
             print(f"[ClickUp API Error] {endpoint}: {resp.status_code} - {resp.text}")
             return None
-        return resp.json()
+        data = resp.json()
+        print(f"[ClickUp API Success] {endpoint} - Keys: {list(data.keys())}")
+        return data
 
 def normalize_status(status_data: any) -> str:
     # Retornar el estado original de ClickUp para mantener fidelidad total
@@ -175,6 +178,10 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                     # Intentamos usar el nombre del usuario de ClickUp si está disponible
                     user_info = comm.get('user', {})
                     u_name = user_info.get('username', 'SISTEMA (CU)')
+                    # Fallback to nombre if username is not present or email
+                    if not u_name or u_name == 'SISTEMA (CU)':
+                        u_name = user_info.get('email', 'SISTEMA (CU)')
+                    
                     new_comm = TaskComment(
                         task_id=db_task.id, 
                         content=text_comm, 
@@ -182,6 +189,7 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                         user_name=u_name
                     )
                     db.add(new_comm)
+                    print(f"[ClickUp Sync] Comentario agregado: {u_name}")
     except Exception as e:
         print(f"[ClickUp Sync] Error en comentarios: {e}")
 
@@ -202,6 +210,21 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             db.add(new_att)
 
     # 6.5 Procesar Etiquetas (Tags)
+    # Primero intentamos sincronizar todas las etiquetas del espacio para tener las opciones completas
+    if 'space' in task_data and task_data['space'].get('id'):
+        try:
+            s_id = task_data['space']['id']
+            tags_res = await fetch_clickup(f"space/{s_id}/tag", api_token)
+            if tags_res and 'tags' in tags_res:
+                for t_item in tags_res['tags']:
+                    t_n = t_item.get('name')
+                    if t_n:
+                        if not db.query(Tag).filter(Tag.name == t_n).first():
+                            db.add(Tag(name=t_n, color=t_item.get('tag_bg', '#3b82f6')))
+                db.flush()
+        except Exception as e:
+            print(f"[ClickUp Sync] Error on-demand space tags: {e}")
+
     clickup_tags = task_data.get('tags', [])
     if clickup_tags:
         db_tags = []
@@ -274,6 +297,21 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
             if not spaces_data: continue
             
             for space in spaces_data['spaces']:
+                # --- SINCRONIZACIÓN DE ETIQUETAS (Space Tags) ---
+                try:
+                    tags_data = await fetch_clickup(f"space/{space['id']}/tag", api_token)
+                    if tags_data and 'tags' in tags_data:
+                        for t_item in tags_data['tags']:
+                            t_name = t_item.get('name')
+                            if t_name:
+                                existing_tag = db.query(Tag).filter(Tag.name == t_name).first()
+                                if not existing_tag:
+                                    new_tag = Tag(name=t_name, color=t_item.get('tag_bg', '#3b82f6'))
+                                    db.add(new_tag)
+                        db.flush()
+                except Exception as e:
+                    print(f"[ClickUp Sync] Error syncing tags for space {space['id']}: {e}")
+
                 # 3. Folders
                 folders_data = await fetch_clickup(f"space/{space['id']}/folder", api_token)
                 if folders_data:
