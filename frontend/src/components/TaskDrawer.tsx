@@ -133,9 +133,22 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
         cleanedUpdates.due_date = null as any;
       }
 
-      const updated = await updateTask(displayTask.id, cleanedUpdates);
-      onTaskUpdate(updated);
-      setFullTask(updated);
+      if (!displayTask.id) {
+        // Es una tarea nueva, usar createTask
+        const created = await createTask({
+          ...displayTask,
+          ...cleanedUpdates,
+          title: editedTitle || "Nueva Tarea"
+        });
+        onTaskUpdate(created);
+        setFullTask(created);
+        toast({ title: "Tarea creada", description: "La tarea se ha guardado correctamente." });
+      } else {
+        // Es una tarea existente, usar updateTask
+        const updated = await updateTask(displayTask.id, cleanedUpdates);
+        onTaskUpdate(updated);
+        setFullTask(updated);
+      }
     } catch (error: any) {
       toast({ title: "Error de sincronización", description: error.message || "Verifica conexión judicial.", variant: "destructive" });
     }
