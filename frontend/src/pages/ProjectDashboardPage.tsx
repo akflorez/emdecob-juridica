@@ -48,7 +48,9 @@ import {
 import { toast } from "sonner";
 import { 
   getWorkspaces, getTasks, importClickUp, updateTask, getUsers,
-  type Workspace, type Task as TaskType, type User
+  createWorkspace, createFolder, createList, addWorkspaceMember, createTask,
+  getNotificationConfig, updateNotificationConfig,
+  type Workspace, type Task as TaskType, type User, type NotificationConfigResponse
 } from "@/services/api";
 import { TaskDrawer } from "@/components/TaskDrawer";
 import { Calendar as BigCalendar, momentLocalizer, Views } from 'react-big-calendar';
@@ -83,6 +85,8 @@ export default function ProjectDashboardPage() {
   // Creation Modals
   const [creationModal, setCreationModal] = useState<{ open: boolean, mode: string, title: string }>({ open: false, mode: '', title: '' });
   const [newItemName, setNewItemName] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [configData, setConfigData] = useState<any>(null);
   
   // Calendario state
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -311,12 +315,15 @@ export default function ProjectDashboardPage() {
     try {
       if (creationModal.mode === 'espacio') {
         await createWorkspace({ name: newItemName });
+      } else if (creationModal.mode === 'equipo' && selectedWorkspaceId && selectedUserId) {
+        await addWorkspaceMember(selectedWorkspaceId, selectedUserId);
+      } else if (creationModal.mode === 'pref' && configData) {
+        await updateNotificationConfig(configData);
       } else if (creationModal.mode === 'carpeta' && selectedWorkspaceId) {
         await createFolder({ name: newItemName, workspace_id: selectedWorkspaceId });
       } else if (creationModal.mode === 'lista' && (selectedFolderId || selectedWorkspaceId)) {
         await createList({ name: newItemName, workspace_id: selectedWorkspaceId!, folder_id: selectedFolderId || undefined });
       } else if (creationModal.mode === 'tarea' || !creationModal.mode) {
-        // Por defecto es tarea si no hay modo o es tarea
         await createTask({ 
           title: newItemName, 
           list_id: selectedListId || 0,
@@ -745,15 +752,54 @@ export default function ProjectDashboardPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="py-6 space-y-4">
-             <div className="space-y-2">
-               <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre</label>
-               <Input 
-                 placeholder={`Ej: ${creationModal.mode === 'espacio' ? 'Departamento Legal' : creationModal.mode === 'carpeta' ? 'Procesos 2026' : 'Lista de Tareas'}`}
-                 value={newItemName}
-                 onChange={(e) => setNewItemName(e.target.value)}
-                 className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
-               />
-             </div>
+             {creationModal.mode !== 'pref' && creationModal.mode !== 'equipo' && (
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre</label>
+                 <Input 
+                   placeholder={`Ej: ${creationModal.mode === 'espacio' ? 'Departamento Legal' : creationModal.mode === 'carpeta' ? 'Procesos 2026' : 'Lista de Tareas'}`}
+                   value={newItemName}
+                   onChange={(e) => setNewItemName(e.target.value)}
+                   className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold"
+                 />
+               </div>
+             )}
+
+             {creationModal.mode === 'equipo' && (
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Seleccionar Miembro</label>
+                 <Select onValueChange={(val) => setSelectedUserId(parseInt(val))}>
+                   <SelectTrigger className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold">
+                     <SelectValue placeholder="Seleccione un usuario" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {users.map(u => (
+                       <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+               </div>
+             )}
+
+             {creationModal.mode === 'pref' && (
+               <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre del Sistema</label>
+                    <Input placeholder="EMDECOB JURÍDICO" className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">SMTP Host</label>
+                      <Input placeholder="smtp.gmail.com" className="bg-accent/30 border-border/40 rounded-xl h-10 text-xs" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">SMTP Port</label>
+                      <Input type="number" placeholder="587" className="bg-accent/30 border-border/40 rounded-xl h-10 text-xs" />
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground bg-primary/5 p-3 rounded-lg border border-primary/10 italic">Nota: Estas configuraciones afectan a las notificaciones globales y al branding del panel.</p>
+               </div>
+             )}
+
              {(creationModal.mode === 'tarea' || !creationModal.mode) && (
                <div className="space-y-2">
                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Fecha de Vencimiento</label>

@@ -4040,9 +4040,11 @@ async def get_workspaces(
 ):
     """Retorna la jerarquia completa de espacios para el usuario."""
     if current_user.is_admin:
-        workspaces = db.query(Workspace).all()
+        workspaces = db.query(Workspace).options(
+            joinedload(Workspace.folders).joinedload(Folder.lists)
+        ).all()
         
-        # Solo para modo local: si no hay espacios, crear un flujo local m?nimo por defecto
+        # Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
         if not workspaces:
             print("[PROJECTS] Creando estructura basica de proyectos local...")
             ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
@@ -4067,6 +4069,8 @@ async def get_workspaces(
                 Workspace.owner_id == current_user.id,
                 WorkspaceMember.user_id == current_user.id
             )
+        ).options(
+            joinedload(Workspace.folders).joinedload(Folder.lists)
         ).all()
     
     results = []
@@ -4108,6 +4112,31 @@ async def create_workspace(
         db.rollback()
         print(f"[PROJECTS] Error creating workspace: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error al crear espacio: {str(e)}")
+
+class MemberAdd(BaseModel):
+    user_id: int
+    role: str = "VIEWER"
+
+@app.post("/api/projects/workspaces/{workspace_id}/members")
+@app.post("/projects/workspaces/{workspace_id}/members")
+async def add_workspace_member(
+    workspace_id: int,
+    m_data: MemberAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Verificar que el usuario actual es el dueño o admin
+    ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace no encontrado")
+        
+    if ws.owner_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No tienes permiso para agregar miembros")
+        
+    member = WorkspaceMember(workspace_id=workspace_id, user_id=m_data.user_id, role=m_data.role)
+    db.add(member)
+    db.commit()
+    return {"ok": True}
 
 @app.post("/api/projects/folders")
 @app.post("/projects/folders")

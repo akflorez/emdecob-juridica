@@ -836,6 +836,13 @@ export type Attachment = {
   created_at: string;
 };
 
+export function addWorkspaceMember(workspaceId: number, userId: number, role: string = "VIEWER") {
+  return apiFetch<{ ok: boolean }>(`/projects/workspaces/${workspaceId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, role }),
+  });
+}
+
 export type Tag = {
   id: number;
   name: string;
