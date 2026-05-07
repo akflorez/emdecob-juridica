@@ -64,7 +64,7 @@ export default function LoginPage() {
           inset: 0;
           background-image: url(${LOGIN_BG});
           background-size: cover;
-          background-position: -12% bottom; /* Shifting more to the left to hide more of the blue section */
+          background-position: left bottom;
           z-index: 1;
         }
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
         }
 
         .branding-area-spacer {
-          flex: 0 0 20%;
+          flex: 0 0 50%;
         }
 
         .form-area {
@@ -86,7 +86,7 @@ export default function LoginPage() {
           justify-content: center;
           align-items: center;
           padding: 2rem;
-          padding-left: 35%; /* Shifted even more right to stay centered in the now-dominant gray/white zone */
+          padding-left: 12%; /* Adjusted for the new image to center perfectly in the gray watermark area */
         }
 
         @media (max-width: 1024px) {
