@@ -12,11 +12,13 @@ import {
   EyeOff,
   Loader2,
   ArrowRight,
-  Mail
+  Mail,
+  Shield,
+  Headphones
 } from 'lucide-react';
 
-/* USE THE ORIGINAL IMAGE AS REQUESTED FOR 100% FIDELITY */
-const LOGIN_BG = "/login.png";
+/* Use the new clean asset provided by the user */
+const LOGIN_BG = "/login-2.png";
 
 export default function LoginPage() {
   const [username, setUsername] = useState('juricob');
@@ -50,14 +52,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full relative bg-white flex overflow-hidden">
+    <div className="min-h-screen w-full relative flex overflow-hidden">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap');
         
         .font-serif-juricob { font-family: 'Cinzel', serif; }
         .font-sans-juricob { font-family: 'Outfit', sans-serif; }
 
-        .full-background {
+        .full-bg {
           position: absolute;
           inset: 0;
           background-image: url(${LOGIN_BG});
@@ -66,7 +68,7 @@ export default function LoginPage() {
           z-index: 1;
         }
 
-        .overlay-layer {
+        .overlay-content {
           position: relative;
           z-index: 10;
           width: 100%;
@@ -74,60 +76,54 @@ export default function LoginPage() {
           display: flex;
         }
 
-        .branding-side {
+        .branding-area-spacer {
           flex: 0 0 58%;
         }
 
-        .login-side {
+        .form-area {
           flex: 1;
           display: flex;
           justify-content: center;
           align-items: center;
-          background: white; /* This covers the mockup form in the background image on the right */
           padding: 2rem;
+          padding-right: 5%;
         }
 
         @media (max-width: 1024px) {
-          .branding-side { display: none; }
-          .login-side { flex: 1; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(5px); }
+          .branding-area-spacer { display: none; }
+          .form-area { flex: 1; padding-right: 2rem; }
+          .full-bg { background-position: 80% center; }
         }
 
-        .functional-card {
+        .premium-login-card {
           width: 100%;
           max-width: 440px;
           background: white;
           border-radius: 2.5rem;
-          box-shadow: 0 40px 100px -20px rgba(0,0,0,0.15);
+          box-shadow: 0 30px 60px -12px rgba(0,0,0,0.15);
           padding: 3.5rem 3rem;
           border: 1px solid #f1f5f9;
         }
 
-        .premium-btn {
+        .btn-target-grad {
           background: linear-gradient(90deg, #021C33 0%, #064e3b 60%, #10b981 100%);
-          transition: all 0.3s ease;
-        }
-        .premium-btn:hover {
-           filter: brightness(1.1);
-           transform: translateY(-1px);
         }
       `}</style>
 
-      {/* The original image for the left side branding */}
-      <div className="full-background" />
+      {/* The new clean background image */}
+      <div className="full-bg" />
 
-      {/* Functional Layout */}
-      <div className="overlay-layer">
-        {/* Left side stays empty to show the branding from the background image */}
-        <div className="branding-side" />
+      {/* Content Overlay */}
+      <div className="overlay-content">
+        <div className="branding-area-spacer" />
 
-        {/* Right side has a solid background to mask the mockup form and show the real one */}
-        <div className="login-side">
-          <div className="functional-card animate-in fade-in slide-in-from-right duration-700">
+        <div className="form-area">
+          <div className="premium-login-card animate-in fade-in zoom-in duration-700">
             <div className="text-center mb-10">
-              <h2 className="text-2xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest mb-6">Acceso seguro</h2>
+              <h1 className="text-2xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest mb-6">Acceso seguro</h1>
               <div className="flex items-center justify-center gap-4">
                 <div className="h-[1px] flex-1 bg-slate-100"></div>
-                <div className="w-16 h-16 rounded-full border-2 border-emerald-400/20 flex items-center justify-center bg-white shadow-inner">
+                <div className="w-16 h-16 rounded-full border border-emerald-400 flex items-center justify-center bg-white shadow-sm">
                   <Lock className="w-7 h-7 text-[#021C33]" />
                 </div>
                 <div className="h-[1px] flex-1 bg-slate-100"></div>
@@ -155,16 +151,16 @@ export default function LoginPage() {
               </div>
 
               <div className="flex items-center justify-between px-1">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 cursor-pointer group">
                   <input type="checkbox" id="rem" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer" />
-                  <label htmlFor="rem" className="text-xs text-slate-500 font-medium">Recordarme</label>
+                  <label htmlFor="rem" className="text-xs text-slate-500 font-medium cursor-pointer group-hover:text-emerald-600 transition-colors">Recordarme</label>
                 </div>
-                <button type="button" className="text-xs font-bold text-emerald-700">¿Olvidaste tu contraseña?</button>
+                <button type="button" className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
               </div>
 
               {loginError && <p className="text-red-500 text-[10px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
 
-              <Button type="submit" disabled={isSubmitting} className="premium-btn w-full h-14 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-emerald-900/10 active:scale-[0.98]">
+              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-14 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all">
                 {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-5 w-5" /></>}
               </Button>
 
@@ -173,10 +169,26 @@ export default function LoginPage() {
                  <div className="relative flex justify-center text-[10px]"><span className="bg-white px-6 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
               </div>
 
-              <Button variant="outline" className="w-full h-12 border-slate-200 text-[#021C33] font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50">Solicitar acceso</Button>
+              <Button variant="outline" className="w-full h-12 border-slate-200 text-[#021C33] font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
             </form>
           </div>
         </div>
+      </div>
+
+      {/* Global Footer (using absolute to overlay at bottom right) */}
+      <div className="absolute bottom-10 right-10 z-20 hidden lg:flex items-center gap-10 text-slate-400">
+         <div className="flex items-center gap-3">
+            <Shield className="w-6 h-6 text-[#021C33]" />
+            <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
+         </div>
+         <div className="w-[1px] h-8 bg-slate-100" />
+         <div className="flex items-center gap-3">
+            <Headphones className="w-6 h-6 text-[#021C33]" />
+            <div className="flex flex-col text-[10px] leading-tight font-bold">
+               <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
+               <span className="text-slate-400 font-normal">Asistencia profesional.</span>
+            </div>
+         </div>
       </div>
     </div>
   );
