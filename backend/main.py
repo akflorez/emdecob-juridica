@@ -4329,21 +4329,14 @@ async def get_task_detail(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
     
-    # Sincronización inteligente on-demand si es tarea de ClickUp
-    if task.clickup_id:
-        try:
-            # Necesitamos el token de ClickUp del usuario (asumiendo que está en el ambiente o se pasa)
-            # Para simplificar, intentamos buscar el token en la sesión del usuario o config
-            # En este sistema el token se maneja en el frontend, así que lo ideal es recibirlo.
-            # Pero como estamos en el backend, usaremos el token de la última sincronización si estuviera guardado.
-            # MEJOR: Si el usuario es el dueño o admin, y tenemos acceso a su token (que el frontend envía en los headers)
-            api_token = request.headers.get("X-ClickUp-Token") # Asumimos que el frontend lo enviará
+    try:
+        # Sincronización inteligente on-demand si es tarea de ClickUp
+        if task.clickup_id:
+            api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
                 from backend.clickup_sync import fetch_clickup, process_task
-                # Traemos la tarea con subtareas y checklists en una sola llamada optimizada
                 t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
                 if t_data:
-                    # Cache de usuarios para mapeo
                     all_users = db.query(User).all()
                     user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
                     user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
@@ -4351,10 +4344,11 @@ async def get_task_detail(
                     await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
                     db.commit()
                     db.refresh(task)
-        except Exception as e:
-            print(f"[OnDemand Sync Error] {e}")
-
-    return task
+        return task
+    except Exception as e:
+        db.rollback()
+        print(f"[TASKS] Error in get_task_detail for {task_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al sincronizar tarea: {str(e)}")
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
