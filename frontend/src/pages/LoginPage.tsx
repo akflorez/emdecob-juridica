@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
 import { 
   Shield, 
   Lock, 
@@ -15,10 +14,13 @@ import {
   Loader2,
   ArrowRight,
   Mail,
-  Headphones
+  Headphones,
+  FileSearch,
+  BarChart3,
+  Scale
 } from 'lucide-react';
 
-const LOGIN_BG = "/login.png";
+const LOGIN_BG = "/juricob_login_background_1778105003101.png";
 
 export default function LoginPage() {
   const [username, setUsername] = useState('juricob');
@@ -31,7 +33,6 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { toast } = useToast();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/consultar';
 
@@ -53,197 +54,301 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-white font-sans antialiased overflow-hidden">
+    <div className="min-h-screen flex bg-white font-sans antialiased overflow-hidden selection:bg-emerald-200 selection:text-emerald-900">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Outfit:wght@300;400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+          --juricob-dark: #021C33;
+          --juricob-accent: #10b981;
+          --juricob-accent-dark: #064e3b;
+        }
+
         .font-serif-juricob { font-family: 'Cinzel', serif; }
         .font-sans-juricob { font-family: 'Outfit', sans-serif; }
         
-        .left-branding-container {
-          width: 58%;
-          height: 100vh;
+        .branding-section {
+          width: 62%;
           position: relative;
-          background: #021C33;
-          z-index: 10;
+          background: var(--juricob-dark);
+          overflow: hidden;
         }
 
-        .bg-image-wrapper {
+        .bg-image {
           position: absolute;
           inset: 0;
           background-image: url(${LOGIN_BG});
           background-size: cover;
           background-position: left center;
-          /* We zoom in a bit to ensure the mockup login part is hidden */
-          width: 140%; 
-          height: 100%;
+          opacity: 0.9;
         }
 
-        .curve-overlay {
+        .bg-overlay {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at 30% 50%, rgba(2, 28, 51, 0.2) 0%, rgba(2, 28, 51, 0.85) 100%);
+        }
+
+        .curve-container {
           position: absolute;
           top: 0;
-          right: -120px;
-          width: 240px;
+          right: 0;
           height: 100%;
-          background: white;
-          border-left: 10px solid #4ade80; /* The emerald green line */
-          border-radius: 100% 0 0 100% / 50%;
+          width: 250px;
           z-index: 20;
-          box-shadow: -15px 0 30px rgba(0,0,0,0.2);
+          pointer-events: none;
         }
 
-        .login-card {
-          box-shadow: 0 30px 70px rgba(0,0,0,0.1);
-          border-radius: 40px;
+        .curve-shape {
+          position: absolute;
+          top: 0;
+          right: -100px;
+          height: 100%;
+          width: 350px;
           background: white;
-          width: 100%;
-          max-width: 480px;
+          clip-path: ellipse(100% 100% at 100% 50%);
+          box-shadow: -30px 0 60px rgba(0,0,0,0.4);
         }
 
-        .btn-gradient {
-          background: linear-gradient(90deg, #021C33 0%, #044D29 100%);
+        .emerald-curve {
+          position: absolute;
+          top: 0;
+          right: 150px;
+          height: 100%;
+          width: 100px;
+          background: linear-gradient(to right, transparent, var(--juricob-accent-dark), var(--juricob-accent));
+          opacity: 0.8;
+          clip-path: ellipse(100% 100% at 100% 50%);
+          z-index: 19;
+        }
+
+        .login-section {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          background: white;
+          position: relative;
+          z-index: 30;
+          padding: 2rem;
+        }
+
+        .premium-card {
+          width: 100%;
+          max-width: 440px;
+          border-radius: 3rem;
+          background: white;
+          box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.1);
+          border: 1px solid #f1f5f9;
+        }
+
+        .btn-target-gradient {
+          background: linear-gradient(90deg, #021C33 0%, #064e3b 60%, #10b981 100%);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-target-gradient:hover {
+          filter: brightness(1.1);
+          transform: translateY(-1px);
+          box-shadow: 0 12px 24px -8px rgba(16, 185, 129, 0.5);
+        }
+
+        .logo-underline {
+          height: 1px;
+          width: 200px;
+          background: linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.5) 50%, transparent 100%);
+          margin-top: 1rem;
+        }
+
+        .feature-box {
+           transition: transform 0.3s ease;
+        }
+        .feature-box:hover {
+           transform: translateX(10px);
         }
       `}</style>
 
       {/* Left Branding Area */}
-      <div className="hidden lg:block left-branding-container">
-        <div className="bg-image-wrapper" />
-        <div 
-          className="absolute inset-0 z-15"
-          style={{
-            background: 'linear-gradient(90deg, rgba(2, 28, 51, 0.2) 0%, rgba(2, 28, 51, 0.7) 100%)',
-          }}
-        />
-        <div className="curve-overlay" />
+      <div className="hidden lg:flex branding-section flex-col justify-center p-20">
+        <div className="bg-image" />
+        <div className="bg-overlay" />
+        
+        {/* Animated Curves */}
+        <div className="curve-container">
+           <div className="emerald-curve animate-pulse" style={{ animationDuration: '4s' }} />
+           <div className="curve-shape" />
+        </div>
+
+        <div className="relative z-10 flex flex-col items-center mb-24 max-w-xl mx-auto">
+          {/* Logo Hexagon ABOVE */}
+          <div className="w-16 h-16 bg-[#F8FAFC] flex items-center justify-center rotate-45 rounded-xl shadow-2xl mb-6 border border-emerald-100">
+            <div className="-rotate-45 flex items-center justify-center">
+               <Scale className="text-[#021C33] w-8 h-8" />
+            </div>
+          </div>
+          <h1 className="text-7xl font-bold text-white tracking-tighter font-serif-juricob">
+            JURICOB
+          </h1>
+          <div className="logo-underline" />
+        </div>
+
+        {/* Features List */}
+        <div className="relative z-10 space-y-10 max-w-md mx-auto">
+          <div className="feature-box flex items-center gap-6">
+            <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center bg-white/5 backdrop-blur-sm">
+              <Shield className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h4 className="text-white font-bold font-sans-juricob">Seguro y confiable</h4>
+              <p className="text-white/50 text-sm leading-tight">Protegemos tu información con los más altos estándares.</p>
+            </div>
+          </div>
+
+          <div className="feature-box flex items-center gap-6">
+            <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center bg-white/5 backdrop-blur-sm">
+              <FileSearch className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h4 className="text-white font-bold font-sans-juricob">Gestión eficiente</h4>
+              <p className="text-white/50 text-sm leading-tight">Administra tus casos y documentos de manera ágil.</p>
+            </div>
+          </div>
+
+          <div className="feature-box flex items-center gap-6">
+            <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center bg-white/5 backdrop-blur-sm">
+              <BarChart3 className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h4 className="text-white font-bold font-sans-juricob">Información al día</h4>
+              <p className="text-white/50 text-sm leading-tight">Accede a legislación y jurisprudencia actualizada.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Right Login Area */}
-      <div className="flex-1 flex flex-col justify-center items-center py-12 px-8 bg-white z-30">
-        <div className="w-full flex flex-col items-center">
-          <Card className="login-card border-none p-12 space-y-8 animate-in fade-in duration-500">
-            <CardContent className="p-0 space-y-10">
-              
-              <div className="text-center">
-                 <h2 className="text-2xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest opacity-80">Acceso seguro</h2>
+      <div className="login-section">
+        <Card className="premium-card border-none p-12 lg:p-16 animate-in slide-in-from-right duration-700">
+          <CardContent className="p-0 space-y-12">
+            
+            <div className="text-center space-y-4">
+               <h1 className="text-3xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-widest">Acceso seguro</h1>
+               <div className="flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full border-2 border-emerald-400/30 flex items-center justify-center bg-white">
+                    <Lock className="w-7 h-7 text-[#021C33]" />
+                  </div>
+               </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="space-y-3">
+                <Label htmlFor="username" className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</Label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="ejemplo@correo.com"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="pl-12 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
+                  />
+                </div>
               </div>
 
-              {/* Icon Section with Lines */}
-              <div className="flex items-center justify-center gap-6">
-                 <div className="h-[1.5px] flex-1 bg-gray-100"></div>
-                 <div className="w-16 h-16 rounded-full border-[2px] border-emerald-400 flex items-center justify-center bg-white shadow-sm">
-                    <Lock className="w-6 h-6 text-[#021C33]" />
-                 </div>
-                 <div className="h-[1.5px] flex-1 bg-gray-100"></div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="space-y-3">
-                  <Label htmlFor="username" className="text-sm font-bold text-[#021C33] ml-1">Correo electrónico</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      id="username"
-                      type="text"
-                      placeholder="ejemplo@correo.com"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="pl-12 h-14 bg-gray-50/50 border-gray-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label htmlFor="password" className="text-sm font-bold text-[#021C33] ml-1">Contraseña</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pl-12 pr-12 h-14 bg-gray-50/50 border-gray-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="checkbox" 
-                      id="remember" 
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
-                    />
-                    <label htmlFor="remember" className="text-xs text-slate-500 cursor-pointer font-medium">Recordarme</label>
-                  </div>
+              <div className="space-y-3">
+                <Label htmlFor="password" className="text-xs font-bold text-slate-700 ml-1">Contraseña</Label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-12 pr-12 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl font-sans-juricob"
+                  />
                   <button
                     type="button"
-                    className="text-xs font-bold text-emerald-700 hover:opacity-80"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300"
                   >
-                    ¿Olvidaste tu contraseña?
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+              </div>
 
-                {loginError && (
-                  <p className="text-red-500 text-xs text-center font-semibold">{loginError}</p>
-                )}
-
-                <button 
-                  type="submit" 
-                  disabled={isSubmitting}
-                  className="btn-gradient w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl hover:opacity-90 transition-all hover:scale-[1.01]"
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="checkbox" 
+                    id="remember" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
+                  />
+                  <label htmlFor="remember" className="text-xs text-slate-500 font-medium">Recordarme</label>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs font-bold text-emerald-700"
                 >
-                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (
-                    <>
-                      <span>Iniciar sesión</span>
-                      <ArrowRight className="h-6 w-6" />
-                    </>
-                  )}
+                  ¿Olvidaste tu contraseña?
                 </button>
+              </div>
 
-                <div className="relative py-2">
-                   <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-100"></div>
-                   </div>
-                   <div className="relative flex justify-center text-[10px]">
-                      <span className="bg-white px-4 text-gray-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span>
-                   </div>
-                </div>
+              {loginError && (
+                <p className="text-red-500 text-xs text-center font-bold">{loginError}</p>
+              )}
 
-                <Button 
-                   variant="outline" 
-                   className="w-full h-16 border-gray-100 text-[#021C33] font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
-                >
-                   <User className="w-5 h-5 text-gray-400" />
-                   Solicitar acceso
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="btn-target-gradient w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-xl shadow-emerald-900/10 active:scale-95"
+              >
+                {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : (
+                  <>
+                    <span>Iniciar sesión</span>
+                    <ArrowRight className="h-6 w-6" />
+                  </>
+                )}
+              </button>
 
-          {/* Footer Branding */}
-          <div className="flex items-center gap-12 text-slate-400 text-sm font-medium mt-16">
-             <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6 text-[#021C33]" />
-                <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
-             </div>
-             <div className="w-[1.5px] h-10 bg-gray-100" />
-             <div className="flex items-center gap-3">
-                <Headphones className="w-6 h-6 text-[#021C33]" />
-                <div className="flex flex-col text-[10px] leading-tight font-bold">
-                   <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
-                   <span className="text-slate-400 font-normal">Asistencia profesional.</span>
-                </div>
-             </div>
-          </div>
+              <div className="relative pt-4">
+                 <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-100"></div>
+                 </div>
+                 <div className="relative flex justify-center text-[11px]">
+                    <span className="bg-white px-6 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span>
+                 </div>
+              </div>
+
+              <Button 
+                 variant="outline" 
+                 className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
+              >
+                 <User className="w-4 h-4 text-slate-400" />
+                 Solicitar acceso
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Footer Branding aligned right as in mockup */}
+        <div className="flex items-center gap-10 mt-16 text-slate-400">
+           <div className="flex items-center gap-3">
+              <Shield className="w-6 h-6 text-[#021C33]" />
+              <span className="uppercase tracking-[0.2em] text-[10px] font-bold">Plataforma Segura</span>
+           </div>
+           <div className="w-[1px] h-8 bg-slate-100" />
+           <div className="flex items-center gap-3">
+              <Headphones className="w-6 h-6 text-[#021C33]" />
+              <div className="flex flex-col text-[10px] leading-tight font-bold">
+                 <span className="uppercase tracking-[0.1em]">Soporte Especializado</span>
+                 <span className="text-slate-400 font-normal">Asistencia profesional.</span>
+              </div>
+           </div>
         </div>
       </div>
     </div>
