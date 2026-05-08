@@ -17,8 +17,8 @@ import {
   Headphones
 } from 'lucide-react';
 
-/* Use the new clean asset provided by the user with cache busting */
-const LOGIN_BG = "/login-2.png?v=999";
+/* Use a new filename to absolutely bypass any cache */
+const LOGIN_BG = "/login-vfinal.png";
 
 export default function LoginPage() {
   const [username, setUsername] = useState('juricob');
@@ -161,7 +161,7 @@ export default function LoginPage() {
 
               {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
 
-              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-bold text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all">
+              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-normal text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all font-serif-juricob uppercase tracking-widest">
                 {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-6 w-6" /></>}
               </Button>
 
