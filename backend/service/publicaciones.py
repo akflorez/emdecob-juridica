@@ -37,6 +37,12 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^a-z0-9\s]', ' ', text)
     return " ".join(text.split()).strip()
 
+def is_relevant_actuacion(actuacion_text: str) -> bool:
+    if not actuacion_text: return False
+    norm = normalize_text(actuacion_text)
+    keywords = ["auto", "fijacion", "estado"]
+    return any(k in norm for k in keywords)
+
 async def extract_text_content(url: str, client: httpx.AsyncClient) -> str:
     try:
         print(f"[validator] Descargando {url[:100]}...")
@@ -103,42 +109,57 @@ def validate_content(text: str, radicado_completo: str, demandante: str, demanda
     print(f"[validator] MATCH FAIL: No coincide radicado ni partes.")
     return False
 
-async def get_candidates(html: str, radicado_completo: str):
+async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optional[date] = None):
     candidates = []
     soup = BeautifulSoup(html, "html.parser")
-    # Capturar TODOS los links que parezcan resultados
-    # Liferay suele usar h6/h3 para títulos de búsqueda o divs.search-result
-    links = soup.find_all("a", href=True)
     
+    # Liferay search results are usually in entries
+    entries = soup.find_all("div", class_="search-result") or soup.find_all("li", class_="search-result")
+    if not entries:
+        # Fallback a buscar por contenedores genéricos de links
+        entries = [l.parent.parent for l in soup.find_all("a", href=True) if "find_file_entry" in l["href"]]
+
     year_pattern = radicado_completo[12:16]
     consecutive = radicado_completo[16:21]
+    pattern_with_dash = f"{year_pattern}-{consecutive}"
 
     seen_urls = set()
-    for l in links:
+    for entry in entries:
+        l = entry.find("a", href=True)
+        if not l: continue
         url = l["href"]
-        if "find_file_entry" not in url and not url.lower().endswith(".pdf") and not url.lower().endswith(".docx"):
-            continue
         if url in seen_urls: continue
         seen_urls.add(url)
         
-        # Limpiar URL
         if not url.startswith("http"):
             url = "https://publicacionesprocesales.ramajudicial.gov.co" + (url if url.startswith("/") else "/" + url)
             
-        # Extraer Metadata del contenedor del link
-        parent = l.parent
-        while parent and len(parent.get_text()) < 50:
-            parent = parent.parent
+        entry_text = entry.get_text()
         
-        txt = parent.get_text() if parent else l.get_text()
+        # 1. Extraer Fecha del Texto del Resultado
+        # Buscamos patrones tipo DD/MM/YYYY o YYYY-MM-DD
+        date_match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', entry_text)
+        pub_date = None
+        if date_match:
+            try:
+                d, m, y = date_match.groups()
+                pub_date = date(int(y), int(m), int(d))
+            except: pass
         
-        # Candidato si menciona el año o el patrón
-        if year_pattern in txt or consecutive in txt:
+        # 2. Validar Fecha (Igual o posterior a la actuación)
+        if fecha_act_min and pub_date:
+            if pub_date < fecha_act_min:
+                print(f"[scraper] Saltando publicacion antigua: {pub_date} < {fecha_act_min}")
+                continue
+
+        # 3. Candidato si menciona el patrón o el radicado
+        if pattern_with_dash in entry_text or consecutive in entry_text:
             candidates.append({
-                "fecha": datetime.now().strftime("%Y-%m-%d"),
-                "tipo": l.get_text(strip=True)[:100],
+                "fecha": pub_date.strftime("%Y-%m-%d") if pub_date else datetime.now().strftime("%Y-%m-%d"),
+                "tipo": l.get_text(strip=True)[:100] or "Notificación de Estado",
                 "documento_url": url,
-                "source_id": hashlib.md5(url.encode()).hexdigest()
+                "source_id": hashlib.md5(url.encode()).hexdigest(),
+                "snippet": entry_text[:200]
             })
     return candidates
 
@@ -147,31 +168,43 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     rad_digits = "".join(filter(str.isdigit, radicado_completo))
     if len(rad_digits) < 21: return []
     
-    # Patrones de búsqueda
-    pattern = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
-    search_queries = [rad_digits, pattern]
-    if demandado and demandado.strip():
-        parts = demandado.split()
-        if parts:
-            search_queries.append(parts[0])
-
+    # Fecha mínima de actuación para filtrar
+    fecha_act_min = parse_fecha_pub(fecha_act_str)
+    
+    # Patrones de búsqueda según manual
+    pattern_with_dash = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
+    despacho_12 = rad_digits[:12]
+    
+    # Priorizar búsqueda por despacho + patrón
+    search_queries = [f"{despacho_12} {pattern_with_dash}", pattern_with_dash, rad_digits]
+    
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
         for q in search_queries:
             if not q: continue
-            print(f"[scraper] Buscando query: {q}")
+            print(f"[scraper] Consultando portal con query: {q}")
             try:
+                # El portal usa 'q' para búsqueda general
                 resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params={"q": q})
                 if resp.status_code == 200:
-                    candidates = await get_candidates(resp.text, rad_digits)
-                    print(f"[scraper] Encontrados {len(candidates)} candidatos para validacion.")
-                    for cand in candidates[:8]: # Revisar máximo 8 para eficiencia
+                    candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
+                    print(f"[scraper] Encontrados {len(candidates)} candidatos potenciales.")
+                    
+                    for cand in candidates:
+                        # Si el snippet ya tiene el patrón o nombres, validamos más rápido
+                        if pattern_with_dash in cand["snippet"]:
+                            results.append(cand)
+                            print(f"[scraper] ✅ Match rápido por patrón en snippet.")
+                            continue
+                            
+                        # Si no, descarga y valida contenido (último recurso)
                         text = await extract_text_content(cand["documento_url"], client)
                         if validate_content(text, rad_digits, demandante, demandado):
                             results.append(cand)
-                            print(f"[scraper] ✅ Documento verificado exitosamente.")
+                            print(f"[scraper] ✅ Documento verificado por contenido.")
             except Exception as e:
                 print(f"[scraper] Error en búsqueda '{q}': {e}")
-            if results: break
+            
+            if results: break # Si encontramos resultados con la query más específica, paramos
 
     # Deduplicar
     final = []

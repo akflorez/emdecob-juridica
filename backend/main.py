@@ -3682,6 +3682,9 @@ async def save_new_publications(case: Case, db: Session):
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
         actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
         
+        # 2. Filtrar actuaciones relevantes (Auto, Fijacion, Estado)
+        relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
+        
         if not relevantes:
             print(f" No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
