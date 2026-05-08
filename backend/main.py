@@ -16,7 +16,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session, sessionmaker, joinedload
+from sqlalchemy.orm import Session, sessionmaker, joinedload, selectinload
 from sqlalchemy import create_engine, or_, desc, and_, case as sql_case, func
 
 # IMPORTACION ADAPTATIVA (Expert Mode)
@@ -4329,15 +4329,15 @@ async def get_task_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    import traceback
     try:
         task = db.query(Task).options(
-            joinedload(Task.subtasks),
-            joinedload(Task.checklists),
-            joinedload(Task.comments),
-            joinedload(Task.tags),
-            joinedload(Task.attachments)
+            selectinload(Task.subtasks),
+            selectinload(Task.checklists),
+            selectinload(Task.comments),
+            selectinload(Task.tags),
+            selectinload(Task.attachments)
         ).filter(Task.id == task_id).first()
+        
         if not task:
             raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
@@ -4345,33 +4345,29 @@ async def get_task_detail(
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
-                from backend.clickup_sync import fetch_clickup, process_task
-                # Traemos la tarea con subtareas y checklists en una sola llamada optimizada
-                t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
-                if t_data:
-                    all_users = db.query(User).all()
-                    user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
-                    user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
-                    
-                    await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
-                    db.commit()
-                    db.refresh(task)
+                try:
+                    from backend.clickup_sync import fetch_clickup, process_task
+                    t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
+                    if t_data:
+                        all_users = db.query(User).all()
+                        user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
+                        user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
+                        
+                        await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
+                        db.commit()
+                except Exception as sync_err:
+                    print(f"[SYNC ERROR] get_task_detail: {sync_err}")
+                    db.rollback()
         
-        # Aseguramos que todo está en memoria antes de devolverlo
-        db.refresh(task)
-        # Acceso explícito para forzar carga si joinedload falló por alguna razón
-        _ = task.subtasks
-        _ = task.comments
-        _ = task.checklists
-        _ = task.tags
-        _ = task.attachments
         return task
     except HTTPException as he:
         raise he
     except Exception as e:
         db.rollback()
+        import traceback
         print(f"[CRITICAL ERROR] get_task_detail: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        # Devolvemos un error limpio al frontend, no el dump de SQL
+        raise HTTPException(status_code=500, detail="Error interno al cargar detalles de la tarea. Por favor, intenta de nuevo.")
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
