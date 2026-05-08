@@ -4330,6 +4330,9 @@ async def get_task_detail(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        from fastapi.responses import JSONResponse
+        from datetime import datetime
+        
         task = db.query(Task).options(
             selectinload(Task.subtasks),
             selectinload(Task.checklists),
@@ -4339,7 +4342,7 @@ async def get_task_detail(
         ).filter(Task.id == task_id).first()
         
         if not task:
-            raise HTTPException(status_code=404, detail="Tarea no encontrada")
+            return JSONResponse(status_code=404, content={"detail": "Tarea no encontrada"})
         
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
@@ -4359,15 +4362,70 @@ async def get_task_detail(
                     print(f"[SYNC ERROR] get_task_detail: {sync_err}")
                     db.rollback()
         
-        return task
-    except HTTPException as he:
-        raise he
+        # Construcción manual segura para evitar recursividad infinita (Circular Reference)
+        def fmt_dt(dt):
+            return dt.isoformat() if isinstance(dt, datetime) else dt
+
+        res_data = {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": fmt_dt(task.due_date),
+            "list_id": task.list_id,
+            "assignee_id": task.assignee_id,
+            "assignee_name": task.assignee_name,
+            "creator_id": task.creator_id,
+            "case_id": task.case_id,
+            "parent_id": task.parent_id,
+            "clickup_id": task.clickup_id,
+            "created_at": fmt_dt(task.created_at),
+            "updated_at": fmt_dt(task.updated_at),
+            "subtasks": [
+                {
+                    "id": st.id,
+                    "title": st.title,
+                    "status": st.status,
+                    "priority": st.priority,
+                    "due_date": fmt_dt(st.due_date),
+                    "assignee_name": st.assignee_name,
+                    "parent_id": st.parent_id
+                } for st in task.subtasks
+            ],
+            "comments": [
+                {
+                    "id": c.id,
+                    "content": c.content,
+                    "user_id": c.user_id,
+                    "user_name": c.user_name,
+                    "created_at": fmt_dt(c.created_at)
+                } for c in task.comments
+            ],
+            "tags": [{"name": t.name, "color": t.color} for t in task.tags],
+            "checklists": [
+                {
+                    "id": cl.id,
+                    "content": cl.content,
+                    "is_completed": cl.is_completed
+                } for cl in task.checklists
+            ],
+            "attachments": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "file_path": a.file_path,
+                    "file_type": a.file_type
+                } for a in task.attachments
+            ]
+        }
+        
+        return JSONResponse(content=res_data)
     except Exception as e:
         db.rollback()
         import traceback
         print(f"[CRITICAL ERROR] get_task_detail: {traceback.format_exc()}")
-        # Devolvemos un error limpio al frontend, no el dump de SQL
-        raise HTTPException(status_code=500, detail="Error interno al cargar detalles de la tarea. Por favor, intenta de nuevo.")
+        return JSONResponse(status_code=500, content={"detail": "Error interno al cargar detalles de la tarea. Por favor, intenta de nuevo."})
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
