@@ -44,6 +44,17 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
+        
+        # SCRIPT DE LIMPIEZA DE DUPLICADOS (Cirugía de precisión)
+        # Eliminamos eventos que tengan misma fecha, título y detalle dentro de un mismo caso, dejando solo el más nuevo
+        conn.execute(text("""
+            DELETE FROM case_events 
+            WHERE id NOT IN (
+                SELECT MAX(id) 
+                FROM case_events 
+                GROUP BY case_id, event_date, title, detail
+            )
+        """))
         conn.commit()
         print("[DB] Migraciones r?pidas completadas")
     except Exception as e:
@@ -3051,15 +3062,16 @@ async def sync_case_events_background(case_id: int):
                 CaseEvent.event_hash == event_hash
             ).first()
             
-            # FALLBACK: Si no lo encuentra por hash, buscar por fecha y título exacto (Caso de migración)
+            # FALLBACK REFORZADO: Buscar por fecha, título y detalle para evitar duplicidad total
             if not exists:
                 exists = db.query(CaseEvent).filter(
                     CaseEvent.case_id == c.id,
                     CaseEvent.event_date == it["event_date"],
-                    CaseEvent.title == it["title"]
+                    CaseEvent.title == it["title"],
+                    CaseEvent.detail == it["detail"]
                 ).first()
                 if exists:
-                    # Actualizar el hash al nuevo formato para futuras consultas
+                    # Actualizamos el hash al nuevo formato para que el 'if not exists' lo encuentre la próxima vez
                     exists.event_hash = event_hash
             
             if not exists:
