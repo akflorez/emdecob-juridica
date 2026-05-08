@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 /* Use the new clean asset provided by the user with cache busting */
-const LOGIN_BG = "/login-2.png?v=3";
+const LOGIN_BG = "/login-2.png?v=999";
 
 export default function LoginPage() {
   const [username, setUsername] = useState('juricob');
