@@ -4347,13 +4347,15 @@ async def get_tasks(
         ).scalar_subquery()
         
         if is_jurico:
-            # Juridico ve tareas de sus casos O tareas de sus workspaces (siempre que no sean casos de otros)
+            # Juridico ve tareas de sus casos O tareas de sus workspaces O tareas creadas por él
             query = query.filter(
                 or_(
                     # Caso propio o de la cuenta maestra juridica
                     and_(Task.case_id.isnot(None), or_(Case.user_id == current_user.id, Case.user_id == 2)),
                     # Tarea sin caso pero en un workspace al que pertenece
-                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery))
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
+                    # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
+                    Task.assignee_id == current_user.id
                 )
             )
         else:
@@ -4363,7 +4365,9 @@ async def get_tasks(
                     # Sus casos (no juridicos)
                     and_(Task.case_id.isnot(None), Case.user_id != 2, Case.user_id == current_user.id),
                     # Tareas sin caso en sus workspaces
-                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery))
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
+                    # Lo que tiene asignado
+                    Task.assignee_id == current_user.id
                 )
             )
         
