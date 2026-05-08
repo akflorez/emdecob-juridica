@@ -175,8 +175,11 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     pattern_with_dash = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
     despacho_12 = rad_digits[:12]
     
-    # Priorizar búsqueda por despacho + patrón
-    search_queries = [f"{despacho_12} {pattern_with_dash}", pattern_with_dash, rad_digits]
+    # Búsquedas estratégicas: 
+    # 1. Despacho (Trae la lista de Estados/Edictos del juzgado)
+    # 2. Patrón con guion (Búsqueda directa)
+    # 3. Radicado completo
+    search_queries = [despacho_12, pattern_with_dash, rad_digits]
     
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
         for q in search_queries:
