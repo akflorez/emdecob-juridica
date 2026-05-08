@@ -91,7 +91,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setEditedTitle(task.title || '');
       setEditedDesc(task.description || '');
       setEditedDueDate(task.due_date ? format(parseISO(task.due_date.toString()), 'yyyy-MM-dd') : '');
-      refreshTask();
+      if (task.id) refreshTask();
       
       getUsers().then(res => {
         if (Array.isArray(res)) setUsers(res);
@@ -109,7 +109,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   }, [task, open]);
 
   const refreshTask = async () => {
-    if (!task) return;
+    if (!task || !task.id) return;
     setIsLoading(true);
     try {
       const detail = await getTaskDetail(task.id, clickupToken);
@@ -118,9 +118,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       }
     } catch (error: any) {
       console.error("Error refreshing task", error);
+      const errorDetail = error.payload?.detail || error.message || "No se pudo sincronizar con ClickUp.";
       toast({ 
         title: "Error al refrescar", 
-        description: error.message || "No se pudo sincronizar con ClickUp.", 
+        description: typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : String(errorDetail), 
         variant: "destructive" 
       });
     } finally {
