@@ -3698,28 +3698,35 @@ async def save_new_publications(case: Case, db: Session):
         case.sync_pub_progress = 5
         db.commit()
         
-        # --- NUEVA LÓGICA DE LIMPIEZA DE FALSOS POSITIVOS (OPTIMIZADA) ---
+        # --- NUEVA LÓGICA DE LIMPIEZA DE FALSOS POSITIVOS (ESTABLE) ---
         existing_pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).all()
         if existing_pubs:
-            print(f"[cleanup] Re-validando {len(existing_pubs)} publicaciones en paralelo...")
+            print(f"[cleanup] Re-validando {len(existing_pubs)} publicaciones de forma controlada...")
             
+            # Semáforo para no saturar el portal (máximo 5 hilos)
+            sem = asyncio.Semaphore(5)
+
             async def revalidate_pub(p, client):
-                if not p.documento_url: return
-                try:
-                    text = await extract_text_content(p.documento_url, client)
-                    if not validate_content(text, case.radicado, case.demandante, case.demandado):
-                        print(f"[cleanup] Marcando para borrar id={p.id}")
-                        return p
-                except Exception as e:
-                    print(f"[cleanup] Error en pub {p.id}: {e}")
+                async with sem:
+                    if not p.documento_url: return
+                    try:
+                        # Timeout corto por documento para no colgarse
+                        text = await extract_text_content(p.documento_url, client)
+                        if not validate_content(text, case.radicado, case.demandante, case.demandado):
+                            print(f"[cleanup] Marcando para borrar id={p.id}")
+                            return p
+                    except Exception as e:
+                        print(f"[cleanup] Error controlado en pub {p.id}: {e}")
                 return None
 
-            async with httpx.AsyncClient(verify=False, timeout=30) as client:
+            async with httpx.AsyncClient(verify=False, timeout=20) as client:
                 tasks = [revalidate_pub(p, client) for p in existing_pubs]
-                results_to_delete = await asyncio.gather(*tasks)
+                # return_exceptions=True para que un error no mate todo el proceso
+                results_to_delete = await asyncio.gather(*tasks, return_exceptions=True)
                 
                 for p_to_del in results_to_delete:
-                    if p_to_del: db.delete(p_to_del)
+                    if isinstance(p_to_del, CasePublication):
+                        db.delete(p_to_del)
             db.commit()
         # -----------------------------------------------------------------
 
