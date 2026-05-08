@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { LogOut, User, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export function UserMenu() {
+export function UserMenu({ collapsed }: { collapsed?: boolean }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -50,15 +50,17 @@ export function UserMenu() {
               {initials}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col items-start text-left">
-            <span className="text-sm font-medium text-sidebar-foreground truncate max-w-[120px]">
-              {displayName}
-            </span>
-            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 ${roleColor}`}>
-              {roleLabel}
-            </Badge>
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          {!collapsed && (
+            <div className="flex flex-col items-start text-left">
+              <span className="text-sm font-medium text-sidebar-foreground truncate max-w-[120px]">
+                {displayName}
+              </span>
+              <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 ${roleColor}`}>
+                {roleLabel}
+              </Badge>
+            </div>
+          )}
+          {!collapsed && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
