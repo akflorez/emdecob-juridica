@@ -3020,9 +3020,13 @@ async def sync_case_events_background(case_id: int):
                 "detail": a.get("anotacion"),
             }
             event_hash = sha256_obj(it)
-            exists = db.query(CaseEvent).filter(CaseEvent.case_id == c.id, CaseEvent.event_hash == event_hash).first()
+            con_docs = bool(a.get("conDocumentos"))
+            exists = db.query(CaseEvent).filter(
+                CaseEvent.case_id == c.id,
+                CaseEvent.event_hash == event_hash
+            ).first()
+            
             if not exists:
-                con_docs = bool(a.get("conDocumentos"))
                 db.add(CaseEvent(
                     case_id=c.id,
                     event_date=it["event_date"],
@@ -3035,6 +3039,14 @@ async def sync_case_events_background(case_id: int):
                 ))
                 if con_docs: c.has_documents = True
                 new_count += 1
+            else:
+                # Si existe pero no tiene los IDs técnicos (caso de migración), los actualizamos
+                if con_docs and (not exists.id_reg_actuacion or not exists.cons_actuacion):
+                    exists.id_reg_actuacion = a.get("idRegActuacion")
+                    exists.cons_actuacion = a.get("consActuacion")
+                    exists.con_documentos = True
+                    c.has_documents = True
+                    new_count += 1
         
         c.last_check_at = now_colombia()
         db.commit()
