@@ -127,7 +127,12 @@ from backend.service.rama import (
     RamaRateLimitError,
 )
 from backend.apply_robust_migrations import run_migrations
-from backend.service.publicaciones import consultar_publicaciones, parse_fecha_pub, consultar_publicaciones_rango
+from backend.service.publicaciones import (
+    consultar_publicaciones, 
+    parse_fecha_pub, 
+    consultar_publicaciones_rango,
+    is_relevant_actuacion
+)
 from backend.service.bulk_orchestrator import run_name_search_job, log_job
 from backend.clickup_sync import migrate_clickup_to_emdecob
 
@@ -3085,6 +3090,12 @@ async def sync_case_events_background(case_id: int):
                     id_reg_actuacion=a.get("idRegActuacion"),
                     cons_actuacion=a.get("consActuacion"),
                 ))
+                
+                # AUTOMATIZACIÓN: Si la nueva actuación es relevante, disparar búsqueda de publicaciones
+                if is_relevant_actuacion(it["title"]):
+                    from backend.tasks import save_new_publications_task
+                    background_tasks.add_task(save_new_publications_task, c.id)
+
                 if con_docs: c.has_documents = True
                 new_count += 1
             else:
