@@ -225,6 +225,7 @@ class Workspace(Base):
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
     
     folders = relationship("Folder", back_populates="workspace", cascade="all, delete-orphan")
+    lists = relationship("ProjectList", back_populates="workspace", cascade="all, delete-orphan")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -276,6 +277,7 @@ class ProjectList(Base):
     clickup_id = Column(String(100), unique=True, index=True, nullable=True)
 
     folder = relationship("Folder", back_populates="lists")
+    workspace = relationship("Workspace", back_populates="lists")
     tasks = relationship("Task", back_populates="project_list", cascade="all, delete-orphan")
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
