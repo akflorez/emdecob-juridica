@@ -181,38 +181,41 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
             if resp.status_code == 200:
                 candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
                 
-                for cand in candidates:
+                # FUNCIÓN DE PROCESAMIENTO PARALELO POR CANDIDATO
+                async def process_candidate(cand):
                     target_url = cand["documento_url"]
-                    
-                    # SI NO ES DIRECTO: "Navegar hacia adentro" (Como en la Imagen 3/4 del manual)
-                    if not cand["is_direct"]:
-                        print(f"[scraper] Navegando página de resumen: {target_url}")
-                        inner_resp = await client.get(target_url)
-                        if inner_resp.status_code == 200:
-                            inner_soup = BeautifulSoup(inner_resp.text, "html.parser")
-                            # Buscar links de "CONSULTAR AQUI", "VER", "VER DETALLE" o PDFs directos
-                            inner_links = inner_soup.find_all("a", href=True)
-                            for il in inner_links:
-                                link_text = il.get_text().upper()
-                                href = il["href"]
-                                if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
-                                    if not href.startswith("http"):
-                                        href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
-                                    
-                                    # Validar el contenido de este link profundo
-                                    doc_text = await extract_text_content(href, client)
-                                    if validate_content(doc_text, rad_digits, demandante, demandado):
-                                        new_cand = cand.copy()
-                                        new_cand["documento_url"] = href
-                                        results.append(new_cand)
-                                        print(f"[scraper] ✅ Match profundo encontrado en: {href}")
-                                        break
-                    else:
-                        # VALIDACIÓN DIRECTA (Si el link ya era un PDF)
-                        doc_text = await extract_text_content(target_url, client)
-                        if validate_content(doc_text, rad_digits, demandante, demandado):
-                            results.append(cand)
-                            print(f"[scraper] ✅ Match directo encontrado.")
+                    try:
+                        if not cand["is_direct"]:
+                            print(f"[scraper] Navegando página de resumen: {target_url}")
+                            inner_resp = await client.get(target_url)
+                            if inner_resp.status_code == 200:
+                                inner_soup = BeautifulSoup(inner_resp.text, "html.parser")
+                                inner_links = inner_soup.find_all("a", href=True)
+                                for il in inner_links:
+                                    link_text = il.get_text().upper()
+                                    href = il["href"]
+                                    if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
+                                        if not href.startswith("http"):
+                                            href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
+                                        
+                                        doc_text = await extract_text_content(href, client)
+                                        if validate_content(doc_text, rad_digits, demandante, demandado):
+                                            new_cand = cand.copy()
+                                            new_cand["documento_url"] = href
+                                            return new_cand
+                        else:
+                            doc_text = await extract_text_content(target_url, client)
+                            if validate_content(doc_text, rad_digits, demandante, demandado):
+                                return cand
+                    except Exception as e:
+                        print(f"[scraper] Error procesando candidato {target_url}: {e}")
+                    return None
+
+                # Ejecutar todos los candidatos en paralelo
+                tasks = [process_candidate(c) for c in candidates]
+                found_results = await asyncio.gather(*tasks)
+                for res in found_results:
+                    if res: results.append(res)
             
             if results: break # Optimizar: si ya encontramos oro, no buscamos más
 

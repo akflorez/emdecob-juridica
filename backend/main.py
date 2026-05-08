@@ -3698,25 +3698,30 @@ async def save_new_publications(case: Case, db: Session):
         case.sync_pub_progress = 5
         db.commit()
         
-        # --- NUEVA LÓGICA DE LIMPIEZA DE FALSOS POSITIVOS ---
+        # --- NUEVA LÓGICA DE LIMPIEZA DE FALSOS POSITIVOS (OPTIMIZADA) ---
         existing_pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).all()
         if existing_pubs:
-            print(f"[cleanup] Re-validando {len(existing_pubs)} publicaciones existentes...")
+            print(f"[cleanup] Re-validando {len(existing_pubs)} publicaciones en paralelo...")
+            
+            async def revalidate_pub(p, client):
+                if not p.documento_url: return
+                try:
+                    text = await extract_text_content(p.documento_url, client)
+                    if not validate_content(text, case.radicado, case.demandante, case.demandado):
+                        print(f"[cleanup] Marcando para borrar id={p.id}")
+                        return p
+                except Exception as e:
+                    print(f"[cleanup] Error en pub {p.id}: {e}")
+                return None
+
             async with httpx.AsyncClient(verify=False, timeout=30) as client:
-                for p in existing_pubs:
-                    # Si no tiene URL de documento, no podemos re-validar, la dejamos por ahora
-                    if not p.documento_url: continue
-                    
-                    try:
-                        text = await extract_text_content(p.documento_url, client)
-                        # Si no pasa la validación estricta, se borra
-                        if not validate_content(text, case.radicado, case.demandante, case.demandado):
-                            print(f"[cleanup] Borrando publicación incorrecta id={p.id} (No pertenece al radicado)")
-                            db.delete(p)
-                    except Exception as e:
-                        print(f"[cleanup] Error re-validando pub {p.id}: {e}")
+                tasks = [revalidate_pub(p, client) for p in existing_pubs]
+                results_to_delete = await asyncio.gather(*tasks)
+                
+                for p_to_del in results_to_delete:
+                    if p_to_del: db.delete(p_to_del)
             db.commit()
-        # ----------------------------------------------------
+        # -----------------------------------------------------------------
 
         # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
