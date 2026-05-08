@@ -4498,6 +4498,7 @@ async def delete_task_checklist_item(item_id: int, db: Session = Depends(get_db)
 
 
 @app.patch("/api/projects/tasks/{task_id}")
+@app.patch("/projects/tasks/{task_id}")
 @app.put("/api/projects/tasks/{task_id}")
 @app.put("/projects/tasks/{task_id}")
 @app.patch("/api/tasks/{task_id}")
