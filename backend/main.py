@@ -3655,34 +3655,29 @@ async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db
     
     return await get_case_publications(case.radicado, db)
 
-@app.post("/cases/{radicado}/refresh-publicaciones")
-async def refresh_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+@app.post("/cases/{radicado}/sync-publications")
+async def sync_case_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.radicado == radicado).first()
-    if not case:
-        raise HTTPException(status_code=404, detail="Caso no encontrado")
-
-    background_tasks.add_task(save_new_publications_task, case.id)
-    return {"ok": True, "message": "Sincronizacin iniciada en segundo plano"}
+    if not case: return {"ok": False, "error": "Caso no encontrado"}
+    background_tasks.add_task(run_sync_publications_task, case.radicado)
+    return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
 @app.post("/cases/id/{case_id}/refresh-publicaciones")
 async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    if not case: return {"ok": False, "error": "Caso no encontrado"}
+    background_tasks.add_task(run_sync_publications_task, case.radicado)
+    return {"ok": True, "message": "Sincronización iniciada"}
 
-    background_tasks.add_task(save_new_publications_task, case.id)
-    return {"ok": True, "message": "Sincronizacin iniciada en segundo plano"}
-
-async def save_new_publications_task(case_id: int):
-    """Wrapper para ejecutar save_new_publications con su propia sesin de DB."""
+async def run_sync_publications_task(radicado: str):
+    """Wrapper para ejecutar la sincronización con su propia sesión de DB."""
     db = SessionLocal()
     try:
-        case = db.query(Case).filter(Case.id == case_id).first()
+        case = db.query(Case).filter(Case.radicado == radicado).first()
         if case:
             await save_new_publications(case, db)
-            db.commit()
     except Exception as e:
-        print(f"[back-sync] Error en tarea de fondo: {e}")
+        print(f"[sync_task] Error crítico: {e}")
     finally:
         db.close()
 
@@ -3693,7 +3688,7 @@ async def save_new_publications(case: Case, db: Session):
         import asyncio
         import httpx
 
-        # 0. Iniciar progreso con seguridad
+        # 0. Iniciar progreso con seguridad (Resetear estado previo)
         case.sync_pub_status = "Iniciando limpieza y búsqueda..."
         case.sync_pub_progress = 5
         db.commit()
@@ -3705,8 +3700,8 @@ async def save_new_publications(case: Case, db: Session):
             db.commit()
             print(f"[cleanup] Limpieza completada para caso {case.id}")
         except Exception as e_cleanup:
-            print(f"[cleanup] Error en limpieza (no crítico): {e_cleanup}")
-            db.rollback() # Asegurar que la sesión queda limpia si falla el borrado
+            print(f"[cleanup] Error en limpieza: {e_cleanup}")
+            db.rollback()
 
         # Actualizar a 10% tras limpieza
         case.sync_pub_progress = 10
@@ -3714,24 +3709,29 @@ async def save_new_publications(case: Case, db: Session):
         db.commit()
 
         # 1. Obtener actuaciones del caso
-
-        # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
-        actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
-        
-        # 2. Filtrar actuaciones relevantes (Auto, Fijacion, Estado)
-        relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
+        # Convertir a dict para procesar
+        relevantes = []
+        for ev in eventos:
+            if is_relevant_actuacion(ev.actuacion):
+                relevantes.append({
+                    "fechaActuacion": ev.fecha_actuacion.strftime("%Y-%m-%d") if ev.fecha_actuacion else "",
+                    "actuacion": ev.actuacion
+                })
         
         if not relevantes:
+            case.sync_pub_status = "No se detectaron actuaciones relevantes (Auto/Estado)"
+            case.sync_pub_progress = 100
+            db.commit()
+            await asyncio.sleep(3)
             case.sync_pub_status = None
             case.sync_pub_progress = 0
             db.commit()
-            print(f" No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
 
         # 3. Procesar TODAS las actuaciones relevantes para cobertura total
         total_steps = len(relevantes)
-        print(f"[refresh] Iniciando bsqueda profunda para {case.radicado} ({total_steps} actuaciones)")
+        print(f"[refresh] Iniciando búsqueda profunda para {case.radicado} ({total_steps} actuaciones)")
 
         # 3. Para cada actuación relevante, buscar en Publicaciones
         for idx, act in enumerate(relevantes):
@@ -3761,12 +3761,10 @@ async def save_new_publications(case: Case, db: Session):
                     if not exists:
                         db.add(CasePublication(
                             case_id=case.id,
-                            fecha_publicacion=parse_fecha_pub(p["fecha"]),
-                            tipo_publicacion=p["tipo"],
-                            descripcion=p.get("descripcion", ""),
-                            documento_url=p["documento_url"],
-                            source_url=p.get("source_url"),
-                            source_id=p["source_id"]
+                            source_id=p["source_id"],
+                            fecha=p["fecha"],
+                            tipo=p["tipo"],
+                            documento_url=p["documento_url"]
                         ))
                     else:
                         # Actualizar URL si cambió
@@ -3774,20 +3772,25 @@ async def save_new_publications(case: Case, db: Session):
                 
                 db.commit()
             except Exception as e:
-                print(f"[refresh] Error en ventana de publicacin para {case.radicado}: {e}")
+                print(f"[refresh] Error en ventana de publicación para {case.radicado}: {e}")
         
         # 4. Finalizar progreso
-        case.sync_pub_status = None
+        case.sync_pub_status = "Búsqueda completada con éxito"
         case.sync_pub_progress = 100
         db.commit()
-        # Pequeña pausa y resetear progreso para que la barra desaparezca en el frontend
-        await asyncio.sleep(2)
+        # Pequeña pausa y resetear progreso para que la barra desaparezca
+        await asyncio.sleep(3)
+        case.sync_pub_status = None
         case.sync_pub_progress = 0
         db.commit()
                 
     except Exception as e:
         print(f"[refresh] Error guardando publicaciones: {e}")
-        case.sync_pub_status = "Error en búsqueda"
+        try:
+            case.sync_pub_status = f"Error: {str(e)[:50]}"
+            case.sync_pub_progress = 0
+            db.commit()
+        except: pass
         case.sync_pub_progress = 0
         db.commit()
 
