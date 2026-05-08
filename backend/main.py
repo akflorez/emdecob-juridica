@@ -31,6 +31,19 @@ except ImportError:
         SessionLocal = db.SessionLocal
         Base = db.Base
 
+# MIGRACIONES AUTOMATICAS RAPIDAS
+from sqlalchemy import text
+with engine.connect() as conn:
+    try:
+        conn.execute(text("ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)"))
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)"))
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
+        conn.commit()
+        print("[DB] Migraciones r?pidas completadas")
+    except Exception as e:
+        print(f"[DB] Error en migraciones: {e}")
+
 def get_db():
     db = SessionLocal()
     try:
@@ -4344,8 +4357,7 @@ async def get_task_detail(
         if not task:
             return JSONResponse(status_code=404, content={"detail": "Tarea no encontrada"})
         
-        # Sincronización inteligente on-demand deshabilitada temporalmente para debug
-        """
+        # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
@@ -4362,7 +4374,6 @@ async def get_task_detail(
                 except Exception as sync_err:
                     print(f"[SYNC ERROR] get_task_detail: {sync_err}")
                     db.rollback()
-        """
         
         # Construcción manual segura para evitar recursividad infinita (Circular Reference)
         def fmt_dt(dt):
