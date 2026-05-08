@@ -803,6 +803,8 @@ export default function CasoDetailPage() {
                 publications={publications}
                 isLoading={isLoadingPubs}
                 onRefresh={(newPubs) => setPublications(newPubs)}
+                initialSyncStatus={caseData?.sync_pub_status}
+                initialSyncProgress={caseData?.sync_pub_progress}
               />
             </CardContent>
           </Card>

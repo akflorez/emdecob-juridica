@@ -44,6 +44,8 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
+        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)"))
+        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0"))
         
         # SCRIPT DE LIMPIEZA DE DUPLICADOS (Cirugía de precisión)
         # Eliminamos eventos que tengan misma fecha, título y detalle dentro de un mismo caso, dejando solo el más nuevo
@@ -3686,9 +3688,15 @@ async def save_new_publications_task(case_id: int):
 
 async def save_new_publications(case: Case, db: Session):
     try:
-        from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango
-        
-        from backend.models import CaseEvent
+        from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango, parse_fecha_pub
+        from backend.models import CaseEvent, CasePublication
+        import asyncio
+
+        # 0. Iniciar progreso
+        case.sync_pub_status = "Iniciando búsqueda..."
+        case.sync_pub_progress = 5
+        db.commit()
+
         # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
         actuaciones = [{"anotacion": e.title, "fechaActuacion": e.event_date} for e in eventos]
@@ -3697,18 +3705,28 @@ async def save_new_publications(case: Case, db: Session):
         relevantes = [a for a in actuaciones if is_relevant_actuacion(a.get("anotacion", ""))]
         
         if not relevantes:
+            case.sync_pub_status = None
+            case.sync_pub_progress = 0
+            db.commit()
             print(f" No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
 
-        # 3. Limitar a las 5 ms recientes para evitar Timeouts (504)
+        # 3. Limitar a las 5 más recientes para evitar Timeouts
         relevantes = relevantes[:5]
-        print(f"[refresh] Iniciando bsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {len(relevantes)})")
+        total_steps = len(relevantes)
+        print(f"[refresh] Iniciando bsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {total_steps})")
 
-        # 3. Para cada actuacin relevante, buscar en Publicaciones en su ventana de tiempo
-        for act in relevantes:
+        # 3. Para cada actuación relevante, buscar en Publicaciones
+        for idx, act in enumerate(relevantes):
             fecha_act_str = act.get("fechaActuacion") or ""
             if not fecha_act_str: continue
             
+            # Actualizar progreso por cada actuación
+            step_progress = 10 + int((idx / total_steps) * 85)
+            case.sync_pub_status = f"Buscando para actuación del {fecha_act_str}..."
+            case.sync_pub_progress = step_progress
+            db.commit()
+
             try:
                 results = await consultar_publicaciones_rango(
                     case.radicado, 
@@ -3728,29 +3746,33 @@ async def save_new_publications(case: Case, db: Session):
                             case_id=case.id,
                             fecha_publicacion=parse_fecha_pub(p["fecha"]),
                             tipo_publicacion=p["tipo"],
-                            descripcion=p["descripcion"],
+                            descripcion=p.get("descripcion", ""),
                             documento_url=p["documento_url"],
                             source_url=p.get("source_url"),
                             source_id=p["source_id"]
                         ))
                     else:
+                        # Actualizar URL si cambió
                         exists.documento_url = p["documento_url"]
-                try:
-                    # Fix too many values to unpack (expected 2)
-                    validation_result = await validar_radicado_completo(c.radicado, db)
-                    if isinstance(validation_result, tuple):
-                        res, msg = validation_result
-                    else:
-                        res, msg = validation_result, "Resultado de validacion unico"
-                    
-                    print(f"[pending-loop] Resultado para {c.radicado}: {res}")
-                except Exception as loop_e:
-                    print(f"[pending-loop] Error en {c.radicado}: {loop_e}")
+                
+                db.commit()
             except Exception as e:
-                print(f"[refresh] Error procesando ventana de publicacin para {case.radicado}: {e}")
+                print(f"[refresh] Error en ventana de publicacin para {case.radicado}: {e}")
+        
+        # 4. Finalizar progreso
+        case.sync_pub_status = None
+        case.sync_pub_progress = 100
+        db.commit()
+        # Pequeña pausa y resetear progreso para que la barra desaparezca en el frontend
+        await asyncio.sleep(2)
+        case.sync_pub_progress = 0
+        db.commit()
                 
     except Exception as e:
         print(f"[refresh] Error guardando publicaciones: {e}")
+        case.sync_pub_status = "Error en búsqueda"
+        case.sync_pub_progress = 0
+        db.commit()
 
 @app.post("/admin/backfill-publicaciones")
 async def backfill_publicaciones(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):

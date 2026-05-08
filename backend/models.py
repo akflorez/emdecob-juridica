@@ -48,6 +48,10 @@ class Case(Base):
     ultima_actuacion = Column(Date, nullable=True)
 
     has_documents = Column(Boolean, default=False)
+    
+    # Seguimiento de progreso para publicaciones
+    sync_pub_status = Column(String(100), nullable=True)   # Ej: "Buscando...", "Finalizado"
+    sync_pub_progress = Column(Integer, default=0)         # 0 a 100
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
