@@ -4546,8 +4546,9 @@ async def update_task(
         return task
     except Exception as e:
         db.rollback()
-        print(f"[TASKS] Error updating task {task_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error al actualizar tarea: {str(e)}")
+        import traceback
+        print(f"[CRITICAL ERROR] update_task {task_id}: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
     # Endpoint consolidado en la l?nea 3604
     pass

@@ -132,11 +132,25 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
   const handleSave = async (updates: Partial<TaskType>) => {
     if (!displayTask) return;
     try {
-      const cleanedUpdates = { ...updates };
+      // Solo enviamos los campos que el backend espera para evitar errores de validación o 500
+      const allowedFields = ['title', 'description', 'status', 'priority', 'due_date', 'assignee_id', 'case_id', 'assignee_ids'];
+      const cleanedUpdates: any = {};
+      
+      allowedFields.forEach(field => {
+        if (field in updates) {
+          (cleanedUpdates as any)[field] = (updates as any)[field];
+        }
+      });
+
+      // Manejo especial de tags si vienen en el objeto updates
+      if ('tags' in updates) {
+        cleanedUpdates.tags = (updates.tags as any[]).map(t => typeof t === 'string' ? t : t.name);
+      }
+
       if (cleanedUpdates.due_date && typeof cleanedUpdates.due_date === 'string' && cleanedUpdates.due_date.trim() !== '') {
         cleanedUpdates.due_date = new Date(cleanedUpdates.due_date).toISOString();
       } else if (cleanedUpdates.due_date === '') {
-        cleanedUpdates.due_date = null as any;
+        cleanedUpdates.due_date = null;
       }
 
       if (!displayTask.id) {
