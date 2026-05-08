@@ -115,6 +115,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       const detail = await getTaskDetail(task.id, clickupToken);
       if (detail) {
         setFullTask(detail);
+        onTaskUpdate(detail);
       }
     } catch (error: any) {
       console.error("Error refreshing task", error);
@@ -245,7 +246,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       setNewSubtaskAssigneeId(undefined);
       setNewSubtaskPriority("normal");
       setShowSubtaskForm(false);
-      refreshTask();
+      await refreshTask();
       toast({ title: "Gestión creada correctamente" });
     } catch (error) {
       toast({ title: "Error al crear gestión", variant: "destructive" });

@@ -4341,6 +4341,8 @@ async def get_task_detail(
         if not task:
             raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
+        print(f"[DEBUG] get_task_detail {task_id}: subtasks={len(task.subtasks)}, comments={len(task.comments)}")
+        
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
