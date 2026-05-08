@@ -4341,8 +4341,6 @@ async def get_task_detail(
         if not task:
             raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
-        print(f"[DEBUG] get_task_detail {task_id}: subtasks={len(task.subtasks)}, comments={len(task.comments)}")
-        
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
@@ -4359,61 +4357,15 @@ async def get_task_detail(
                     db.commit()
                     db.refresh(task)
         
-        # Convertir a dict para asegurar que se incluyen todas las relaciones cargadas
-        task_dict = {
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "status": task.status,
-            "priority": task.priority,
-            "due_date": task.due_date,
-            "list_id": task.list_id,
-            "assignee_id": task.assignee_id,
-            "assignee_name": task.assignee_name,
-            "creator_id": task.creator_id,
-            "case_id": task.case_id,
-            "parent_id": task.parent_id,
-            "clickup_id": task.clickup_id,
-            "created_at": task.created_at,
-            "updated_at": task.updated_at,
-            "subtasks": [
-                {
-                    "id": st.id,
-                    "title": st.title,
-                    "status": st.status,
-                    "priority": st.priority,
-                    "due_date": st.due_date,
-                    "assignee_name": st.assignee_name,
-                    "parent_id": st.parent_id
-                } for st in task.subtasks
-            ],
-            "comments": [
-                {
-                    "id": c.id,
-                    "content": c.content,
-                    "user_id": c.user_id,
-                    "user_name": c.user_name,
-                    "created_at": c.created_at
-                } for c in task.comments
-            ],
-            "tags": [{"name": t.name, "color": t.color} for t in task.tags],
-            "checklists": [
-                {
-                    "id": cl.id,
-                    "content": cl.content,
-                    "is_completed": cl.is_completed
-                } for cl in task.checklists
-            ],
-            "attachments": [
-                {
-                    "id": a.id,
-                    "name": a.name,
-                    "file_path": a.file_path,
-                    "file_type": a.file_type
-                } for a in task.attachments
-            ]
-        }
-        return task_dict
+        # Aseguramos que todo está en memoria antes de devolverlo
+        db.refresh(task)
+        # Acceso explícito para forzar carga si joinedload falló por alguna razón
+        _ = task.subtasks
+        _ = task.comments
+        _ = task.checklists
+        _ = task.tags
+        _ = task.attachments
+        return task
     except HTTPException as he:
         raise he
     except Exception as e:
