@@ -4358,7 +4358,62 @@ async def get_task_detail(
                     await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
                     db.commit()
                     db.refresh(task)
-        return task
+        
+        # Convertir a dict para asegurar que se incluyen todas las relaciones cargadas
+        task_dict = {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": task.due_date,
+            "list_id": task.list_id,
+            "assignee_id": task.assignee_id,
+            "assignee_name": task.assignee_name,
+            "creator_id": task.creator_id,
+            "case_id": task.case_id,
+            "parent_id": task.parent_id,
+            "clickup_id": task.clickup_id,
+            "created_at": task.created_at,
+            "updated_at": task.updated_at,
+            "subtasks": [
+                {
+                    "id": st.id,
+                    "title": st.title,
+                    "status": st.status,
+                    "priority": st.priority,
+                    "due_date": st.due_date,
+                    "assignee_name": st.assignee_name,
+                    "parent_id": st.parent_id
+                } for st in task.subtasks
+            ],
+            "comments": [
+                {
+                    "id": c.id,
+                    "content": c.content,
+                    "user_id": c.user_id,
+                    "user_name": c.user_name,
+                    "created_at": c.created_at
+                } for c in task.comments
+            ],
+            "tags": [{"name": t.name, "color": t.color} for t in task.tags],
+            "checklists": [
+                {
+                    "id": cl.id,
+                    "content": cl.content,
+                    "is_completed": cl.is_completed
+                } for cl in task.checklists
+            ],
+            "attachments": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "file_path": a.file_path,
+                    "file_type": a.file_type
+                } for a in task.attachments
+            ]
+        }
+        return task_dict
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -4406,6 +4461,7 @@ async def create_task(
             lid = default_list.id
             print(f" [TASK] Asignando lista por defecto ID {lid}")
 
+    print(f"[DEBUG] Creating task: title={t_data.title}, parent_id={t_data.parent_id}, case_id={t_data.case_id}")
     try:
         task = Task(
             title=t_data.title,
