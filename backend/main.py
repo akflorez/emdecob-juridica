@@ -4301,12 +4301,23 @@ async def get_tasks(
     # Multi-tenancy filter: Detección flexible para Jurico
     is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
     if is_jurico:
-        query = query.join(Case, Task.case_id == Case.id)
-        query = query.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
+        # Tareas de sus casos O tareas sin caso creadas/asignadas a él
+        query = query.outerjoin(Case, Task.case_id == Case.id)
+        query = query.filter(
+            or_(
+                and_(Task.case_id.isnot(None), or_(Case.user_id == current_user.id, Case.user_id == 2)),
+                and_(Task.case_id.is_(None), or_(Task.creator_id == current_user.id, Task.assignee_id == current_user.id))
+            )
+        )
     elif not current_user.is_admin:
-        # Otros usuarios no-admin (FNA) ven todo menos lo de Jurico
-        query = query.join(Case, Task.case_id == Case.id)
-        query = query.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+        # Otros usuarios no-admin (FNA) ven sus tareas O tareas de casos no-jurico
+        query = query.outerjoin(Case, Task.case_id == Case.id)
+        query = query.filter(
+            or_(
+                and_(Task.case_id.isnot(None), Case.user_id != 2, Case.user_id.isnot(None)),
+                and_(Task.case_id.is_(None), or_(Task.creator_id == current_user.id, Task.assignee_id == current_user.id))
+            )
+        )
         
     return query.order_by(desc(Task.created_at)).all()
 
