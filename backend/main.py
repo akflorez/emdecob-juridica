@@ -3026,6 +3026,17 @@ async def sync_case_events_background(case_id: int):
                 CaseEvent.event_hash == event_hash
             ).first()
             
+            # FALLBACK: Si no lo encuentra por hash, buscar por fecha y título exacto (Caso de migración)
+            if not exists:
+                exists = db.query(CaseEvent).filter(
+                    CaseEvent.case_id == c.id,
+                    CaseEvent.event_date == it["event_date"],
+                    CaseEvent.title == it["title"]
+                ).first()
+                if exists:
+                    # Actualizar el hash al nuevo formato para futuras consultas
+                    exists.event_hash = event_hash
+            
             if not exists:
                 db.add(CaseEvent(
                     case_id=c.id,
