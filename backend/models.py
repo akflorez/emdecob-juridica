@@ -29,7 +29,7 @@ class Case(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     radicado = Column(String(60), index=True, nullable=False)
-    id_proceso = Column(String(20), unique=True, index=True, nullable=True) # ID único de Rama Judicial
+    id_proceso = Column(String(50), nullable=True, index=True) # ID único de Rama Judicial
 
     demandante = Column(String(255), nullable=True)
     demandado = Column(String(255), nullable=True)
@@ -58,6 +58,7 @@ class Case(Base):
     )
     
     tasks = relationship("Task", back_populates="case", cascade="all, delete-orphan")
+    events = relationship("CaseEvent", back_populates="case", cascade="all, delete-orphan")
 
 
 class CaseEvent(Base):
