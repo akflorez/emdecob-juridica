@@ -73,10 +73,13 @@ class CaseEvent(Base):
 
     con_documentos = Column(Boolean, default=False)
     id_reg_actuacion = Column(BigInteger, nullable=True)
-    cons_actuacion = Column(Integer, nullable=True)
+    cons_actuacion = Column(BigInteger, nullable=True)
+    documentos_cache = Column(Text, nullable=True) # JSON con la lista de docs para velocidad
+    
+    case = relationship("Case", back_populates="events")
+    is_current = Column(Boolean, default=True)
 
     version = Column(Integer, default=1)
-    is_current = Column(Boolean, default=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 

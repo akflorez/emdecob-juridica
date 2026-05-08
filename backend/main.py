@@ -43,6 +43,7 @@ with engine.connect() as conn:
         # Migraciones para Documentos Judiciales
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
+        conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
         conn.commit()
         print("[DB] Migraciones r?pidas completadas")
     except Exception as e:
@@ -1861,6 +1862,30 @@ async def run_auto_refresh_now():
 
     except Exception as e:
         raise HTTPException(500, f"Error ejecutando auto-refresh: {str(e)}")
+
+@app.get("/api/documentos/{radicado}/{id_reg_actuacion}")
+async def get_docs_actuacion(radicado: str, id_reg_actuacion: int, db: Session = Depends(get_db)):
+    try:
+        # 1. Intentar obtener desde el caché de la base de datos
+        event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
+        if event and event.documentos_cache:
+            try:
+                cached_data = json.loads(event.documentos_cache)
+                return cached_data
+            except:
+                pass # Si el JSON est corrupto, seguimos con la consulta real
+
+        # 2. Consultar en tiempo real a la Rama Judicial (esto tarda)
+        docs = await consultar_documentos(radicado, id_reg_actuacion)
+        
+        # 3. Guardar en el caché para la próxima vez
+        if event and docs:
+            event.documentos_cache = json.dumps(docs)
+            db.commit()
+            
+        return docs
+    except Exception as e:
+        raise HTTPException(500, f"Error al cargar documentos: {str(e)}")
 
 
 # =========================
