@@ -14,3 +14,6 @@ httpx
 psycopg2-binary
 python-dotenv
 xlsxwriter
+itsdangerous
+sqladmin
+wtforms
