@@ -4344,7 +4344,8 @@ async def get_task_detail(
         if not task:
             return JSONResponse(status_code=404, content={"detail": "Tarea no encontrada"})
         
-        # Sincronización inteligente on-demand si es tarea de ClickUp
+        # Sincronización inteligente on-demand deshabilitada temporalmente para debug
+        """
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
@@ -4361,9 +4362,11 @@ async def get_task_detail(
                 except Exception as sync_err:
                     print(f"[SYNC ERROR] get_task_detail: {sync_err}")
                     db.rollback()
+        """
         
         # Construcción manual segura para evitar recursividad infinita (Circular Reference)
         def fmt_dt(dt):
+            if dt is None: return None
             return dt.isoformat() if isinstance(dt, datetime) else dt
 
         res_data = {
@@ -4424,8 +4427,9 @@ async def get_task_detail(
     except Exception as e:
         db.rollback()
         import traceback
+        err_msg = f"Error: {str(e)}"
         print(f"[CRITICAL ERROR] get_task_detail: {traceback.format_exc()}")
-        return JSONResponse(status_code=500, content={"detail": "Error interno al cargar detalles de la tarea. Por favor, intenta de nuevo."})
+        return JSONResponse(status_code=500, content={"detail": err_msg})
 
 @app.get("/cases/{case_id}/tasks")
 async def get_case_tasks_endpoint(
