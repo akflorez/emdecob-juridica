@@ -63,8 +63,10 @@ export default function LoginPage() {
           position: absolute;
           inset: 0;
           background-image: url(${LOGIN_BG});
-          background-size: cover;
-          background-position: left bottom;
+          background-size: 100% auto; /* Ajuste para reducir el zoom */
+          background-position: center;
+          background-repeat: no-repeat;
+          background-color: #021C33; /* Fondo oscuro por si la imagen no cubre todo */
           z-index: 1;
         }
 
