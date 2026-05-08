@@ -4331,7 +4331,13 @@ async def get_task_detail(
 ):
     import traceback
     try:
-        task = db.query(Task).filter(Task.id == task_id).first()
+        task = db.query(Task).options(
+            joinedload(Task.subtasks),
+            joinedload(Task.checklists),
+            joinedload(Task.comments),
+            joinedload(Task.tags),
+            joinedload(Task.attachments)
+        ).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
