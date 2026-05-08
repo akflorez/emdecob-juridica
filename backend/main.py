@@ -2948,8 +2948,7 @@ async def events_logic(c: Case, db: Session):
         # 1. Obtener datos locales actuales ordenados por fecha de actuación (más reciente arriba)
         db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.event_date), desc(CaseEvent.id)).all()
         
-        # 2. Decidir si necesitamos refrescar (en segundo plano)
-        # Si no hay eventos o el ultimo check fue hace mas de 12 horas
+        # 2. Decidir si necesitamos refrescar (siempre en segundo plano para no bloquear)
         needs_refresh = False
         if not db_events:
             needs_refresh = True
@@ -2957,14 +2956,7 @@ async def events_logic(c: Case, db: Session):
             needs_refresh = True
             
         if needs_refresh:
-            print(f"[SYNC] Disparando actualizacion para {radicado}")
-            # Si no hay eventos, lo hacemos Sincrono la primera vez para que el usuario vea algo
-            if not db_events:
-                await sync_case_events_background(c.id)
-                # Volver a consultar
-                db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.created_at)).all()
-            else:
-                asyncio.create_task(sync_case_events_background(c.id))
+            asyncio.create_task(sync_case_events_background(c.id))
 
         # 3. Formatear para el frontend
         result_items = []
