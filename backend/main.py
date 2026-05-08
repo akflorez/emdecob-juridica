@@ -3693,21 +3693,25 @@ async def save_new_publications(case: Case, db: Session):
         import asyncio
         import httpx
 
-        # 0. Iniciar progreso
+        # 0. Iniciar progreso con seguridad
         case.sync_pub_status = "Iniciando limpieza y búsqueda..."
         case.sync_pub_progress = 5
         db.commit()
         
-        # --- OPCIÓN NUCLEAR: LIMPIEZA INSTANTÁNEA ---
-        # Como el usuario confirmó que los 22 documentos NO sirven, 
-        # los borramos directamente de la DB para no perder tiempo descargándolos.
-        existing_count = db.query(CasePublication).filter(CasePublication.case_id == case.id).count()
-        if existing_count > 0:
-            print(f"[cleanup] Borrando {existing_count} registros previos para iniciar búsqueda limpia...")
-            case.sync_pub_status = f"Borrando {existing_count} registros antiguos..."
-            db.query(CasePublication).filter(CasePublication.case_id == case.id).delete()
+        try:
+            # --- OPCIÓN NUCLEAR: LIMPIEZA INSTANTÁNEA ---
+            # Borrado directo por ID de caso para máxima velocidad
+            db.query(CasePublication).filter(CasePublication.case_id == case.id).delete(synchronize_session=False)
             db.commit()
-        # ---------------------------------------------
+            print(f"[cleanup] Limpieza completada para caso {case.id}")
+        except Exception as e_cleanup:
+            print(f"[cleanup] Error en limpieza (no crítico): {e_cleanup}")
+            db.rollback() # Asegurar que la sesión queda limpia si falla el borrado
+
+        # Actualizar a 10% tras limpieza
+        case.sync_pub_progress = 10
+        case.sync_pub_status = "Analizando historial de actuaciones..."
+        db.commit()
 
         # 1. Obtener actuaciones del caso
 
