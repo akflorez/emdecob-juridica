@@ -80,11 +80,12 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+from backend.db import engine, SessionLocal, Base
 from backend.models import (
-    Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
-    User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
-    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig
+    User, Case, CaseEvent, CasePublication, SearchJob, 
+    Workspace, Folder, ProjectList, Task, TaskChecklistItem, TaskComment, Tag, TaskAttachment, IntegrationConfig
 )
+from backend.clickup_sync import fetch_clickup, process_task
 from backend.service.rama import (
     consulta_por_radicado,
     detalle_proceso,
@@ -4328,7 +4329,7 @@ async def get_task_detail(
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
-                from backend.clickup_sync import fetch_clickup, process_task
+                # Traemos la tarea con subtareas y checklists en una sola llamada optimizada
                 t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
                 if t_data:
                     all_users = db.query(User).all()
