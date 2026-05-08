@@ -598,6 +598,11 @@ export default function ProjectDashboardPage() {
                             <BigCalendar
                               localizer={localizer}
                               events={calendarEvents}
+                              selectable
+                              onSelectSlot={(slotInfo: any) => {
+                                setNewDueDate(format(slotInfo.start, 'yyyy-MM-dd'));
+                                setCreationModal({ open: true, mode: 'tarea', title: 'Nueva Tarea' });
+                              }}
                               startAccessor="start"
                               endAccessor="end"
                               date={calendarDate}

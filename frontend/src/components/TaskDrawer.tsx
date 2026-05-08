@@ -195,6 +195,20 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
     handleSave({ tags: newTags } as any);
   };
 
+  const toggleSubtaskStatus = async (st: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!displayTask) return;
+    const isCompleted = ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '');
+    const newStatus = isCompleted ? 'to do' : 'completado';
+    try {
+      await updateTask(st.id, { status: newStatus });
+      await refreshTask();
+      if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+    } catch (error) {
+      console.error("Error toggling subtask status:", error);
+    }
+  };
+
   const handleAddComment = async () => {
     if (!displayTask || !newComment.trim()) return;
     try {
@@ -413,7 +427,22 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                             <PopoverContent className="w-80 p-3 bg-popover border-border text-popover-foreground rounded-2xl shadow-2xl">
                                <ScrollArea className="h-[250px]">
                                   <div className="grid grid-cols-1 gap-1.5">
-                                    {allTags.map(t => (
+                                <div className="p-2 mb-2">
+                                  <Input 
+                                    placeholder="Nueva etiqueta..." 
+                                    className="h-9 bg-accent/30 border-border/40 rounded-lg text-xs"
+                                    onKeyDown={(e: any) => {
+                                      if (e.key === 'Enter') {
+                                        const val = e.target.value;
+                                        if (val.trim()) {
+                                          toggleTag(val.trim());
+                                          e.target.value = '';
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </div>
+                                {allTags.map(t => (
                                       <div key={t.id} className="flex items-center justify-between p-2.5 hover:bg-muted/50 rounded-xl cursor-pointer transition-all border border-transparent hover:border-border/30" onClick={() => toggleTag(t.name)}>
                                          <div className="flex items-center gap-3">
                                             <div className="h-3.5 w-3.5 rounded-full shadow-lg" style={{ backgroundColor: t.color || '#3b82f6' }} />
@@ -479,7 +508,10 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                                    displayTask.subtasks.map(st => (
                                      <div key={st.id} className="grid grid-cols-[1fr_180px_120px_160px] gap-8 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary">
                                         <div className="flex items-center gap-5 text-foreground">
-                                           <div className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all group-hover:border-primary", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}>
+                                            <div 
+                                              className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all hover:border-primary cursor-pointer", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}
+                                              onClick={(e) => toggleSubtaskStatus(st, e)}
+                                            >
                                               {['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3 w-3 text-white" />}
                                            </div>
                                            <span className={cn("font-bold tracking-tight truncate", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
