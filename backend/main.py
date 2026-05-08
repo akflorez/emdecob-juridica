@@ -3692,10 +3692,11 @@ async def save_new_publications(case: Case, db: Session):
         from backend.models import CaseEvent, CasePublication
         import asyncio
 
-        # 0. Iniciar progreso
-        case.sync_pub_status = "Iniciando búsqueda..."
+        # 0. Iniciar progreso con una pequeña pausa para el frontend
+        case.sync_pub_status = "Iniciando motor de búsqueda..."
         case.sync_pub_progress = 5
         db.commit()
+        await asyncio.sleep(1.5) # Dar tiempo al frontend para iniciar el polling
 
         # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()

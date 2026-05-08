@@ -39,31 +39,40 @@ export function PublicacionesPanel({
   useEffect(() => {
     let interval: any;
     
-    // Si hay progreso activo (entre 1 y 99), empezamos a preguntar al servidor
-    if (syncProgress > 0 && syncProgress < 100) {
+    // Si hay progreso activo o acabamos de iniciar una búsqueda (isRefreshing)
+    if ((syncProgress > 0 && syncProgress < 100) || isRefreshing) {
       interval = setInterval(async () => {
         try {
           const caseData = await getCaseByRadicado(radicado);
           if (caseData) {
-            setSyncStatus(caseData.sync_pub_status);
-            setSyncProgress(caseData.sync_pub_progress || 0);
+            // Solo actualizamos si el servidor tiene un progreso válido
+            if (caseData.sync_pub_status || (caseData.sync_pub_progress > 0)) {
+              setSyncStatus(caseData.sync_pub_status);
+              setSyncProgress(caseData.sync_pub_progress || 0);
+            }
             
-            // Si terminó o hubo error, refrescamos la lista de publicaciones
-            if (caseData.sync_pub_progress === 100 || !caseData.sync_pub_status) {
+            // Si el servidor ya terminó (100% o status nulo pero ya teníamos progreso)
+            if (caseData.sync_pub_progress === 100 || (syncProgress > 50 && !caseData.sync_pub_status)) {
               const result = caseId 
                 ? await refreshCasePublicationsById(caseId)
                 : await refreshCasePublications(radicado);
-              if (result.ok && result.items) onRefresh(result.items);
+              if (result.ok && result.items) {
+                onRefresh(result.items);
+                setSyncProgress(0); // Ahora sí ocultamos
+                setSyncStatus(null);
+                setIsRefreshing(false);
+                clearInterval(interval);
+              }
             }
           }
         } catch (e) {
           console.error("Error polling progress:", e);
         }
-      }, 3000);
+      }, 2000); // Más frecuente (2 segundos) para mayor fluidez
     }
 
     return () => { if (interval) clearInterval(interval); };
-  }, [syncProgress, radicado, caseId, onRefresh]);
+  }, [syncProgress, isRefreshing, radicado, caseId, onRefresh]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
