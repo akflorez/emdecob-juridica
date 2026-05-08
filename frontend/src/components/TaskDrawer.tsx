@@ -485,7 +485,14 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                                            <span className={cn("font-bold tracking-tight truncate", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
                                         </div>
                                         <div className="flex justify-center items-center">
-                                           <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-black text-primary shadow-lg group-hover:bg-primary group-hover:text-primary-foreground transition-all">{st.assignee_name?.[0] || 'U'}</div>
+                                         <div className="flex items-center gap-3">
+                                            <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-black text-primary shadow-lg group-hover:bg-primary group-hover:text-primary-foreground transition-all flex-shrink-0">
+                                               {st.assignee_name?.[0] || 'U'}
+                                            </div>
+                                            <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground transition-colors uppercase tracking-tighter truncate max-w-[140px]">
+                                               {st.assignee_name || 'Sin asignar'}
+                                            </span>
+                                         </div>
                                         </div>
                                         <div className="flex justify-center items-center">
                                            <Flag className={`h-5 w-5 ${st.priority === 'high' ? 'text-red-500' : 'text-muted-foreground/30'}`} />
