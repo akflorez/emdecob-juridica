@@ -182,34 +182,38 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     search_queries = [despacho_12, pattern_with_dash, rad_digits]
     
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
-        for q in search_queries:
+        # Intentar primero con la query más específica (Radicado completo o Patrón)
+        # para evitar el ruido del despacho completo si es posible.
+        priority_queries = [radicado_completo, pattern_with_dash, despacho_12]
+        
+        for q in priority_queries:
             if not q: continue
-            print(f"[scraper] Consultando portal con query: {q}")
+            print(f"[scraper] Consultando portal con query de alta precisión: {q}")
             try:
-                # El portal usa 'q' para búsqueda general
                 resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params={"q": q})
                 if resp.status_code == 200:
                     candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
-                    print(f"[scraper] Encontrados {len(candidates)} candidatos potenciales.")
+                    print(f"[scraper] Encontrados {len(candidates)} candidatos potenciales para validar.")
                     
                     for cand in candidates:
-                        # Si el snippet ya tiene el patrón o nombres, validamos más rápido
-                        if pattern_with_dash in cand["snippet"]:
-                            results.append(cand)
-                            print(f"[scraper] ✅ Match rápido por patrón en snippet.")
-                            continue
-                            
-                        # Si no, descarga y valida contenido (último recurso)
+                        # AUDITORÍA DE CALIDAD: Prohibido validar por snippet. 
+                        # Siempre leer el contenido para evitar los 22 falsos positivos.
                         text = await extract_text_content(cand["documento_url"], client)
+                        
+                        # Validación ULTRA-ESTRICTA: Radicado + Partes
                         if validate_content(text, rad_digits, demandante, demandado):
                             results.append(cand)
-                            print(f"[scraper] ✅ Documento verificado por contenido.")
+                            print(f"[scraper] ✅ Documento VERIFICADO con éxito (Radicado y Partes coinciden).")
+                        else:
+                            print(f"[scraper] ❌ Documento descartado: No coincide con el radicado {rad_digits}")
             except Exception as e:
-                print(f"[scraper] Error en búsqueda '{q}': {e}")
+                print(f"[scraper] Error en búsqueda profunda '{q}': {e}")
             
-            if results: break # Si encontramos resultados con la query más específica, paramos
+            # Si ya encontramos resultados sólidos con las queries prioritarias, no seguimos al despacho completo
+            # para evitar traer basura de otros radicados.
+            if results: break
 
-    # Deduplicar
+    # Deduplicar resultados finales
     final = []
     seen = set()
     for r in results:
