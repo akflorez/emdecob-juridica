@@ -4387,25 +4387,28 @@ async def create_task(
             lid = default_list.id
             print(f" [TASK] Asignando lista por defecto ID {lid}")
 
-    task = Task(
-        title=t_data.title,
-        description=t_data.description,
-        list_id=lid,
-        assignee_id=t_data.assignee_id,
-        priority=t_data.priority,
-        status=t_data.status,
-        due_date=t_data.due_date,
-        case_id=t_data.case_id,
-        parent_id=t_data.parent_id,
-        creator_id=current_user.id
-    )
-    db.add(task)
-    if "assignee_name" in update_data:
-        task.assignee_name = update_data["assignee_name"]
-    
-    db.commit()
-    db.refresh(task)
-    return task
+    try:
+        task = Task(
+            title=t_data.title,
+            description=t_data.description,
+            list_id=lid,
+            assignee_id=t_data.assignee_id,
+            priority=t_data.priority,
+            status=t_data.status,
+            due_date=t_data.due_date,
+            case_id=t_data.case_id,
+            parent_id=t_data.parent_id,
+            creator_id=current_user.id
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
+    except Exception as e:
+        db.rollback()
+        import traceback
+        print(f"[CRITICAL ERROR] create_task: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/projects/tasks/{task_id}/comments")
 @app.post("/api/projects/tasks/{task_id}/comments")
