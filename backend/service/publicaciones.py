@@ -116,8 +116,7 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
     # Liferay search results are usually in entries
     entries = soup.find_all("div", class_="search-result") or soup.find_all("li", class_="search-result")
     if not entries:
-        # Fallback a buscar por contenedores genéricos de links
-        entries = [l.parent.parent for l in soup.find_all("a", href=True) if "find_file_entry" in l["href"]]
+        entries = [l.parent.parent for l in soup.find_all("a", href=True) if "find_file_entry" in l["href"] or "/documents/" in l["href"]]
 
     year_pattern = radicado_completo[12:16]
     consecutive = radicado_completo[16:21]
@@ -136,8 +135,7 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
             
         entry_text = entry.get_text()
         
-        # 1. Extraer Fecha del Texto del Resultado
-        # Buscamos patrones tipo DD/MM/YYYY o YYYY-MM-DD
+        # 1. Extraer Fecha (Validar que sea igual o posterior)
         date_match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', entry_text)
         pub_date = None
         if date_match:
@@ -146,20 +144,22 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
                 pub_date = date(int(y), int(m), int(d))
             except: pass
         
-        # 2. Validar Fecha (Igual o posterior a la actuación)
-        if fecha_act_min and pub_date:
-            if pub_date < fecha_act_min:
-                print(f"[scraper] Saltando publicacion antigua: {pub_date} < {fecha_act_min}")
-                continue
+        if fecha_act_min and pub_date and pub_date < fecha_act_min:
+            continue
 
-        # 3. Candidato si menciona el patrón o el radicado
+        # 2. Identificar si es un documento directo o una página de resumen (Como la Imagen 3 del Word)
+        # Si es una página de resumen, necesitamos entrar para buscar el PDF real.
+        is_direct_doc = any(ext in url.lower() for ext in [".pdf", ".docx", "find_file_entry"])
+        
+        # 3. Candidato si menciona el patrón
         if pattern_with_dash in entry_text or consecutive in entry_text:
             candidates.append({
                 "fecha": pub_date.strftime("%Y-%m-%d") if pub_date else datetime.now().strftime("%Y-%m-%d"),
-                "tipo": l.get_text(strip=True)[:100] or "Notificación de Estado",
+                "tipo": l.get_text(strip=True)[:100] or "Publicación Procesal",
                 "documento_url": url,
                 "source_id": hashlib.md5(url.encode()).hexdigest(),
-                "snippet": entry_text[:200]
+                "snippet": entry_text[:200],
+                "is_direct": is_direct_doc
             })
     return candidates
 
@@ -168,50 +168,53 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     rad_digits = "".join(filter(str.isdigit, radicado_completo))
     if len(rad_digits) < 21: return []
     
-    # Fecha mínima de actuación para filtrar
     fecha_act_min = parse_fecha_pub(fecha_act_str)
-    
-    # Patrones de búsqueda según manual
     pattern_with_dash = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
     despacho_12 = rad_digits[:12]
     
-    # Búsquedas estratégicas: 
-    # 1. Despacho (Trae la lista de Estados/Edictos del juzgado)
-    # 2. Patrón con guion (Búsqueda directa)
-    # 3. Radicado completo
-    search_queries = [despacho_12, pattern_with_dash, rad_digits]
-    
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
-        # Intentar primero con la query más específica (Radicado completo o Patrón)
-        # para evitar el ruido del despacho completo si es posible.
-        priority_queries = [radicado_completo, pattern_with_dash, despacho_12]
-        
-        for q in priority_queries:
-            if not q: continue
-            print(f"[scraper] Consultando portal con query de alta precisión: {q}")
-            try:
-                resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params={"q": q})
-                if resp.status_code == 200:
-                    candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
-                    print(f"[scraper] Encontrados {len(candidates)} candidatos potenciales para validar.")
+        # Prioridad 1: Patrón exacto (YYYY-NNNNN)
+        # Prioridad 2: Despacho (Para entrar a los estados del juzgado)
+        for q in [pattern_with_dash, despacho_12]:
+            print(f"[scraper] Buscando profundidad con query: {q}")
+            resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params={"q": q})
+            if resp.status_code == 200:
+                candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
+                
+                for cand in candidates:
+                    target_url = cand["documento_url"]
                     
-                    for cand in candidates:
-                        # AUDITORÍA DE CALIDAD: Prohibido validar por snippet. 
-                        # Siempre leer el contenido para evitar los 22 falsos positivos.
-                        text = await extract_text_content(cand["documento_url"], client)
-                        
-                        # Validación ULTRA-ESTRICTA: Radicado + Partes
-                        if validate_content(text, rad_digits, demandante, demandado):
+                    # SI NO ES DIRECTO: "Navegar hacia adentro" (Como en la Imagen 3/4 del manual)
+                    if not cand["is_direct"]:
+                        print(f"[scraper] Navegando página de resumen: {target_url}")
+                        inner_resp = await client.get(target_url)
+                        if inner_resp.status_code == 200:
+                            inner_soup = BeautifulSoup(inner_resp.text, "html.parser")
+                            # Buscar links de "CONSULTAR AQUI", "VER", "VER DETALLE" o PDFs directos
+                            inner_links = inner_soup.find_all("a", href=True)
+                            for il in inner_links:
+                                link_text = il.get_text().upper()
+                                href = il["href"]
+                                if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
+                                    if not href.startswith("http"):
+                                        href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
+                                    
+                                    # Validar el contenido de este link profundo
+                                    doc_text = await extract_text_content(href, client)
+                                    if validate_content(doc_text, rad_digits, demandante, demandado):
+                                        new_cand = cand.copy()
+                                        new_cand["documento_url"] = href
+                                        results.append(new_cand)
+                                        print(f"[scraper] ✅ Match profundo encontrado en: {href}")
+                                        break
+                    else:
+                        # VALIDACIÓN DIRECTA (Si el link ya era un PDF)
+                        doc_text = await extract_text_content(target_url, client)
+                        if validate_content(doc_text, rad_digits, demandante, demandado):
                             results.append(cand)
-                            print(f"[scraper] ✅ Documento VERIFICADO con éxito (Radicado y Partes coinciden).")
-                        else:
-                            print(f"[scraper] ❌ Documento descartado: No coincide con el radicado {rad_digits}")
-            except Exception as e:
-                print(f"[scraper] Error en búsqueda profunda '{q}': {e}")
+                            print(f"[scraper] ✅ Match directo encontrado.")
             
-            # Si ya encontramos resultados sólidos con las queries prioritarias, no seguimos al despacho completo
-            # para evitar traer basura de otros radicados.
-            if results: break
+            if results: break # Optimizar: si ya encontramos oro, no buscamos más
 
     # Deduplicar resultados finales
     final = []
