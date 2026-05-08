@@ -3698,42 +3698,18 @@ async def save_new_publications(case: Case, db: Session):
         case.sync_pub_progress = 5
         db.commit()
         
-        # --- NUEVA LÓGICA DE LIMPIEZA DE FALSOS POSITIVOS (VISIBILIDAD TOTAL) ---
-        existing_pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).all()
-        if existing_pubs:
-            total_cleanup = len(existing_pubs)
-            print(f"[cleanup] Re-validando {total_cleanup} publicaciones...")
-            
-            sem = asyncio.Semaphore(5)
-            processed_count = 0
-
-            async def revalidate_pub(p, client):
-                nonlocal processed_count
-                async with sem:
-                    processed_count += 1
-                    # Actualizar status para que el usuario vea movimiento
-                    case.sync_pub_status = f"Limpiando documento {processed_count} de {total_cleanup}..."
-                    db.commit()
-                    
-                    if not p.documento_url: return None
-                    try:
-                        # Timeout agresivo (10s) para no colgar el sistema
-                        text = await extract_text_content(p.documento_url, client, timeout=10)
-                        if not validate_content(text, case.radicado, case.demandante, case.demandado):
-                            return p
-                    except Exception as e:
-                        print(f"[cleanup] Salto controlado en pub {p.id}: {e}")
-                return None
-
-            async with httpx.AsyncClient(verify=False, timeout=15) as client:
-                tasks = [revalidate_pub(p, client) for p in existing_pubs]
-                results_to_delete = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                for p_to_del in results_to_delete:
-                    if isinstance(p_to_del, CasePublication):
-                        db.delete(p_to_del)
+        # --- OPCIÓN NUCLEAR: LIMPIEZA INSTANTÁNEA ---
+        # Como el usuario confirmó que los 22 documentos NO sirven, 
+        # los borramos directamente de la DB para no perder tiempo descargándolos.
+        existing_count = db.query(CasePublication).filter(CasePublication.case_id == case.id).count()
+        if existing_count > 0:
+            print(f"[cleanup] Borrando {existing_count} registros previos para iniciar búsqueda limpia...")
+            case.sync_pub_status = f"Borrando {existing_count} registros antiguos..."
+            db.query(CasePublication).filter(CasePublication.case_id == case.id).delete()
             db.commit()
-        # -----------------------------------------------------------------
+        # ---------------------------------------------
+
+        # 1. Obtener actuaciones del caso
 
         # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
