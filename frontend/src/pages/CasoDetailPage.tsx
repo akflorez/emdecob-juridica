@@ -14,12 +14,15 @@ import {
   getCaseByRadicado, 
   getCaseEvents, 
   downloadEventsExcel, 
+  downloadEventsByIdExcel,
   getCaseById, 
   getCaseEventsById, 
   getCasePublicationsById,
   getCaseTasks,
   getTasks,
   getUsers,
+  updateCaseLawyer,
+  getDocumentosActuacion,
   type User,
   type Task as TaskType
 } from '@/services/api';
