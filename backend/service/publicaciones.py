@@ -43,10 +43,12 @@ def is_relevant_actuacion(actuacion_text: str) -> bool:
     keywords = ["auto", "fijacion", "estado"]
     return any(k in norm for k in keywords)
 
-async def extract_text_content(url: str, client: httpx.AsyncClient) -> str:
+async def extract_text_content(url: str, client: httpx.AsyncClient, timeout: int = 30) -> str:
+    """Extrae texto de un PDF o DOCX remoto de forma asíncrona."""
+    if not url: return ""
     try:
-        print(f"[validator] Descargando {url[:100]}...")
-        resp = await client.get(url, timeout=35)
+        # Descargar el contenido
+        resp = await client.get(url, timeout=timeout)
         if resp.status_code != 200: return ""
         
         content = resp.content

@@ -43,13 +43,14 @@ export function PublicacionesPanel({
     if ((syncProgress > 0 && syncProgress < 100) || isRefreshing) {
       interval = setInterval(async () => {
         try {
-          const caseData = await getCaseByRadicado(radicado);
+          // Añadimos timestamp para evitar caché del navegador y ver el progreso real (limpieza 1/22...)
+          const timestamp = new Date().getTime();
+          const caseData = await getCaseByRadicado(`${radicado}?t=${timestamp}`);
+          
           if (caseData) {
-            // Solo actualizamos si el servidor tiene un progreso válido
-            if (caseData.sync_pub_status || (caseData.sync_pub_progress > 0)) {
-              setSyncStatus(caseData.sync_pub_status);
-              setSyncProgress(caseData.sync_pub_progress || 0);
-            }
+            // Actualización inmediata de status y progreso
+            setSyncStatus(caseData.sync_pub_status);
+            setSyncProgress(caseData.sync_pub_progress || 0);
             
             // Si el servidor ya terminó (100% o status nulo pero ya teníamos progreso)
             if (caseData.sync_pub_progress === 100 || (syncProgress > 50 && !caseData.sync_pub_status)) {
@@ -58,7 +59,7 @@ export function PublicacionesPanel({
                 : await refreshCasePublications(radicado);
               if (result.ok && result.items) {
                 onRefresh(result.items);
-                setSyncProgress(0); // Ahora sí ocultamos
+                setSyncProgress(0);
                 setSyncStatus(null);
                 setIsRefreshing(false);
                 clearInterval(interval);
@@ -68,7 +69,7 @@ export function PublicacionesPanel({
         } catch (e) {
           console.error("Error polling progress:", e);
         }
-      }, 2000); // Más frecuente (2 segundos) para mayor fluidez
+      }, 1000); // Polling agresivo de 1 segundo para feedback instantáneo
     }
 
     return () => { if (interval) clearInterval(interval); };
