@@ -14,6 +14,7 @@ from fastapi import (
     Header,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, sessionmaker, joinedload, selectinload
@@ -96,8 +97,11 @@ class LoginRequest(BaseModel):
 from backend.models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
-    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig
+    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig, Tag
 )
+from sqladmin import Admin, ModelView
+from sqladmin.authentication import AuthenticationBackend
+from starlette.responses import RedirectResponse
 from backend.service.rama import (
     consulta_por_radicado,
     detalle_proceso,
@@ -434,6 +438,8 @@ async def save_new_actuaciones(case: Case, id_proceso: int, db: Session):
                     detail=it.get("detail"),
                     event_hash=event_hash,
                     con_documentos=con_docs,
+                    id_reg_actuacion=it.get("id_reg_actuacion"),
+                    cons_actuacion=it.get("cons_actuacion"),
                 ))
                 if con_docs:
                     case.has_documents = True
@@ -753,6 +759,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
 
 
 # =========================
@@ -2937,8 +2945,8 @@ async def events_logic(c: Case, db: Session):
     try:
         radicado = c.radicado
         
-        # 1. Obtener datos locales actuales
-        db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.created_at)).all()
+        # 1. Obtener datos locales actuales ordenados por fecha de actuación (más reciente arriba)
+        db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.event_date), desc(CaseEvent.id)).all()
         
         # 2. Decidir si necesitamos refrescar (en segundo plano)
         # Si no hay eventos o el ultimo check fue hace mas de 12 horas
@@ -2962,8 +2970,8 @@ async def events_logic(c: Case, db: Session):
         result_items = []
         for e in db_events:
             result_items.append({
-                "id_reg_actuacion": None, # No lo tenemos si solo es local
-                "cons_actuacion": None,
+                "id_reg_actuacion": e.id_reg_actuacion,
+                "cons_actuacion": e.cons_actuacion,
                 "llave_proceso": radicado,
                 "event_date": e.event_date,
                 "title": e.title,
@@ -3019,6 +3027,8 @@ async def sync_case_events_background(case_id: int):
                     detail=it["detail"],
                     event_hash=event_hash,
                     con_documentos=con_docs,
+                    id_reg_actuacion=a.get("idRegActuacion"),
+                    cons_actuacion=a.get("consActuacion"),
                 ))
                 if con_docs: c.has_documents = True
                 new_count += 1
@@ -4083,7 +4093,8 @@ async def get_workspaces(
                 WorkspaceMember.user_id == current_user.id
             )
         ).options(
-            joinedload(Workspace.folders).joinedload(Folder.lists)
+            joinedload(Workspace.folders).joinedload(Folder.lists),
+            joinedload(Workspace.lists)
         ).all()
     
     results = []
@@ -4093,12 +4104,15 @@ async def get_workspaces(
             lists = [{"id": l.id, "name": l.name} for l in f.lists]
             folders.append({"id": f.id, "name": f.name, "lists": lists})
         
+        workspace_lists = [{"id": l.id, "name": l.name} for l in ws.lists]
+        
         results.append({
             "id": ws.id,
             "name": ws.name,
             "visibility": ws.visibility,
             "clickup_id": ws.clickup_id,
-            "folders": folders
+            "folders": folders,
+            "lists": workspace_lists
         })
     
     return results
@@ -4311,26 +4325,47 @@ async def get_tasks(
     if status:
         query = query.filter(Task.status.ilike(f"%{status}%"))
         
-    # Multi-tenancy filter: Detección flexible para Jurico
+    # Multi-tenancy filter: Detección experta para colaboración y aislamiento judicial
     is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
-    if is_jurico:
-        # Tareas de sus casos O tareas sin caso creadas/asignadas a él
-        query = query.outerjoin(Case, Task.case_id == Case.id)
-        query = query.filter(
+    
+    # Unimos con ProjectList para saber a qué workspace pertenece la tarea
+    # Usamos outerjoin para asegurar que tareas sin lista (si existieran) no desaparezcan por error
+    query = query.outerjoin(ProjectList, Task.list_id == ProjectList.id)
+    query = query.outerjoin(Case, Task.case_id == Case.id)
+    
+    if current_user.is_admin:
+        # Admin ve todo sin restricciones
+        pass
+    else:
+        # 1. Filtro por Membresía de Workspace (Core de Colaboración)
+        # El usuario debe ser dueño del workspace o miembro explícito
+        user_workspaces_subquery = db.query(Workspace.id).outerjoin(WorkspaceMember).filter(
             or_(
-                and_(Task.case_id.isnot(None), or_(Case.user_id == current_user.id, Case.user_id == 2)),
-                and_(Task.case_id.is_(None), or_(Task.creator_id == current_user.id, Task.assignee_id == current_user.id))
+                Workspace.owner_id == current_user.id,
+                WorkspaceMember.user_id == current_user.id
             )
-        )
-    elif not current_user.is_admin:
-        # Otros usuarios no-admin (FNA) ven sus tareas O tareas de casos no-jurico
-        query = query.outerjoin(Case, Task.case_id == Case.id)
-        query = query.filter(
-            or_(
-                and_(Task.case_id.isnot(None), Case.user_id != 2, Case.user_id.isnot(None)),
-                and_(Task.case_id.is_(None), or_(Task.creator_id == current_user.id, Task.assignee_id == current_user.id))
+        ).scalar_subquery()
+        
+        if is_jurico:
+            # Juridico ve tareas de sus casos O tareas de sus workspaces (siempre que no sean casos de otros)
+            query = query.filter(
+                or_(
+                    # Caso propio o de la cuenta maestra juridica
+                    and_(Task.case_id.isnot(None), or_(Case.user_id == current_user.id, Case.user_id == 2)),
+                    # Tarea sin caso pero en un workspace al que pertenece
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery))
+                )
             )
-        )
+        else:
+            # Otros usuarios (FNA, etc.)
+            query = query.filter(
+                or_(
+                    # Sus casos (no juridicos)
+                    and_(Task.case_id.isnot(None), Case.user_id != 2, Case.user_id == current_user.id),
+                    # Tareas sin caso en sus workspaces
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery))
+                )
+            )
         
     return query.order_by(desc(Task.created_at)).all()
 
@@ -4490,12 +4525,18 @@ async def create_task(
             list_id=lid,
             assignee_id=t_data.assignee_id,
             priority=t_data.priority,
-            status=t_data.status,
+            status=(t_data.status or "ABIERTO").upper(),
             due_date=t_data.due_date,
             case_id=t_data.case_id,
             parent_id=t_data.parent_id,
             creator_id=current_user.id
         )
+        
+        # Auditoría de identidad: Poblar assignee_name automáticamente
+        if t_data.assignee_id:
+            user_obj = db.query(User).filter(User.id == t_data.assignee_id).first()
+            if user_obj:
+                task.assignee_name = user_obj.nombre or user_obj.username
         db.add(task)
         db.commit()
         db.refresh(task)
@@ -4615,12 +4656,14 @@ async def update_task(
     try:
         if t_data.title is not None: task.title = t_data.title
         if t_data.description is not None: task.description = t_data.description
-        if t_data.status is not None: task.status = t_data.status
-        if t_data.assignee_id is not None: task.assignee_id = t_data.assignee_id
-        if t_data.priority is not None: task.priority = t_data.priority
-        if t_data.due_date is not None: task.due_date = t_data.due_date
-        if t_data.assignee_name is not None: task.assignee_name = t_data.assignee_name
+        if t_data.status is not None: task.status = t_data.status.upper()
         if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
+        
+        # Auditoría de identidad: Sincronizar nombre si cambia el ID
+        if t_data.assignee_id is not None:
+            user_obj = db.query(User).filter(User.id == t_data.assignee_id).first()
+            if user_obj:
+                task.assignee_name = user_obj.nombre or user_obj.username
         
         if hasattr(t_data, 'assignee_ids') and t_data.assignee_ids is not None:
             db_users = db.query(User).filter(User.id.in_(t_data.assignee_ids)).all()
@@ -4886,3 +4929,89 @@ async def get_all_statuses(db: Session = Depends(get_db), current_user: User = D
     current_list = [s[0].upper() for s in statuses if s[0]]
     final_list = list(set(current_list + base_statuses))
     return sorted(final_list)
+
+
+# =========================
+# ADMIN PANEL (DJANGO-LIKE)
+# =========================
+
+class AdminAuth(AuthenticationBackend):
+    async def login(self, request: Request) -> bool:
+        form = await request.form()
+        username, password = form.get("username"), form.get("password")
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == username).first()
+            if user and _verify_password(password, user.hashed_password) and user.is_admin:
+                request.session.update({"token": create_access_token(user.id)})
+                return True
+        finally:
+            db.close()
+        return False
+
+    async def logout(self, request: Request) -> bool:
+        request.session.clear()
+        return True
+
+    async def authenticate(self, request: Request) -> Optional[RedirectResponse]:
+        token = request.session.get("token")
+        if not token:
+            return RedirectResponse(request.url_for("admin:login"))
+        user_id = verify_access_token(token)
+        if not user_id:
+            return RedirectResponse(request.url_for("admin:login"))
+        # Verificar si sigue siendo admin y activo
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user or not user.is_admin or not user.is_active:
+                request.session.clear()
+                return RedirectResponse(request.url_for("admin:login"))
+        finally:
+            db.close()
+        return None
+
+authentication_backend = AdminAuth(secret_key=secrets.token_urlsafe(32))
+admin = Admin(app, engine, authentication_backend=authentication_backend, base_url="/admin", title="EMDECOB - Panel Admin")
+
+class UserAdmin(ModelView, model=User):
+    column_list = [User.id, User.username, User.nombre, User.email, User.is_admin, User.is_active]
+    column_searchable_list = [User.username, User.nombre, User.email]
+    column_filters = [User.is_admin, User.is_active]
+    name = "Usuario"
+    name_plural = "Usuarios"
+    icon = "fa-solid fa-user"
+
+class CaseAdmin(ModelView, model=Case):
+    column_list = [Case.id, Case.radicado, Case.demandante, Case.demandado, Case.abogado]
+    column_searchable_list = [Case.radicado, Case.demandante, Case.demandado, Case.abogado]
+    column_filters = [Case.user_id]
+    name = "Radicado"
+    name_plural = "Radicados"
+    icon = "fa-solid fa-folder-open"
+
+class TaskAdmin(ModelView, model=Task):
+    column_list = [Task.id, Task.title, Task.status, Task.priority, Task.due_date, Task.assignee_name]
+    column_searchable_list = [Task.title, Task.status, Task.assignee_name]
+    column_filters = [Task.status, Task.priority]
+    name = "Tarea"
+    name_plural = "Tareas"
+    icon = "fa-solid fa-list-check"
+
+class WorkspaceAdmin(ModelView, model=Workspace):
+    column_list = [Workspace.id, Workspace.name, Workspace.visibility]
+    name = "Espacio"
+    name_plural = "Espacios"
+    icon = "fa-solid fa-briefcase"
+
+class IntegrationAdmin(ModelView, model=IntegrationConfig):
+    column_list = [IntegrationConfig.id, IntegrationConfig.service_name, IntegrationConfig.is_active]
+    name = "Integraci?n"
+    name_plural = "Integraciones"
+    icon = "fa-solid fa-plug"
+
+admin.add_view(UserAdmin)
+admin.add_view(CaseAdmin)
+admin.add_view(TaskAdmin)
+admin.add_view(WorkspaceAdmin)
+admin.add_view(IntegrationAdmin)

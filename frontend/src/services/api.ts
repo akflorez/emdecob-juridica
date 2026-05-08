@@ -813,6 +813,7 @@ export type Workspace = {
   name: string;
   visibility: string;
   folders: WorkspaceFolder[];
+  lists: WorkspaceList[];
 };
 
 export type ChecklistItem = {

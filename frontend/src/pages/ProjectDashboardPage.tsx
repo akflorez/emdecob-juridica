@@ -188,7 +188,10 @@ export default function ProjectDashboardPage() {
 
       if (selectedWorkspaceId && !selectedFolderId && !selectedListId) {
         const ws = workspaces.find(w => w.id === selectedWorkspaceId);
-        const listIds = ws?.folders.flatMap(f => f.lists.map(l => l.id)) || [];
+        const listIds = [
+          ...(ws?.lists?.map(l => l.id) || []),
+          ...(ws?.folders?.flatMap(f => f.lists.map(l => l.id)) || [])
+        ];
         if (!listIds.includes(t.list_id)) return false;
       }
 
@@ -221,7 +224,7 @@ export default function ProjectDashboardPage() {
   }, [baseFilteredTasks, dateRange, dateFilterType]);
 
   const dynamicBoardColumns = useMemo(() => {
-    const allStatuses = Array.from(new Set(tasks.map(t => t.status || 'ABIERTO')));
+    const allStatuses = Array.from(new Set(tasks.map(t => (t.status || 'ABIERTO').toUpperCase())));
     
     allStatuses.sort((a, b) => {
       const aLower = (a || '').toLowerCase();
@@ -269,7 +272,7 @@ export default function ProjectDashboardPage() {
   const statsByStatus = useMemo(() => {
     return dynamicBoardColumns.map(col => ({
       name: col.label,
-      value: filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length,
+      value: filteredTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).length,
       color: col.dot
     }));
   }, [filteredTasks, dynamicBoardColumns]);
@@ -326,7 +329,7 @@ export default function ProjectDashboardPage() {
       } else if (creationModal.mode === 'tarea' || !creationModal.mode) {
         await createTask({ 
           title: newItemName, 
-          list_id: selectedListId || 0,
+          list_id: selectedListId || undefined,
           due_date: newDueDate || undefined,
           status: 'ABIERTO'
         });
@@ -542,10 +545,10 @@ export default function ProjectDashboardPage() {
                                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.dot }} />
                                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">{col.label}</h3>
                                 </div>
-                                <Badge variant="outline" className="text-[10px]">{filteredTasks.filter(t => (t.status || 'ABIERTO') === col.id).length}</Badge>
+                                <Badge variant="outline" className="text-[10px]">{filteredTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).length}</Badge>
                              </div>
                              <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
-                                {parentTasks.filter(t => (t.status || 'ABIERTO') === col.id).map(task => (
+                                {parentTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).map(task => (
                                   <Card key={task.id} className="bg-card/80 border-border/40 hover:border-primary/40 transition-all cursor-pointer shadow-lg overflow-hidden" onClick={() => setSelectedTask(task)}>
                                     <div className="p-4">
                                        <div className="flex justify-between items-start mb-3">

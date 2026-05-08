@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     Table,
+    BigInteger,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, backref
@@ -71,6 +72,8 @@ class CaseEvent(Base):
     event_hash = Column(String(64), nullable=False)
 
     con_documentos = Column(Boolean, default=False)
+    id_reg_actuacion = Column(BigInteger, nullable=True)
+    cons_actuacion = Column(Integer, nullable=True)
 
     version = Column(Integer, default=1)
     is_current = Column(Boolean, default=True)

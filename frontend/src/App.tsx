@@ -19,6 +19,7 @@ import ConfiguracionPage from "./pages/ConfiguracionPage";
 import NoEncontradosPage from "./pages/NoEncontradosPage";
 import ProjectDashboardPage from "./pages/ProjectDashboardPage";
 import AgendaView from "./pages/AgendaView";
+import HelpPage from "./pages/HelpPage";
 import NotFound from "./pages/NotFound";
 
 import { MyTasksView } from "./components/MyTasksView";
@@ -58,6 +59,7 @@ const App = () => (
                 <Route path="/casos/id/:id" element={<CasoDetailPage />} />
                 <Route path="/proyectos" element={<ProjectDashboardPage />} />
                 <Route path="/agenda" element={<AgendaView />} />
+                <Route path="/ayuda" element={<HelpPage />} />
                 <Route path="/no-encontrados" element={<NoEncontradosPage />} />
                 <Route path="/configuracion" element={
                   <ProtectedRoute requiredPermission="importar">

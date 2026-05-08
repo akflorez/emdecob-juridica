@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, LayoutDashboard, Calendar, UserCheck, Clock, type LucideIcon } from "lucide-react";
+import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, LayoutDashboard, Calendar, UserCheck, Clock, Book, type LucideIcon } from "lucide-react";
 import { SidebarNavLink } from "./SidebarNavLink";
 import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
@@ -92,6 +92,10 @@ export function AppSidebar() {
 
         <SidebarNavLink to="/agenda" icon={Calendar} collapsed={collapsed} title="Agenda / Calendario">
           {!collapsed && "Agenda / Calendario"}
+        </SidebarNavLink>
+
+        <SidebarNavLink to="/ayuda" icon={Book} collapsed={collapsed} title="Manual de Ayuda">
+          {!collapsed && "Manual de Ayuda"}
         </SidebarNavLink>
 
         {isAdmin && (
