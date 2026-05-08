@@ -3725,10 +3725,9 @@ async def save_new_publications(case: Case, db: Session):
             print(f" No hay actuaciones con palabras clave 'auto', 'fijacion' o 'estado' para radicado {case.radicado}")
             return
 
-        # 3. Limitar a las 5 más recientes para evitar Timeouts
-        relevantes = relevantes[:5]
+        # 3. Procesar TODAS las actuaciones relevantes para cobertura total
         total_steps = len(relevantes)
-        print(f"[refresh] Iniciando bsqueda de publicaciones para {case.radicado} (Actuaciones a revisar: {total_steps})")
+        print(f"[refresh] Iniciando bsqueda profunda para {case.radicado} ({total_steps} actuaciones)")
 
         # 3. Para cada actuación relevante, buscar en Publicaciones
         for idx, act in enumerate(relevantes):
