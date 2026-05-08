@@ -3093,7 +3093,7 @@ async def sync_case_events_background(case_id: int):
                 
                 # AUTOMATIZACIÓN: Si la nueva actuación es relevante, disparar búsqueda de publicaciones
                 if is_relevant_actuacion(it["title"]):
-                    from backend.tasks import save_new_publications_task
+                    # Usamos la función local definida más abajo en este mismo archivo
                     background_tasks.add_task(save_new_publications_task, c.id)
 
                 if con_docs: c.has_documents = True
