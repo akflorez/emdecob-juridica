@@ -3730,20 +3730,22 @@ async def run_sync_publications_task(radicado: str):
         finally:
             db.close()
 
-def update_sync_progress(case_id: int, progress: int, status: str = None):
-    """Actualiza el progreso en una sesión independiente para asegurar visibilidad inmediata."""
-    _db = SessionLocal()
+def update_sync_progress(db: Session, case_id: int, progress: int, status: str = None):
+    """Actualiza el progreso usando la sesión actual y confirmando para visibilidad inmediata."""
     try:
-        c = _db.query(Case).filter(Case.id == case_id).first()
-        if c:
-            c.sync_pub_progress = progress
-            if status is not None: c.sync_pub_status = status
-            _db.commit()
+        # Usamos SQL directo para evitar problemas de estado del objeto
+        params = {"prog": progress, "cid": case_id}
+        sql = "UPDATE cases SET sync_pub_progress = :prog"
+        if status is not None:
+            sql += ", sync_pub_status = :stat"
+            params["stat"] = status
+        sql += " WHERE id = :cid"
+        
+        db.execute(text(sql), params)
+        db.commit() # Vital para que el polling lo vea
     except Exception as e:
         print(f"[progress-error] {e}")
-        _db.rollback()
-    finally:
-        _db.close()
+        db.rollback()
 
 async def save_new_publications(case: Case, db: Session):
     try:
@@ -3752,8 +3754,8 @@ async def save_new_publications(case: Case, db: Session):
         import asyncio
         import httpx
 
-        # 0. Iniciar progreso (Sesión independiente)
-        update_sync_progress(case.id, 5, "Iniciando limpieza y búsqueda...")
+        # 0. Iniciar progreso
+        update_sync_progress(db, case.id, 5, "Iniciando limpieza y búsqueda...")
         
         # LOG DE DEBUG LOCAL
         with open("sync_debug.log", "a") as f_log:
@@ -3802,7 +3804,7 @@ async def save_new_publications(case: Case, db: Session):
         for i, (year, month, f_act_str) in enumerate(months_list):
             prog = 10 + int((i / total_searches) * 85)
             month_name = MONTHS_ES[month-1] if 1 <= month <= 12 else str(month)
-            update_sync_progress(case.id, prog, f"Buscando en {month_name} {year}...")
+            update_sync_progress(db, case.id, prog, f"Buscando en {month_name} {year}...")
             
             try:
                 results = await consultar_publicaciones_rango(case.radicado, f_act_str, case.demandante, case.demandado)
@@ -3812,7 +3814,7 @@ async def save_new_publications(case: Case, db: Session):
                 print(f"[sync] Error en búsqueda de {month}/{year}: {e}")
 
         # 3. Guardar resultados
-        update_sync_progress(case.id, 96, "Guardando publicaciones encontradas...")
+        update_sync_progress(db, case.id, 96, "Guardando publicaciones encontradas...")
         saved_count = 0
         seen_ids = set()
         for p in found_pubs:
@@ -3833,15 +3835,15 @@ async def save_new_publications(case: Case, db: Session):
             saved_count += 1
             
         db.commit()
-        update_sync_progress(case.id, 100, f"Completado: {saved_count} publicaciones guardadas.")
+        update_sync_progress(db, case.id, 100, f"Completado: {saved_count} publicaciones guardadas.")
         
         # Limpiar status después de un momento
         await asyncio.sleep(5)
-        update_sync_progress(case.id, 0, "")
+        update_sync_progress(db, case.id, 0, "")
 
     except Exception as e:
         print(f"[save_new_pubs] Error general: {e}")
-        update_sync_progress(case.id, 0, f"Error: {str(e)[:40]}")
+        update_sync_progress(db, case.id, 0, f"Error: {str(e)[:40]}")
                 
     except Exception as e:
         print(f"[refresh] Error guardando publicaciones: {e}")
