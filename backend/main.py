@@ -2721,6 +2721,8 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
         "unread": is_unread_case(c),
         "has_documents": c.has_documents,
+        "sync_pub_status": c.sync_pub_status,
+        "sync_pub_progress": c.sync_pub_progress,
     }
 
 @app.get("/cases/id/{case_id}")
@@ -2728,19 +2730,22 @@ async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db)):
     return await get_case_by_id(case_id, db)
 
 @app.get("/cases/by-radicado/{radicado}")
-async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
+async def get_case_by_radicado(radicado: str, skip_rama: bool = Query(default=False), db: Session = Depends(get_db)):
     try:
         r = clean_str(radicado)
         if not r:
             raise HTTPException(400, "Radicado requerido")
 
         try:
-            resp = await consulta_por_radicado(r, solo_activos=False, pagina=1)
+            if skip_rama:
+                resp = {"codigo": 200, "items": []}
+            else:
+                resp = await consulta_por_radicado(r, solo_activos=False, pagina=1)
         except RamaError as e:
             raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
 
         items = extract_items(resp)
-        if not items:
+        if not items and not skip_rama:
             raise HTTPException(404, "Caso no encontrado en Rama Judicial")
 
         synced_cases = []
@@ -2807,7 +2812,32 @@ async def get_case_by_radicado(radicado: str, db: Session = Depends(get_db)):
                 "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
                 "unread": is_unread_case(c),
                 "has_documents": c.has_documents,
+                "sync_pub_status": c.sync_pub_status,
+                "sync_pub_progress": c.sync_pub_progress,
             })
+
+        # FALLBACK: Si no hay items (porque saltamos rama) buscamos en la DB local
+        if not synced_cases and skip_rama:
+            db_cases = db.query(Case).filter(Case.radicado == r).all()
+            for c_db in db_cases:
+                synced_cases.append({
+                    "id": c_db.id,
+                    "radicado": c_db.radicado,
+                    "demandante": c_db.demandante,
+                    "demandado": c_db.demandado,
+                    "juzgado": c_db.juzgado,
+                    "alias": c_db.alias,
+                    "fecha_radicacion": c_db.fecha_radicacion.isoformat() if c_db.fecha_radicacion else None,
+                    "ultima_actuacion": c_db.ultima_actuacion.isoformat() if c_db.ultima_actuacion else None,
+                    "last_check_at": c_db.last_check_at.isoformat() if c_db.last_check_at else None,
+                    "unread": is_unread_case(c_db),
+                    "has_documents": c_db.has_documents,
+                    "sync_pub_status": c_db.sync_pub_status,
+                    "sync_pub_progress": c_db.sync_pub_progress,
+                })
+
+        if not synced_cases:
+             raise HTTPException(404, "Caso no encontrado")
 
         db.commit()
         

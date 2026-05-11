@@ -46,9 +46,18 @@ export function PublicacionesPanel({
     if ((syncProgress > 0 && syncProgress < 100) || isRefreshing) {
       interval = setInterval(async () => {
         try {
-          // Añadimos timestamp para evitar caché del navegador y ver el progreso real (limpieza 1/22...)
+          // Añadimos timestamp para evitar caché del navegador y ver el progreso real
           const timestamp = new Date().getTime();
-          const caseData = await getCaseByRadicado(`${radicado}?t=${timestamp}`);
+          
+          // Optimizamos: si tenemos ID, usamos el endpoint de ID que es más rápido y solo DB.
+          // Si no, usamos by-radicado pero con skip_rama=true para no saturar el portal judicial.
+          let caseData: any = null;
+          if (caseId) {
+            caseData = await getCaseById(caseId);
+          } else {
+            const results = await getCaseByRadicado(`${radicado}?skip_rama=true&t=${timestamp}`);
+            caseData = Array.isArray(results) ? results[0] : results;
+          }
           
           if (caseData) {
             // Actualización inmediata de status y progreso
