@@ -48,6 +48,16 @@ try:
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0"))
         
+        # TABLA DE LOGS PARA DEBUG (VITAL PARA EL 5%)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS sync_debug_logs (
+                id SERIAL PRIMARY KEY,
+                case_id INTEGER,
+                message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        
         # INDICE PARA VELOCIDAD
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)"))
@@ -3731,18 +3741,23 @@ async def run_sync_publications_task(radicado: str):
             db.close()
 
 def update_sync_progress(db: Session, case_id: int, progress: int, status: str = None):
-    """Actualiza el progreso usando la sesión actual y confirmando para visibilidad inmediata."""
+    """Actualiza el progreso y guarda un log en la DB para diagnóstico."""
     try:
-        # Usamos SQL directo para evitar problemas de estado del objeto
+        # 1. Actualizar caso
         params = {"prog": progress, "cid": case_id}
         sql = "UPDATE cases SET sync_pub_progress = :prog"
         if status is not None:
             sql += ", sync_pub_status = :stat"
             params["stat"] = status
         sql += " WHERE id = :cid"
-        
         db.execute(text(sql), params)
-        db.commit() # Vital para que el polling lo vea
+        
+        # 2. Guardar log de debug
+        log_msg = f"Progreso: {progress}% | Status: {status or 'N/A'}"
+        db.execute(text("INSERT INTO sync_debug_logs (case_id, message) VALUES (:cid, :msg)"), 
+                   {"cid": case_id, "msg": log_msg})
+        
+        db.commit()
     except Exception as e:
         print(f"[progress-error] {e}")
         db.rollback()
