@@ -22,8 +22,10 @@ except ImportError:
     docx = None
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Referer": "https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search",
+    "Accept-Language": "es-ES,es;q=0.9",
 }
 
 def normalize_text(text: str) -> str:
@@ -96,16 +98,20 @@ def validate_content(text: str, radicado_completo: str, demandante: str, demanda
         
         # Al menos un apellido significativo de cada parte
         def significant_words(name):
-            return [w for w in name.split() if len(w) > 4 and w not in ["banco", "sistema", "gestion", "cobranzas", "municipio"]]
+            if not name: return []
+            # Normalizar: quitar sufijos comunes y palabras vacías
+            n = name.upper().replace("S.A.S.", "").replace("SAS", "").replace("S.A.", "").replace("LIMITADA", "").replace("LTDA", "")
+            return [w for w in n.split() if len(w) > 3 and w not in ["BANCO", "SISTEMA", "GESTION", "COBRANZAS", "MUNICIPIO", "PARA", "LAS", "LOS"]]
             
         words_dante = significant_words(dante_norm)
         words_dado = significant_words(dado_norm)
         
-        match_dante = any(w in t_norm for w in words_dante) if words_dante else True
-        match_dado = any(w in t_norm for w in words_dado) if words_dado else True
+        match_dante = any(w in t_norm for w in words_dante) if words_dante else False
+        match_dado = any(w in t_norm for w in words_dado) if words_dado else False
         
-        if match_dante and match_dado:
-            print(f"[validator] MATCH OK: Patrón {pattern} + Nombres validados.")
+        # Basta con que coincida el Radicado + UNA de las partes (más flexible ante erratas)
+        if match_dante or match_dado:
+            print(f"[validator] MATCH OK: Patrón {pattern} + Partes (Dante:{match_dante}, Dado:{match_dado})")
             return True
             
     print(f"[validator] MATCH FAIL: No coincide radicado ni partes.")
