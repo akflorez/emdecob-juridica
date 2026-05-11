@@ -209,7 +209,9 @@ async def notification_flush_loop():
                 _notification_accumulator.clear()
                 _already_flushed_today = hoy
         except Exception as e:
-            print(f"[flush-loop] Error: {e}")
+            with open("sync_emergency.log", "a") as f:
+                f.write(f"[{datetime.now()}] ERROR FATAL en tarea {radicado}: {str(e)}\n")
+            print(f"[sync-error] {e}")
 
 
 # =========================
@@ -3795,6 +3797,10 @@ async def save_new_publications(case: Case, db: Session):
         import httpx
 
         # 0. Iniciar progreso
+        # LOG DE EMERGENCIA EN ARCHIVO
+        with open("sync_emergency.log", "a") as f:
+            f.write(f"[{datetime.now()}] Iniciando tarea para {radicado} (ID: {case.id})\n")
+                
         update_sync_progress(db, case.id, 5, "Iniciando limpieza y búsqueda...")
         
         # LOG DE DEBUG LOCAL
