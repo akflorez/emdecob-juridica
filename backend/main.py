@@ -3690,6 +3690,7 @@ async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db
     
     return await get_case_publications(case.radicado, db)
 
+@app.post("/api/cases/{radicado}/sync-publications")
 @app.post("/cases/{radicado}/sync-publications")
 async def sync_case_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.radicado == radicado).first()
@@ -3697,6 +3698,7 @@ async def sync_case_publications(radicado: str, background_tasks: BackgroundTask
     background_tasks.add_task(run_sync_publications_task, case.radicado)
     return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
+@app.post("/api/cases/id/{case_id}/refresh-publicaciones")
 @app.post("/cases/id/{case_id}/refresh-publicaciones")
 async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
@@ -3704,6 +3706,7 @@ async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundT
     background_tasks.add_task(run_sync_publications_task, case.radicado)
     return {"ok": True, "message": "Sincronización iniciada"}
 
+@app.post("/api/cases/{radicado}/reset-sync")
 @app.post("/cases/{radicado}/reset-sync")
 async def reset_case_sync(radicado: str, db: Session = Depends(get_db)):
     """Resetea manualmente el estado de sincronización si se queda trabado."""
@@ -3713,6 +3716,13 @@ async def reset_case_sync(radicado: str, db: Session = Depends(get_db)):
     case.sync_pub_progress = 0
     db.commit()
     return {"ok": True, "message": "Estado de sincronización reseteado."}
+
+@app.get("/api/sync/logs/{case_id}")
+async def get_sync_logs(case_id: int, db: Session = Depends(get_db)):
+    """Permite ver los logs de diagnóstico desde el navegador."""
+    logs = db.execute(text("SELECT message, created_at FROM sync_debug_logs WHERE case_id = :cid ORDER BY created_at DESC LIMIT 100"), 
+                     {"cid": case_id}).fetchall()
+    return [{"message": r[0], "at": r[1].isoformat()} for r in logs]
 
 # Semáforo global para evitar saturación y bloqueos de DB (Máximo 2 sincronizaciones pesadas a la vez)
 sync_pub_semaphore = asyncio.Semaphore(2)
