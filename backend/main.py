@@ -34,36 +34,27 @@ except ImportError:
 
 # MIGRACIONES AUTOMATICAS RAPIDAS
 from sqlalchemy import text
-with engine.connect() as conn:
-    try:
+try:
+    with engine.begin() as conn:
         conn.execute(text("ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
-        # Migraciones para Documentos Judiciales (Solo si no existen)
-        # Optimizamos para no ejecutar DELETEs masivos en cada inicio si no es necesario
+        
+        # Migraciones para Documentos Judiciales
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0"))
         
-        # INDICE PARA VELOCIDAD (Evita el cuelgue al borrar/consultar publicaciones)
+        # INDICE PARA VELOCIDAD
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)"))
         
-        # conn.execute(text("""
-        #     DELETE FROM case_events 
-        #     WHERE id NOT IN (
-        #         SELECT MAX(id) 
-        #         FROM case_events 
-        #         GROUP BY case_id, event_date, title, detail
-        #     )
-        # """))
-        # conn.commit()
         print("[DB] Migraciones rapidas completadas")
-    except Exception as e:
-        print(f"[DB] Error en migraciones: {e}")
+except Exception as e:
+    print(f"[DB] Error en migraciones: {e}")
 
 def get_db():
     db = SessionLocal()
