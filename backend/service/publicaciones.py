@@ -165,6 +165,8 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
             })
     return candidates
 
+MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
 async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: str, demandante: str = "", demandado: str = ""):
     results = []
     rad_digits = "".join(filter(str.isdigit, radicado_completo))
@@ -174,53 +176,71 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
     pattern_with_dash = f"{rad_digits[12:16]}-{rad_digits[16:21]}"
     despacho_12 = rad_digits[:12]
     
+    # Preparar tags de año y mes para búsqueda dirigida (Paso a Paso del usuario)
+    tags = []
+    if fecha_act_min:
+        tags.append(str(fecha_act_min.year))
+        tags.append(MONTHS_ES[fecha_act_min.month - 1])
+
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
-        # Semáforo para no saturar el portal (máximo 4 hilos para búsqueda profunda)
+        # Semáforo para no saturar el portal
         sem = asyncio.Semaphore(4)
 
-        for q in [pattern_with_dash, despacho_12]:
-            print(f"[scraper] Buscando profundidad con query: {q}")
-            resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params={"q": q})
-            if resp.status_code == 200:
-                candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
-                
-                async def process_candidate(cand):
-                    async with sem:
-                        target_url = cand["documento_url"]
-                        try:
-                            if not cand["is_direct"]:
-                                print(f"[scraper] Navegando página de resumen: {target_url}")
-                                inner_resp = await client.get(target_url)
-                                if inner_resp.status_code == 200:
-                                    inner_soup = BeautifulSoup(inner_resp.text, "html.parser")
-                                    inner_links = inner_soup.find_all("a", href=True)
-                                    for il in inner_links:
-                                        link_text = il.get_text().upper()
-                                        href = il["href"]
-                                        if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
-                                            if not href.startswith("http"):
-                                                href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
-                                            
-                                            doc_text = await extract_text_content(href, client)
-                                            if validate_content(doc_text, rad_digits, demandante, demandado):
-                                                new_cand = cand.copy()
-                                                new_cand["documento_url"] = href
-                                                return new_cand
-                            else:
-                                doc_text = await extract_text_content(target_url, client)
-                                if validate_content(doc_text, rad_digits, demandante, demandado):
-                                    return cand
-                        except Exception as e:
-                            print(f"[scraper] Error procesando candidato {target_url}: {e}")
-                    return None
-
-                tasks = [process_candidate(c) for c in candidates]
-                found_results = await asyncio.gather(*tasks, return_exceptions=True)
-                for res in found_results:
-                    if res and isinstance(res, dict): 
-                        results.append(res)
+        # Queries: Primero el radicado exacto, luego el despacho con filtros de fecha
+        queries = [pattern_with_dash, despacho_12]
+        
+        for i, q in enumerate(queries):
+            params = {"q": q}
+            # Para la búsqueda por despacho, aplicamos los tags de año/mes del historial de actuaciones
+            if i == 1 and tags:
+                params["tag"] = tags
             
-            if results: break
+            print(f"[scraper] Buscando profundidad con query: {q} params: {params}")
+            try:
+                resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params=params)
+                if resp.status_code == 200:
+                    candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
+                    
+                    async def process_candidate(cand):
+                        async with sem:
+                            target_url = cand["documento_url"]
+                            try:
+                                if not cand["is_direct"]:
+                                    print(f"[scraper] Navegando página de resumen: {target_url}")
+                                    inner_resp = await client.get(target_url)
+                                    if inner_resp.status_code == 200:
+                                        inner_soup = BeautifulSoup(inner_resp.text, "html.parser")
+                                        inner_links = inner_soup.find_all("a", href=True)
+                                        for il in inner_links:
+                                            link_text = il.get_text().upper()
+                                            href = il["href"]
+                                            if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
+                                                if not href.startswith("http"):
+                                                    href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
+                                                
+                                                doc_text = await extract_text_content(href, client)
+                                                if validate_content(doc_text, rad_digits, demandante, demandado):
+                                                    new_cand = cand.copy()
+                                                    new_cand["documento_url"] = href
+                                                    return new_cand
+                                else:
+                                    doc_text = await extract_text_content(target_url, client)
+                                    if validate_content(doc_text, rad_digits, demandante, demandado):
+                                        return cand
+                            except Exception as e:
+                                print(f"[scraper] Error procesando candidato {target_url}: {e}")
+                        return None
+
+                    tasks = [process_candidate(c) for c in candidates]
+                    found_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for res in found_results:
+                        if res and isinstance(res, dict): 
+                            results.append(res)
+                
+                # Si encontramos resultados con el radicado exacto, no hace falta buscar por despacho completo
+                if results and i == 0: break
+            except Exception as e:
+                print(f"[scraper] Error en búsqueda {q}: {e}")
 
     # Deduplicar resultados finales
     final = []

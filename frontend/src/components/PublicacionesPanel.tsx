@@ -34,6 +34,9 @@ export function PublicacionesPanel({
   const [syncStatus, setSyncStatus] = useState<string | null>(initialSyncStatus || null);
   const [syncProgress, setSyncProgress] = useState<number>(initialSyncProgress);
   const { toast } = useToast();
+  
+  const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+  const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
 
   // Polling para actualizar el progreso
   useEffect(() => {
@@ -161,15 +164,40 @@ export function PublicacionesPanel({
             Documentos y estados detectados automáticamente para este radicado.
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh} 
-          disabled={isRefreshing || (syncProgress > 0 && syncProgress < 100)}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'animate-spin' : ''}`} />
-          {isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'Buscando...' : 'Sincronizar ahora'}
-        </Button>
+        <div className="flex gap-2">
+          {(syncProgress > 0 && syncProgress < 100) && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-muted-foreground hover:text-destructive"
+              onClick={async () => {
+                try {
+                  const timestamp = new Date().getTime();
+                  const resp = await fetch(`${cleanBaseUrl}/cases/${radicado}/reset-sync?t=${timestamp}`, { method: 'POST' });
+                  if (resp.ok) {
+                    setSyncProgress(0);
+                    setSyncStatus(null);
+                    setIsRefreshing(false);
+                    toast({ title: "Sincronización reseteada", description: "El estado se ha limpiado. Puedes intentar de nuevo." });
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+              }}
+            >
+              Forzar Reset
+            </Button>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            disabled={isRefreshing || (syncProgress > 0 && syncProgress < 100)}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'animate-spin' : ''}`} />
+            {isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'Buscando...' : 'Sincronizar ahora'}
+          </Button>
+        </div>
       </div>
 
       {publications.length === 0 && (syncProgress === 0 || syncProgress === 100) ? (

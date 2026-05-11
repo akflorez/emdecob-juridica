@@ -40,25 +40,28 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
-        # Migraciones para Documentos Judiciales
+        # Migraciones para Documentos Judiciales (Solo si no existen)
+        # Optimizamos para no ejecutar DELETEs masivos en cada inicio si no es necesario
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0"))
         
-        # SCRIPT DE LIMPIEZA DE DUPLICADOS (Cirugía de precisión)
-        # Eliminamos eventos que tengan misma fecha, título y detalle dentro de un mismo caso, dejando solo el más nuevo
-        conn.execute(text("""
-            DELETE FROM case_events 
-            WHERE id NOT IN (
-                SELECT MAX(id) 
-                FROM case_events 
-                GROUP BY case_id, event_date, title, detail
-            )
-        """))
-        conn.commit()
-        print("[DB] Migraciones r?pidas completadas")
+        # INDICE PARA VELOCIDAD (Evita el cuelgue al borrar/consultar publicaciones)
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)"))
+        
+        # conn.execute(text("""
+        #     DELETE FROM case_events 
+        #     WHERE id NOT IN (
+        #         SELECT MAX(id) 
+        #         FROM case_events 
+        #         GROUP BY case_id, event_date, title, detail
+        #     )
+        # """))
+        # conn.commit()
+        print("[DB] Migraciones rapidas completadas")
     except Exception as e:
         print(f"[DB] Error en migraciones: {e}")
 
@@ -3669,17 +3672,41 @@ async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundT
     background_tasks.add_task(run_sync_publications_task, case.radicado)
     return {"ok": True, "message": "Sincronización iniciada"}
 
+@app.post("/cases/{radicado}/reset-sync")
+async def reset_case_sync(radicado: str, db: Session = Depends(get_db)):
+    """Resetea manualmente el estado de sincronización si se queda trabado."""
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case: return {"ok": False, "error": "Caso no encontrado"}
+    case.sync_pub_status = None
+    case.sync_pub_progress = 0
+    db.commit()
+    return {"ok": True, "message": "Estado de sincronización reseteado."}
+
+# Semáforo global para evitar saturación y bloqueos de DB (Máximo 2 sincronizaciones pesadas a la vez)
+sync_pub_semaphore = asyncio.Semaphore(2)
+
 async def run_sync_publications_task(radicado: str):
     """Wrapper para ejecutar la sincronización con su propia sesión de DB."""
-    db = SessionLocal()
-    try:
-        case = db.query(Case).filter(Case.radicado == radicado).first()
-        if case:
-            await save_new_publications(case, db)
-    except Exception as e:
-        print(f"[sync_task] Error crítico: {e}")
-    finally:
-        db.close()
+    async with sync_pub_semaphore:
+        db = SessionLocal()
+        try:
+            # Refresh del objeto en esta sesión
+            case = db.query(Case).filter(Case.radicado == radicado).first()
+            if case:
+                await save_new_publications(case, db)
+        except Exception as e:
+            print(f"[sync_task] Error crítico: {e}")
+            # Limpiar estado en caso de error fatal
+            try:
+                db.rollback()
+                case = db.query(Case).filter(Case.radicado == radicado).first()
+                if case:
+                    case.sync_pub_status = f"Error: {str(e)[:50]}"
+                    case.sync_pub_progress = 0
+                    db.commit()
+            except: pass
+        finally:
+            db.close()
 
 async def save_new_publications(case: Case, db: Session):
     try:
@@ -3693,15 +3720,30 @@ async def save_new_publications(case: Case, db: Session):
         case.sync_pub_progress = 5
         db.commit()
         
+        # LOG DE DEBUG LOCAL
+        with open("sync_debug.log", "a") as f_log:
+            f_log.write(f"\n[{datetime.now()}] SYNC START: {case.radicado}")
+
         try:
-            # --- OPCIÓN NUCLEAR: LIMPIEZA INSTANTÁNEA ---
-            # Borrado directo por ID de caso para máxima velocidad
-            db.query(CasePublication).filter(CasePublication.case_id == case.id).delete(synchronize_session=False)
+            # --- OPCIÓN NUCLEAR: LIMPIEZA OPTIMIZADA ---
+            case.sync_pub_progress = 6
+            db.commit()
+            
+            # Usamos SQL directo con timeout para no colgar el event loop
+            db.execute(text("SET statement_timeout = 10000")) # 10 segundos max
+            db.execute(text("DELETE FROM case_publications WHERE case_id = :cid"), {"cid": case.id})
+            db.commit()
+            
+            case.sync_pub_progress = 8
             db.commit()
             print(f"[cleanup] Limpieza completada para caso {case.id}")
         except Exception as e_cleanup:
-            print(f"[cleanup] Error en limpieza: {e_cleanup}")
+            print(f"[cleanup] Error en limpieza (posible lock): {e_cleanup}")
             db.rollback()
+            # Si hay lock, bajamos el timeout y reintentamos o seguimos
+            try:
+                db.execute(text("SET statement_timeout = 0")) 
+            except: pass
 
         # Actualizar a 10% tras limpieza
         case.sync_pub_progress = 10
@@ -3713,10 +3755,23 @@ async def save_new_publications(case: Case, db: Session):
         # Convertir a dict para procesar
         relevantes = []
         for ev in eventos:
-            if is_relevant_actuacion(ev.actuacion):
+            # CORRECCIÓN: CaseEvent usa 'title' para la actuación y 'event_date' para la fecha
+            act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") # Fallback por seguridad
+            if is_relevant_actuacion(act_text):
+                # Formatear fecha: event_date suele venir como "YYYY-MM-DD" o "DD/MM/YYYY" en string
+                raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
+                f_act_str = ""
+                if raw_date:
+                    if isinstance(raw_date, (date, datetime)):
+                        f_act_str = raw_date.strftime("%Y-%m-%d")
+                    else:
+                        # Extraer solo los primeros 10 caracteres si es un string (YYYY-MM-DD)
+                        # O intentar parsear si viene en otro formato
+                        f_act_str = str(raw_date)[:10]
+                
                 relevantes.append({
-                    "fechaActuacion": ev.fecha_actuacion.strftime("%Y-%m-%d") if ev.fecha_actuacion else "",
-                    "actuacion": ev.actuacion
+                    "fechaActuacion": f_act_str,
+                    "actuacion": act_text
                 })
         
         if not relevantes:
@@ -3738,7 +3793,7 @@ async def save_new_publications(case: Case, db: Session):
             fecha_act_str = act.get("fechaActuacion") or ""
             if not fecha_act_str: continue
             
-            # Actualizar progreso por cada actuación
+            # Actualizar progreso por cada actuación (entre 10% y 95%)
             step_progress = 10 + int((idx / total_steps) * 85)
             case.sync_pub_status = f"Buscando para actuación del {fecha_act_str}..."
             case.sync_pub_progress = step_progress
