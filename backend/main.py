@@ -3698,6 +3698,12 @@ async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db
 async def sync_case_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.radicado == radicado).first()
     if not case: return {"ok": False, "error": "Caso no encontrado"}
+    
+    # RESET INMEDIATO
+    case.sync_pub_progress = 5
+    case.sync_pub_status = "Iniciando búsqueda..."
+    db.commit()
+    
     background_tasks.add_task(run_sync_publications_task, case.radicado)
     return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
@@ -3706,6 +3712,12 @@ async def sync_case_publications(radicado: str, background_tasks: BackgroundTask
 async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case: return {"ok": False, "error": "Caso no encontrado"}
+    
+    # RESET INMEDIATO PARA EVITAR FALSOS TERMINADOS EN EL FRONTEND
+    case.sync_pub_progress = 5
+    case.sync_pub_status = "Iniciando búsqueda..."
+    db.commit()
+    
     background_tasks.add_task(run_sync_publications_task, case.radicado)
     return {"ok": True, "message": "Sincronización iniciada"}
 
