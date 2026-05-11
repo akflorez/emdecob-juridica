@@ -159,6 +159,7 @@ RAMA_HEADERS = {
 
 RAMA_BASE = "https://consultaprocesos.ramajudicial.gov.co:448/api/v2"
 
+MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 def now_colombia() -> datetime:
     return datetime.now(TIMEZONE_CO).replace(tzinfo=None)
@@ -3738,6 +3739,21 @@ async def run_sync_publications_task(radicado: str):
         finally:
             db.close()
 
+def update_sync_progress(case_id: int, progress: int, status: str = None):
+    """Actualiza el progreso en una sesión independiente para asegurar visibilidad inmediata."""
+    _db = SessionLocal()
+    try:
+        c = _db.query(Case).filter(Case.id == case_id).first()
+        if c:
+            c.sync_pub_progress = progress
+            if status is not None: c.sync_pub_status = status
+            _db.commit()
+    except Exception as e:
+        print(f"[progress-error] {e}")
+        _db.rollback()
+    finally:
+        _db.close()
+
 async def save_new_publications(case: Case, db: Session):
     try:
         from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango, parse_fecha_pub, validate_content, extract_text_content
@@ -3745,129 +3761,96 @@ async def save_new_publications(case: Case, db: Session):
         import asyncio
         import httpx
 
-        # 0. Iniciar progreso con seguridad (Resetear estado previo)
-        case.sync_pub_status = "Iniciando limpieza y búsqueda..."
-        case.sync_pub_progress = 5
-        db.commit()
+        # 0. Iniciar progreso (Sesión independiente)
+        update_sync_progress(case.id, 5, "Iniciando limpieza y búsqueda...")
         
         # LOG DE DEBUG LOCAL
         with open("sync_debug.log", "a") as f_log:
             f_log.write(f"\n[{datetime.now()}] SYNC START: {case.radicado}")
 
         try:
-            # --- OPCIÓN NUCLEAR: LIMPIEZA OPTIMIZADA ---
-            case.sync_pub_progress = 6
-            db.commit()
-            
-            # Usamos SQL directo con timeout para no colgar el event loop
-            db.execute(text("SET statement_timeout = 10000")) # 10 segundos max
+            # --- LIMPIEZA ---
+            db.execute(text("SET statement_timeout = 5000")) 
             db.execute(text("DELETE FROM case_publications WHERE case_id = :cid"), {"cid": case.id})
             db.commit()
-            
-            case.sync_pub_progress = 8
-            db.commit()
-            print(f"[cleanup] Limpieza completada para caso {case.id}")
+            update_sync_progress(case.id, 8)
         except Exception as e_cleanup:
-            print(f"[cleanup] Error en limpieza (posible lock): {e_cleanup}")
+            print(f"[cleanup] Error en limpieza: {e_cleanup}")
             db.rollback()
-            # Si hay lock, bajamos el timeout y reintentamos o seguimos
-            try:
-                db.execute(text("SET statement_timeout = 0")) 
+            try: db.execute(text("SET statement_timeout = 0")) 
             except: pass
 
-        # Actualizar a 10% tras limpieza
-        case.sync_pub_progress = 10
-        case.sync_pub_status = "Analizando historial de actuaciones..."
-        db.commit()
-
-        # 1. Obtener actuaciones del caso
-        eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
-        # Convertir a dict para procesar
-        relevantes = []
+        update_sync_progress(case.id, 10, "Analizando historial de actuaciones...")
+        
+        # 1. Obtener actuaciones del caso (Fijación, Estado, Auto según Paso a Paso)
+        eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).order_by(CaseEvent.event_date.desc()).all()
+        
+        # Agrupar por mes/año para optimizar (una búsqueda por mes)
+        months_to_check = set()
         for ev in eventos:
-            # CORRECCIÓN: CaseEvent usa 'title' para la actuación y 'event_date' para la fecha
-            act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") # Fallback por seguridad
-            if is_relevant_actuacion(act_text):
-                # Formatear fecha: event_date suele venir como "YYYY-MM-DD" o "DD/MM/YYYY" en string
+            act_text = (getattr(ev, "title", "") or getattr(ev, "actuacion", "") or "").lower()
+            if any(k in act_text for k in ["fijación", "fijacion", "estado", "auto"]):
                 raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
-                f_act_str = ""
                 if raw_date:
                     if isinstance(raw_date, (date, datetime)):
-                        f_act_str = raw_date.strftime("%Y-%m-%d")
+                        dt = raw_date
                     else:
-                        # Extraer solo los primeros 10 caracteres si es un string (YYYY-MM-DD)
-                        # O intentar parsear si viene en otro formato
-                        f_act_str = str(raw_date)[:10]
-                
-                relevantes.append({
-                    "fechaActuacion": f_act_str,
-                    "actuacion": act_text
-                })
-        
-        if not relevantes:
-            case.sync_pub_status = "No se detectaron actuaciones relevantes (Auto/Estado)"
-            case.sync_pub_progress = 100
-            db.commit()
-            await asyncio.sleep(3)
-            case.sync_pub_status = None
-            case.sync_pub_progress = 0
-            db.commit()
+                        try: dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
+                        except: continue
+                    months_to_check.add((dt.year, dt.month, dt.strftime("%Y-%m-%d")))
+
+        if not months_to_check:
+            update_sync_progress(case.id, 100, "No se detectaron actuaciones de tipo Auto/Estado.")
             return
 
-        # 3. Procesar TODAS las actuaciones relevantes para cobertura total
-        total_steps = len(relevantes)
-        print(f"[refresh] Iniciando búsqueda profunda para {case.radicado} ({total_steps} actuaciones)")
-
-        # 3. Para cada actuación relevante, buscar en Publicaciones
-        for idx, act in enumerate(relevantes):
-            fecha_act_str = act.get("fechaActuacion") or ""
-            if not fecha_act_str: continue
-            
-            # Actualizar progreso por cada actuación (entre 10% y 95%)
-            step_progress = 10 + int((idx / total_steps) * 85)
-            case.sync_pub_status = f"Buscando para actuación del {fecha_act_str}..."
-            case.sync_pub_progress = step_progress
-            db.commit()
-
-            try:
-                results = await consultar_publicaciones_rango(
-                    case.radicado, 
-                    fecha_act_str, 
-                    demandante=case.demandante or "",
-                    demandado=case.demandado or ""
-                )
-                
-                for p in results:
-                    exists = db.query(CasePublication).filter(
-                        CasePublication.case_id == case.id,
-                        CasePublication.source_id == p["source_id"]
-                    ).first()
-                    
-                    if not exists:
-                        db.add(CasePublication(
-                            case_id=case.id,
-                            source_id=p["source_id"],
-                            fecha=p["fecha"],
-                            tipo=p["tipo"],
-                            documento_url=p["documento_url"]
-                        ))
-                    else:
-                        # Actualizar URL si cambió
-                        exists.documento_url = p["documento_url"]
-                
-                db.commit()
-            except Exception as e:
-                print(f"[refresh] Error en ventana de publicación para {case.radicado}: {e}")
+        # 2. Consultar scraper por cada mes único
+        found_pubs = []
+        months_list = sorted(list(months_to_check), reverse=True)
+        total_searches = len(months_list)
         
-        # 4. Finalizar progreso
-        case.sync_pub_status = "Búsqueda completada con éxito"
-        case.sync_pub_progress = 100
+        for i, (year, month, f_act_str) in enumerate(months_list):
+            prog = 10 + int((i / total_searches) * 85)
+            month_name = MONTHS_ES[month-1] if 1 <= month <= 12 else str(month)
+            update_sync_progress(case.id, prog, f"Buscando en {month_name} {year}...")
+            
+            try:
+                results = await consultar_publicaciones_rango(case.radicado, f_act_str, case.demandante, case.demandado)
+                if results:
+                    found_pubs.extend(results)
+            except Exception as e:
+                print(f"[sync] Error en búsqueda de {month}/{year}: {e}")
+
+        # 3. Guardar resultados
+        update_sync_progress(case.id, 96, "Guardando publicaciones encontradas...")
+        saved_count = 0
+        seen_ids = set()
+        for p in found_pubs:
+            sid = p.get("source_id")
+            if not sid or sid in seen_ids: continue
+            seen_ids.add(sid)
+            
+            new_pub = CasePublication(
+                case_id=case.id,
+                fecha_publicacion=parse_fecha_pub(p.get("fecha")),
+                tipo_publicacion=p.get("tipo"),
+                descripcion=p.get("snippet"),
+                documento_url=p.get("documento_url"),
+                source_url=p.get("source_url"),
+                source_id=sid
+            )
+            db.add(new_pub)
+            saved_count += 1
+            
         db.commit()
-        # Pequeña pausa y resetear progreso para que la barra desaparezca
-        await asyncio.sleep(3)
-        case.sync_pub_status = None
-        case.sync_pub_progress = 0
-        db.commit()
+        update_sync_progress(case.id, 100, f"Completado: {saved_count} publicaciones guardadas.")
+        
+        # Limpiar status después de un momento
+        await asyncio.sleep(5)
+        update_sync_progress(case.id, 0, "")
+
+    except Exception as e:
+        print(f"[save_new_pubs] Error general: {e}")
+        update_sync_progress(case.id, 0, f"Error: {str(e)[:40]}")
                 
     except Exception as e:
         print(f"[refresh] Error guardando publicaciones: {e}")

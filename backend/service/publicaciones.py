@@ -184,22 +184,31 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
         # Semáforo para no saturar el portal
-        sem = asyncio.Semaphore(4)
+        sem = asyncio.Semaphore(2)
 
-        # Queries: Primero el radicado exacto, luego el despacho con filtros de fecha
-        queries = [pattern_with_dash, despacho_12]
+        # Query ultra-precisa: Despacho (12) + Radicado Corto (YYYY-NNNNN)
+        # Esto reduce drásticamente los resultados basura y evita el cuelgue al 5%
+        queries = [f"{despacho_12} {pattern_with_dash}"]
+        
+        # Fallback: Si la ultra-precisa no devuelve nada, probamos radicado solo
+        queries.append(pattern_with_dash)
         
         for i, q in enumerate(queries):
+            if results: break # Si ya encontramos, no seguimos buscando
+            
             params = {"q": q}
-            # Para la búsqueda por despacho, aplicamos los tags de año/mes del historial de actuaciones
-            if i == 1 and tags:
+            # En la segunda vuelta (menos precisa), aplicamos los tags de mes/año del Word
+            if i > 0 and tags:
                 params["tag"] = tags
             
             print(f"[scraper] Buscando profundidad con query: {q} params: {params}")
             try:
                 resp = await client.get("https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/search", params=params)
                 if resp.status_code == 200:
-                    candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
+                    all_candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
+                    
+                    # LIMITAMOS a los mejores 5 candidatos para evitar cuelgues (5% hang)
+                    candidates = all_candidates[:5]
                     
                     async def process_candidate(cand):
                         async with sem:
@@ -214,6 +223,7 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                                         for il in inner_links:
                                             link_text = il.get_text().upper()
                                             href = il["href"]
+                                            # Solo si parece un PDF o documento
                                             if any(k in link_text for k in ["VER", "CONSULTAR", "AQUI", "DETALLE"]) or ".pdf" in href.lower():
                                                 if not href.startswith("http"):
                                                     href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
@@ -224,6 +234,7 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                                                     new_cand["documento_url"] = href
                                                     return new_cand
                                 else:
+                                    # Si es directo, igual validamos contenido
                                     doc_text = await extract_text_content(target_url, client)
                                     if validate_content(doc_text, rad_digits, demandante, demandado):
                                         return cand
@@ -237,10 +248,8 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                         if res and isinstance(res, dict): 
                             results.append(res)
                 
-                # Si encontramos resultados con el radicado exacto, no hace falta buscar por despacho completo
-                if results and i == 0: break
             except Exception as e:
-                print(f"[scraper] Error en búsqueda {q}: {e}")
+                print(f"[scraper] Error en query {q}: {e}")
 
     # Deduplicar resultados finales
     final = []
