@@ -2727,10 +2727,12 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
         "sync_pub_progress": c.sync_pub_progress,
     }
 
+@app.get("/api/cases/id/{case_id}")
 @app.get("/cases/id/{case_id}")
 async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db)):
     return await get_case_by_id(case_id, db)
 
+@app.get("/api/cases/by-radicado/{radicado}")
 @app.get("/cases/by-radicado/{radicado}")
 async def get_case_by_radicado(radicado: str, skip_rama: bool = Query(default=False), db: Session = Depends(get_db)):
     try:
@@ -3682,6 +3684,7 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
         ]
     }
 
+@app.get("/api/cases/id/{case_id}/publicaciones")
 @app.get("/cases/id/{case_id}/publicaciones")
 async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
