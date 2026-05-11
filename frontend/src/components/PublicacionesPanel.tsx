@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { CasePublication, refreshCasePublications, refreshCasePublicationsById, getCaseByRadicado, getCaseById } from '@/services/api';
+import { CasePublication, refreshCasePublications, refreshCasePublicationsById, getCaseByRadicado, getCaseById, getCasePublications, getCasePublicationsById } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface PublicacionesPanelProps {
@@ -67,15 +67,16 @@ export function PublicacionesPanel({
             // Si el servidor ya terminó (100% o status nulo pero ya teníamos progreso)
             if (caseData.sync_pub_progress === 100 || (syncProgress > 50 && !caseData.sync_pub_status)) {
               const result = caseId 
-                ? await refreshCasePublicationsById(caseId)
-                : await refreshCasePublications(radicado);
-              if (result.ok && result.items) {
-                onRefresh(result.items);
-                setSyncProgress(0);
-                setSyncStatus(null);
-                setIsRefreshing(false);
-                clearInterval(interval);
-              }
+                ? await getCasePublicationsById(caseId)
+                : await getCasePublications(radicado);
+              
+              const items = Array.isArray(result) ? result : (result as any).items || [];
+              onRefresh(items);
+              
+              setSyncProgress(0);
+              setSyncStatus(null);
+              setIsRefreshing(false);
+              if (interval) clearInterval(interval);
             }
           }
         } catch (e) {
