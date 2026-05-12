@@ -3812,14 +3812,14 @@ async def save_new_publications(case: Case, db: Session):
             db.execute(text("SET statement_timeout = 5000")) 
             db.execute(text("DELETE FROM case_publications WHERE case_id = :cid"), {"cid": case.id})
             db.commit()
-            update_sync_progress(case.id, 8)
+            update_sync_progress(db, case.id, 8)
         except Exception as e_cleanup:
             print(f"[cleanup] Error en limpieza: {e_cleanup}")
             db.rollback()
             try: db.execute(text("SET statement_timeout = 0")) 
             except: pass
 
-        update_sync_progress(case.id, 10, "Analizando historial de actuaciones...")
+        update_sync_progress(db, case.id, 10, "Analizando historial de actuaciones...")
         
         # 1. Obtener actuaciones del caso (Fijación, Estado, Auto según Paso a Paso)
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).order_by(CaseEvent.event_date.desc()).all()
@@ -3839,7 +3839,7 @@ async def save_new_publications(case: Case, db: Session):
                     months_to_check.add((dt.year, dt.month, dt.strftime("%Y-%m-%d")))
 
         if not months_to_check:
-            update_sync_progress(case.id, 100, "No se detectaron actuaciones de tipo Auto/Estado.")
+            update_sync_progress(db, case.id, 100, "No se detectaron actuaciones de tipo Auto/Estado.")
             return
 
         # 2. Consultar scraper por cada mes único
