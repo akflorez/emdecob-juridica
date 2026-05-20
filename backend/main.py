@@ -3799,7 +3799,7 @@ async def save_new_publications(case: Case, db: Session):
         # 0. Iniciar progreso
         # LOG DE EMERGENCIA EN ARCHIVO
         with open("sync_emergency.log", "a") as f:
-            f.write(f"[{datetime.now()}] Iniciando tarea para {radicado} (ID: {case.id})\n")
+            f.write(f"[{datetime.now()}] Iniciando tarea para {case.radicado} (ID: {case.id})\n")
                 
         update_sync_progress(db, case.id, 5, "Iniciando limpieza y búsqueda...")
         
