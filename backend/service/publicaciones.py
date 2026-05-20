@@ -46,9 +46,25 @@ def is_relevant_actuacion(actuacion_text: str) -> bool:
     return any(k in norm for k in keywords)
 
 async def extract_text_content(url: str, client: httpx.AsyncClient, timeout: int = 30) -> str:
-    """Extrae texto de un PDF o DOCX remoto de forma asíncrona."""
+    """Extrae texto de un PDF o DOCX remoto de forma asíncrona, resolviendo páginas intermedias de Liferay."""
     if not url: return ""
     try:
+        # Resolver redirecciones y páginas intermedias de Liferay
+        if "find_file_entry" in url or "SearchResultsPortlet" in url:
+            print(f"[extractor] Resolviendo página intermedia: {url[:100]}...")
+            resp = await client.get(url, timeout=timeout)
+            if resp.status_code == 200:
+                html = resp.text
+                uuid_match = re.search(r'fileEntryUUID\s*:\s*["\']([^"\']+)["\']', html)
+                group_match = re.search(r'groupId\s*:\s*["\']([^"\']+)["\']', html)
+                if uuid_match and group_match:
+                    uuid = uuid_match.group(1)
+                    group_id = group_match.group(1)
+                    url = f"https://publicacionesprocesales.ramajudicial.gov.co/c/document_library/get_file?uuid={uuid}&groupId={group_id}"
+                    print(f"[extractor] URL resuelta a descarga directa: {url}")
+                else:
+                    print("[extractor] No se encontró UUID/GroupID en la página intermedia")
+
         # Descargar el contenido
         resp = await client.get(url, timeout=timeout)
         if resp.status_code != 200: return ""
@@ -85,36 +101,50 @@ def validate_content(text: str, radicado_completo: str, demandante: str, demanda
     t_norm = "".join(normalize_text(text).split())
     rad_norm = "".join(filter(str.isdigit, radicado_completo))
     
+    # Al menos dos palabras significativas de cada parte (o todas si hay menos de 2)
+    def significant_words(name):
+        if not name: return []
+        # Normalizar: quitar sufijos comunes y palabras vacías
+        n = name.upper().replace("S.A.S.", "").replace("SAS", "").replace("S.A.", "").replace("LIMITADA", "").replace("LTDA", "").replace("E.S.P.", "").replace("ESP", "")
+        # IMPORTANTE: Devolver en minúsculas para que coincida con t_norm
+        return [w.lower() for w in n.split() if len(w) > 3 and w not in ["BANCO", "SISTEMA", "GESTION", "COBRANZAS", "MUNICIPIO", "PARA", "LAS", "LOS", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA"]]
+        
+    words_dante = significant_words(demandante)
+    words_dado = significant_words(demandado)
+    
+    matches_dante = sum(1 for w in words_dante if w in t_norm) if words_dante else 0
+    matches_dado = sum(1 for w in words_dado if w in t_norm) if words_dado else 0
+    
+    threshold_dante = min(2, len(words_dante)) if words_dante else 0
+    threshold_dado = min(2, len(words_dado)) if words_dado else 0
+    
+    match_dante = (matches_dante >= threshold_dante) if threshold_dante > 0 else True
+    match_dado = (matches_dado >= threshold_dado) if threshold_dado > 0 else True
+    
     # 1. Match Exacto por número de 23 dígitos
+    # Exigimos que coincidan las partes si están especificadas para evitar falsos positivos
     if rad_norm in t_norm:
-        print(f"[validator] MATCH OK: Radicado de 23 dígitos encontrado.")
-        return True
-        
-    # 2. Match por Patrón Año + Consecutivo (12:21)
-    pattern = rad_norm[12:21]
-    if pattern in t_norm:
-        dante_norm = normalize_text(demandante)
-        dado_norm = normalize_text(demandado)
-        
-        # Al menos un apellido significativo de cada parte
-        def significant_words(name):
-            if not name: return []
-            # Normalizar: quitar sufijos comunes y palabras vacías
-            n = name.upper().replace("S.A.S.", "").replace("SAS", "").replace("S.A.", "").replace("LIMITADA", "").replace("LTDA", "")
-            return [w for w in n.split() if len(w) > 3 and w not in ["BANCO", "SISTEMA", "GESTION", "COBRANZAS", "MUNICIPIO", "PARA", "LAS", "LOS"]]
-            
-        words_dante = significant_words(dante_norm)
-        words_dado = significant_words(dado_norm)
-        
-        match_dante = any(w in t_norm for w in words_dante) if words_dante else False
-        match_dado = any(w in t_norm for w in words_dado) if words_dado else False
-        
-        # Basta con que coincida el Radicado + UNA de las partes (más flexible ante erratas)
-        if match_dante or match_dado:
-            print(f"[validator] MATCH OK: Patrón {pattern} + Partes (Dante:{match_dante}, Dado:{match_dado})")
+        if (match_dante or match_dado) or (not words_dante and not words_dado):
+            print(f"[validator] MATCH OK: Radicado 23 dígitos + Partes (Dante:{match_dante}, Dado:{match_dado})")
             return True
-            
-    print(f"[validator] MATCH FAIL: No coincide radicado ni partes.")
+        else:
+            print(f"[validator] RADICADO OK pero PARTES FAIL. Descartando.")
+            return False
+    
+    # 2. Match por Patrón Año + Consecutivo (12:21)
+    # Aquí exigimos patrón + que al menos una parte coincida + que el número de despacho esté en el texto
+    pattern = rad_norm[12:21]
+    court_num = radicado_completo[9:12] # e.g. '024'
+    court_num_short = str(int(court_num)) # e.g. '24'
+    
+    if pattern in t_norm:
+        # Verificar que mencione al despacho target (ya sea '024' o '24')
+        if court_num in t_norm or f"juzgado{court_num_short}" in t_norm or f"j{court_num_short}" in t_norm or f"cmpl{court_num_short}bt" in t_norm:
+            if match_dante or match_dado:
+                print(f"[validator] MATCH OK: Patrón {pattern} + Despacho {court_num} + Al menos una parte.")
+                return True
+        
+    print(f"[validator] MATCH FAIL: No coincide radicado completo ni (patrón + despacho + ambas partes).")
     return False
 
 async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optional[date] = None):
@@ -158,6 +188,25 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
         # 2. Identificar si es un documento directo o una página de resumen (Como la Imagen 3 del Word)
         # Si es una página de resumen, necesitamos entrar para buscar el PDF real.
         is_direct_doc = any(ext in url.lower() for ext in [".pdf", ".docx", "find_file_entry"])
+        
+        # Pre-filtrado por año y despacho en el texto del entry / enlace
+        # radicado_completo es de 23 dígitos: e.g. 11001400302420240140300
+        # despacho es radicado_completo[9:12] -> '024'
+        # año es radicado_completo[12:16] -> '2024'
+        despacho_target = radicado_completo[9:12]
+        year_target = radicado_completo[12:16]
+        
+        # Extraer posibles años de 4 dígitos en el texto del candidato
+        years_in_text = re.findall(r'\b(20\d{2})\b', entry_text)
+        if years_in_text and year_target not in years_in_text:
+            print(f"[scraper] Descartando candidato por año incorrecto en texto (años: {years_in_text}, año buscado: {year_target})")
+            continue
+            
+        # Extraer posibles códigos de despacho (3 dígitos) en el texto del candidato
+        despachos_in_text = re.findall(r'\b(\d{3})\b', entry_text)
+        if despachos_in_text and despacho_target not in despachos_in_text:
+            print(f"[scraper] Descartando candidato por despacho incorrecto en texto (despachos: {despachos_in_text}, despacho buscado: {despacho_target})")
+            continue
         
         # 3. Candidato si menciona el patrón
         if pattern_with_dash in entry_text or consecutive in entry_text:
@@ -213,8 +262,8 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                 if resp.status_code == 200:
                     all_candidates = await get_candidates(resp.text, rad_digits, fecha_act_min)
                     
-                    # LIMITAMOS a los mejores 5 candidatos para evitar cuelgues (5% hang)
-                    candidates = all_candidates[:5]
+                    # LIMITAMOS a los mejores 15 candidatos pre-filtrados para evitar cuelgues (5% hang)
+                    candidates = all_candidates[:15]
                     
                     async def process_candidate(cand):
                         async with sem:
