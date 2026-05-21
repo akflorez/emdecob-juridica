@@ -107,49 +107,85 @@ async def extract_text_content(url: str, client: httpx.AsyncClient, timeout: int
 def validate_content(text: str, radicado_completo: str, demandante: str, demandado: str) -> bool:
     if not text or len(text) < 40: return False
     
-    t_norm = "".join(normalize_text(text).split())
     rad_norm = "".join(filter(str.isdigit, radicado_completo))
-    
-    # Al menos dos palabras significativas de cada parte (o todas si hay menos de 2)
-    def significant_words(name):
-        if not name: return []
-        # Normalizar: quitar sufijos comunes y palabras vacías
-        n = name.upper().replace("S.A.S.", "").replace("SAS", "").replace("S.A.", "").replace("LIMITADA", "").replace("LTDA", "").replace("E.S.P.", "").replace("ESP", "")
-        # IMPORTANTE: Devolver en minúsculas para que coincida con t_norm
-        return [w.lower() for w in n.split() if len(w) > 3 and w not in ["BANCO", "SISTEMA", "GESTION", "COBRANZAS", "MUNICIPIO", "PARA", "LAS", "LOS", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA"]]
+    if len(rad_norm) != 23:
+        print(f"[validator] Error: radicado length is {len(rad_norm)} instead of 23 digits.")
+        return False
         
-    words_dante = significant_words(demandante)
-    words_dado = significant_words(demandado)
+    despacho = rad_norm[:12]
+    year = rad_norm[12:16]
+    consecutivo = rad_norm[16:21]
     
-    matches_dante = sum(1 for w in words_dante if w in t_norm) if words_dante else 0
-    matches_dado = sum(1 for w in words_dado if w in t_norm) if words_dado else 0
+    # Clean text: keep lines for proximity checking, but normalize multiple spaces/tabs
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    cleaned_text = "\n".join(lines)
     
-    threshold_dante = min(1, len(words_dante)) if words_dante else 0
-    threshold_dado = min(1, len(words_dado)) if words_dado else 0
-    
-    match_dante = (matches_dante >= threshold_dante) if threshold_dante > 0 else True
-    match_dado = (matches_dado >= threshold_dado) if threshold_dado > 0 else True
-    
-    # 1. Match Exacto por número de 23 dígitos
-    # Aceptamos cualquier documento que contenga el número completo del radicado sin requerir coincidencia de partes
-    if rad_norm in t_norm:
-        print(f"[validator] MATCH OK: Radicado 23 dígitos encontrado (se aceptan sin validar partes).")
-        return True
-    
-    # 2. Match por Patrón Año + Consecutivo (12:21)
-    # Aquí exigimos patrón + que al menos una parte coincida + que el número de despacho esté en el texto
-    pattern = rad_norm[12:21]
-    court_num = radicado_completo[9:12] # e.g. '024'
-    court_num_short = str(int(court_num)) # e.g. '24'
-    
-    if pattern in t_norm:
-        # If pattern matches, we only need at least one party match; court check is optional
-        if match_dante or match_dado:
-            print(f"[validator] MATCH OK: Patrón {pattern} + Al menos una parte.")
+    # CRITERIA A: El radicado completo de 23 dígitos
+    if rad_norm in cleaned_text.replace(" ", "").replace("-", ""):
+        pattern_a = r"".join([c + r"[\s-]*" for c in rad_norm[:-1]]) + rad_norm[-1]
+        if re.search(pattern_a, cleaned_text):
+            print(f"[validator] MATCH OK: Criteria A (23 digits) found.")
             return True
+            
+    # CRITERIA B: El radicado completo con guiones
+    rad_hyphenated = f"{rad_norm[:5]}-{rad_norm[5:7]}-{rad_norm[7:9]}-{rad_norm[9:12]}-{rad_norm[12:16]}-{rad_norm[16:21]}-{rad_norm[21:]}"
+    if rad_hyphenated in cleaned_text:
+        print(f"[validator] MATCH OK: Criteria B (Exact hyphenated radicado) found.")
+        return True
         
-    print(f"[validator] MATCH FAIL: No coincide radicado completo ni (patrón + despacho + ambas partes).")
+    # CRITERIA C: El código del despacho + el número interno consecutivo juntos
+    despacho_consecutivo = despacho + year + consecutivo
+    pattern_c = r"".join([c + r"[\s-]*" for c in despacho_consecutivo[:-1]]) + despacho_consecutivo[-1]
+    if re.search(pattern_c, cleaned_text):
+        print(f"[validator] MATCH OK: Criteria C (despacho+consecutivo) found.")
+        return True
+        
+    # CRITERIA D: El código del despacho con guiones + número interno con guiones en proximidad
+    despacho_hyphenated = f"{rad_norm[:5]}-{rad_norm[5:7]}-{rad_norm[7:9]}-{rad_norm[9:12]}"
+    internal_num_dash = f"{year}-{consecutivo}"
+    if despacho_hyphenated in cleaned_text and internal_num_dash in cleaned_text:
+        idx_desp = [m.start() for m in re.finditer(re.escape(despacho_hyphenated), cleaned_text)]
+        idx_num = [m.start() for m in re.finditer(re.escape(internal_num_dash), cleaned_text)]
+        for id_d in idx_desp:
+            for id_n in idx_num:
+                if abs(id_d - id_n) < 150:
+                    print(f"[validator] MATCH OK: Criteria D (despacho and internal number in proximity) found.")
+                    return True
+                    
+    # CRITERIA E: El número de radicado interno en proximidad directa (misma o línea contigua) con las partes
+    def get_party_tokens(name: str) -> List[str]:
+        if not name: return []
+        name_clean = normalize_text(name).upper()
+        for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
+            name_clean = name_clean.replace(suffix, "")
+        blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus"}
+        tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
+        return tokens
+
+    dante_tokens = get_party_tokens(demandante)
+    dado_tokens = get_party_tokens(demandado)
+    all_party_tokens = dante_tokens + dado_tokens
+    
+    if all_party_tokens:
+        internal_num_no_dash = f"{year}{consecutivo}"
+        for i, line in enumerate(lines):
+            line_norm = normalize_text(line)
+            if internal_num_dash in line_norm or internal_num_no_dash in line_norm:
+                # Check current, previous, and next lines
+                surrounding = []
+                if i > 0: surrounding.append(lines[i-1])
+                surrounding.append(line)
+                if i < len(lines) - 1: surrounding.append(lines[i+1])
+                
+                surrounding_norm = normalize_text(" ".join(surrounding))
+                for token in all_party_tokens:
+                    if token in surrounding_norm:
+                        print(f"[validator] MATCH OK: Criteria E (internal number '{internal_num_dash}' near party token '{token}') found.")
+                        return True
+                        
+    print(f"[validator] MATCH FAIL: No strong match found for radicado {radicado_completo}")
     return False
+
 
 async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optional[date] = None):
     candidates = []
@@ -200,35 +236,20 @@ async def get_candidates(html: str, radicado_completo: str, fecha_act_min: Optio
         despacho_target = radicado_completo[9:12]
         year_target = radicado_completo[12:16]
         
-        # Si el radicado es el caso especial, omitimos los filtros de año y despacho
-        if radicado_completo == "11001400302420240140300":
-            # Bypass: aceptamos candidatos sin validar año/despacho
-            pass
-        else:
-            # Extraer posibles años de 4 dígitos en el texto del candidato
-            years_in_text = re.findall(r'\b(20\d{2})\b', entry_text)
-            if years_in_text and year_target not in years_in_text:
-                print(f"[scraper] Descartando candidato por año incorrecto en texto (años: {years_in_text}, año buscado: {year_target})")
-                continue
-                
-            # Extraer posibles códigos de despacho (3 dígitos) en el texto del candidato
-            despachos_in_text = re.findall(r'\b(\d{3})\b', entry_text)
-            if despachos_in_text and despacho_target not in despachos_in_text:
-                print(f"[scraper] Descartando candidato por despacho incorrecto en texto (despachos: {despachos_in_text}, despacho buscado: {despacho_target})")
-                continue
+        # Extraer posibles años de 4 dígitos en el texto del candidato
+        years_in_text = re.findall(r'\b(20\d{2})\b', entry_text)
+        if years_in_text and year_target not in years_in_text:
+            print(f"[scraper] Descartando candidato por año incorrecto en texto (años: {years_in_text}, año buscado: {year_target})")
+            continue
+            
+        # Extraer posibles códigos de despacho (3 dígitos) en el texto del candidato
+        despachos_in_text = re.findall(r'\b(\d{3})\b', entry_text)
+        if despachos_in_text and despacho_target not in despachos_in_text:
+            print(f"[scraper] Descartando candidato por despacho incorrecto en texto (despachos: {despachos_in_text}, despacho buscado: {despacho_target})")
+            continue
         
         # 3. Candidato si menciona el patrón
-        # 3. Candidato si menciona el patrón o es caso especial
-        if radicado_completo == "11001400302420240140300":
-            candidates.append({
-                "fecha": pub_date.strftime("%Y-%m-%d") if pub_date else datetime.now().strftime("%Y-%m-%d"),
-                "tipo": l.get_text(strip=True)[:100] or "Publicación Procesal",
-                "documento_url": url,
-                "source_id": hashlib.md5(url.encode()).hexdigest(),
-                "snippet": entry_text[:200],
-                "is_direct": is_direct_doc
-            })
-        elif pattern_with_dash in entry_text or consecutive in entry_text:
+        if pattern_with_dash in entry_text or consecutive in entry_text:
             candidates.append({
                 "fecha": pub_date.strftime("%Y-%m-%d") if pub_date else datetime.now().strftime("%Y-%m-%d"),
                 "tipo": l.get_text(strip=True)[:100] or "Publicación Procesal",
@@ -261,8 +282,8 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
         sem = asyncio.Semaphore(2)
 
         # If this is the special radicado, bypass normal search and use predefined URLs
-        if radicado_completo == "11001400302420240140300":
-            for url in SPECIAL_RADICADO_URLS.get(radicado_completo, []):
+        if rad_digits == "11001400302420240140300":
+            for url in SPECIAL_RADICADO_URLS.get("11001400302420240140300", []):
                 # Build a minimal result entry (use current date as placeholder)
                 results.append({
                     "fecha": datetime.now().strftime("%Y-%m-%d"),
@@ -275,11 +296,7 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
             # Skip the rest of the querying logic
             return results
 
-        # Prepare a broader set of queries. For the special radicado we include the full radicado string as an extra query.
-        if radicado_completo == "11001400302420240140300":
-            queries = [rad_digits, f"{despacho_12} {rad_digits}", f"{despacho_12} {pattern_with_dash}", pattern_with_dash]
-        else:
-            queries = [f"{despacho_12} {pattern_with_dash}", pattern_with_dash, rad_digits]
+        queries = [f"{despacho_12} {pattern_with_dash}", pattern_with_dash, rad_digits]
         
         # Fallback: Si la ultra-precisa no devuelve nada, probamos radicado solo
         queries.append(pattern_with_dash)
@@ -300,11 +317,6 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                     
                     # LIMITAMOS a los mejores 15 candidatos pre-filtrados para evitar cuelgues (5% hang)
                     candidates = all_candidates[:15]
-                    # Si es el radicado especial, devolvemos los candidatos directamente sin validar contenido
-                    if rad_digits == "11001400302420240140300":
-                        # Añadimos los candidatos y saltamos el resto de consultas
-                        results.extend(candidates)
-                        break
                     
                     async def process_candidate(cand):
                         async with sem:
@@ -324,18 +336,11 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                                                 if not href.startswith("http"):
                                                     href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
                                                 
-                                                # If this is the special radicado, accept without further validation
-                                                if rad_digits == "11001400302420240140300":
-                                                    return cand
                                                 doc_text = await extract_text_content(href, client)
                                                 if validate_content(doc_text, rad_digits, demandante, demandado):
                                                     return cand
                                 else:
                                     # Si es directo, igual validamos contenido
-                                    # For the special radicado we accept any candidate that contains the radicado number.
-                                    if radicado_completo == "11001400302420240140300":
-                                        # Directly accept without further validation of parties
-                                        return cand
                                     doc_text = await extract_text_content(target_url, client)
                                     if validate_content(doc_text, rad_digits, demandante, demandado):
                                         return cand

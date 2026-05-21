@@ -133,7 +133,6 @@ from backend.service.rama import (
     RamaRateLimitError,
 )
 from backend.apply_robust_migrations import run_migrations
-from backend.routers import publicaciones
 from backend.service.publicaciones import (
     consultar_publicaciones, 
     parse_fecha_pub, 
@@ -791,14 +790,6 @@ app.add_middleware(
 )
 
 app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
-
-# Register the Publicaciones router
-app.include_router(
-    publicaciones.router,
-    prefix="/api/v1/publicaciones",
-    tags=["Publicaciones"]
-)
-
 
 # =========================
 # SCHEMAS

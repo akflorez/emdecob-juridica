@@ -3,7 +3,7 @@ from backend.service.publicaciones import consultar_publicaciones_rango
 
 async def main():
     res = await consultar_publicaciones_rango(
-        '11001400302420240140300', 
+        '11001-40-03-024-2024-01403-00', 
         '2026-02-01', 
         'FONDO NACIONAL DEL AHORRO CARLOS LLERAS RESTREPO', 
         'PEDRO ELIAS MORENO GONZALES'
