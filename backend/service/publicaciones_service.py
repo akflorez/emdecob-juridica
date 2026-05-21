@@ -1,12 +1,14 @@
 import httpx
+import re
 from bs4 import BeautifulSoup
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy.orm import Session
 
 from ..models.publicacion_procesal import PublicacionProcesal
 from ..db import SessionLocal
+from ..models.case import Case  # assuming a Case model exists with radicado and ultima_actuacion
 
 # Constants for the external portal
 BASE_URL = "https://publicacionesprocesales.ramajudicial.gov.co"
@@ -16,113 +18,196 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
 }
 
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
+
 def _parse_radicado(radicado_completo: str) -> Dict[str, str]:
     """Extract components from the full radicado string.
     Expected format: 11001400302420240140300 (despacho+year+number)
     Returns a dict with keys: despacho, year, number, full.
     """
-    # First 12 chars are despacho code, next 4 are year, remaining are number
     despacho = radicado_completo[:12]
     year = radicado_completo[12:16]
     number = radicado_completo[16:]
+    return {"despacho": despacho, "year": year, "number": number, "full": radicado_completo}
+
+def _get_case_actuation_date(radicado: str) -> Optional[date]:
+    """Return the latest actuation date (ultima_actuacion) for the case.
+    If not found, returns None.
+    """
+    session = SessionLocal()
+    try:
+        case_obj = session.query(Case).filter(Case.radicado == radicado).first()
+        if case_obj and getattr(case_obj, "ultima_actuacion", None):
+            return case_obj.ultima_actuacion
+    finally:
+        session.close()
+    return None
+
+def _first_day_of_month(dt: date) -> date:
+    return dt.replace(day=1)
+
+def _last_day_of_month(dt: date) -> date:
+    next_month = dt.replace(day=28) + timedelta(days=4)
+    return next_month - timedelta(days=next_month.day)
+
+def _build_search_params(components: Dict[str, str], start: date, end: date) -> Dict[str, str]:
+    """Construct GET parameters for a filtered portal search.
+    The portal expects several hidden fields; we provide the visible ones.
+    """
     return {
-        "despacho": despacho,
-        "year": year,
-        "number": number,
-        "full": radicado_completo,
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_action": "busqueda",
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_fechaInicio": start.isoformat(),
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_fechaFin": end.isoformat(),
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_idDepto": "",
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_idDespacho": components["despacho"],
+        "_co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq_verTotales": "true",
     }
 
-def _build_query_params(components: Dict[str, str]) -> Dict[str, str]:
-    """Construct the GET parameters required by the portal.
-    The portal expects filters like the year, the despacho code and the radicado number.
-    """
-    # The portal uses the following GET params (observed from manual browsing)
-    # - "anno"   : year of the radicado
-    # - "despacho": despacho code (12‑digit)
-    # - "numero" : the numeric part of the radicado (after the year)
-    # - "texto"  : optional free‑text search, we feed the full radicado for robustness
-    return {
-        "anno": components["year"],
-        "despacho": components["despacho"],
-        "numero": components["number"],
-        "texto": components["full"],
-    }
-
-def _fetch_search_page(params: Dict[str, str]) -> Optional[str]:
-    """Perform the HTTP GET to the portal and return raw HTML if successful.
-    Returns ``None`` when the request fails or the portal returns a non‑200 status.
-    """
+def _fetch_page(url: str, params: Optional[Dict[str, str]] = None) -> Optional[str]:
     try:
         with httpx.Client(headers=HEADERS, timeout=30.0) as client:
-            response = client.get(SEARCH_ENDPOINT, params=params)
+            response = client.get(url, params=params)
             response.raise_for_status()
             return response.text
     except Exception as exc:
-        # Log the error in real code – for now we just return None
-        print(f"[publicaciones_service] Error fetching search page: {exc}")
+        print(f"[publicaciones_service] Error fetching {url}: {exc}")
         return None
 
-def _extract_candidates(html: str) -> List[Dict[str, Any]]:
-    """Parse the search results page and extract candidate publications.
-    The portal lists each result in a table row with links to the document and detail page.
-    We collect the URL, title, and any visible metadata.
+def _extract_cards(html: str) -> List[Dict[str, Any]]:
+    """Parse search results and return a list of card dicts.
+    Each card contains a detail URL and raw text for further validation.
     """
     soup = BeautifulSoup(html, "html.parser")
-    results: List[Dict[str, Any]] = []
-    # The actual HTML structure may change; we try a few heuristics.
-    # Look for rows inside a table with class "resultados" or generic "tbody".
+    cards: List[Dict[str, Any]] = []
+    for div in soup.find_all("div", class_=re.compile(r"card|portlet", re.I)):
+        link = div.find("a", string=re.compile(r"Ver detalle", re.I))
+        if not link or not link.get("href"):
+            continue
+        detail_url = link["href"]
+        if detail_url.startswith("/"):
+            detail_url = BASE_URL + detail_url
+        text = div.get_text(separator=" ", strip=True)
+        cards.append({"detail_url": detail_url, "raw_text": text})
+    return cards
+
+def _card_matches_despacho(card: Dict[str, Any], despacho: str) -> bool:
+    return despacho in card["raw_text"]
+
+def _fetch_detail_page(url: str) -> Optional[BeautifulSoup]:
+    html = _fetch_page(url)
+    if html:
+        return BeautifulSoup(html, "html.parser")
+    return None
+
+def _parse_rows_from_detail(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """Extract rows from the publication detail table.
+    Expected columns: Número de estado, Fecha, Cuadro, Providencias.
+    Returns list of dicts with keys: numero, fecha (date), cuadro_url, providencia_url.
+    """
+    rows: List[Dict[str, Any]] = []
     table = soup.find("table")
     if not table:
-        return results
-    for row in table.find_all("tr"):
-        cols = row.find_all("td")
-        if not cols:
+        return rows
+    for tr in table.find_all("tr"):
+        cols = tr.find_all("td")
+        if len(cols) < 4:
             continue
-        # Typically first column holds the document link
-        link_tag = cols[0].find("a", href=True)
-        if not link_tag:
-            continue
-        doc_url = link_tag["href"]
-        # Ensure absolute URL
-        if doc_url.startswith("/"):
-            doc_url = BASE_URL + doc_url
-        title = link_tag.get_text(strip=True)
-        # Additional metadata may be in other columns – we capture raw text
-        meta = " ".join(col.get_text(strip=True) for col in cols[1:])
-        results.append({"url": doc_url, "title": title, "meta": meta})
-    return results
+        numero = cols[0].get_text(strip=True)
+        fecha_str = cols[1].get_text(strip=True)
+        try:
+            fecha = datetime.strptime(fecha_str, "%d/%m/%Y").date()
+        except Exception:
+            try:
+                fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+        cuadro_link = cols[2].find("a", href=True)
+        providencia_link = cols[3].find("a", href=True)
+        cuadro_url = cuadro_link["href"] if cuadro_link else None
+        providencia_url = providencia_link["href"] if providencia_link else None
+        if cuadro_url and cuadro_url.startswith("/"):
+            cuadro_url = BASE_URL + cuadro_url
+        if providencia_url and providencia_url.startswith("/"):
+            providencia_url = BASE_URL + providencia_url
+        rows.append({
+            "numero": numero,
+            "fecha": fecha,
+            "cuadro_url": cuadro_url,
+            "providencia_url": providencia_url,
+        })
+    return rows
 
-def _validate_candidate(candidate: Dict[str, Any], radicado: str) -> bool:
-    """Very light validation – the portal already filters by radicado.
-    We additionally check that the radicado string appears in the title or metadata.
-    """
-    needle = radicado
-    return needle in candidate["title"] or needle in candidate["meta"]
+def _download_pdf(url: str) -> Optional[bytes]:
+    try:
+        with httpx.Client(headers=HEADERS, timeout=30.0) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return resp.content
+    except Exception as exc:
+        print(f"[publicaciones_service] PDF download error {url}: {exc}")
+        return None
 
-def _persist_publication(session: Session, radicado: str, data: Dict[str, Any]) -> PublicacionProcesal:
-    """Insert or update a publication record.
-    If a record with the same URL already exists, we update its metadata.
-    """
-    existing = (
-        session.query(PublicacionProcesal)
-        .filter(PublicacionProcesal.url_detalle == data["url"])
-        .first()
-    )
+def _pdf_text(content: bytes) -> str:
+    try:
+        from PyPDF2 import PdfReader
+        import io
+        reader = PdfReader(io.BytesIO(content))
+        return "".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        print(f"[publicaciones_service] PDF parsing error: {exc}")
+        return ""
+
+def _strong_match(radicado: str, despacho: str, text: str) -> bool:
+    patterns = []
+    # A: Full radicado
+    patterns.append(re.escape(radicado))
+    # B: Hyphenated full radicado (e.g., 11001-40-03-024-2024-01403-00)
+    hyphenated = re.sub(r"(\d{5})(\d{2})(\d{2})(\d{3})(\d{4})(\d{5})", r"\1-\2-\3-\4-\5-\6", radicado)
+    patterns.append(hyphenated)
+    # C: Despacho + internal number
+    patterns.append(despacho + radicado[12:])
+    # D: Despacho with hyphens + internal number with hyphens
+    desp_hy = re.sub(r"(\d{5})(\d{2})(\d{2})(\d{3})", r"\1-\2-\3-\4", despacho)
+    internal_hy = radicado[12:16] + "-" + radicado[16:]
+    patterns.append(desp_hy + " " + internal_hy)
+    # E: Year-number block (radicado[12:])
+    patterns.append(radicado[12:])
+    for pat in patterns:
+        if re.search(pat, text):
+            return True
+    return False
+
+def _persist_publication(session: Session, radicado: str, despacho: str, data: Dict[str, Any]) -> PublicacionProcesal:
+    existing = session.query(PublicacionProcesal).filter(PublicacionProcesal.url_detalle == data["detail_url"]).first()
     if existing:
         existing.titulo = data.get("title")
         existing.meta = data.get("meta")
-        existing.radicado = radicado
-        existing.fuente = "Publicaciones Procesales Rama Judicial"
+        existing.fecha_publicacion = data.get("fecha_publicacion")
+        existing.url_cuadro = data.get("cuadro_url")
+        existing.url_providencia = data.get("providencia_url")
+        existing.texto_cuadro = data.get("texto_cuadro")
+        existing.texto_providencia = data.get("texto_providencia")
+        existing.match_fuerte = data.get("match_fuerte")
+        existing.match_type = data.get("match_type")
         existing.updated_at = datetime.utcnow()
         session.add(existing)
         return existing
     else:
         new_pub = PublicacionProcesal(
             radicado=radicado,
-            despacho_codigo=radicado[:12],
-            url_detalle=data["url"],
+            despacho_codigo=despacho,
+            url_detalle=data.get("detail_url"),
             titulo=data.get("title"),
             meta=data.get("meta"),
+            fecha_publicacion=data.get("fecha_publicacion"),
+            url_cuadro=data.get("cuadro_url"),
+            url_providencia=data.get("providencia_url"),
+            texto_cuadro=data.get("texto_cuadro"),
+            texto_providencia=data.get("texto_providencia"),
+            match_fuerte=data.get("match_fuerte"),
+            match_type=data.get("match_type"),
             fuente="Publicaciones Procesales Rama Judicial",
             estado_busqueda="fetched",
             created_at=datetime.utcnow(),
@@ -131,25 +216,72 @@ def _persist_publication(session: Session, radicado: str, data: Dict[str, Any]) 
         session.add(new_pub)
         return new_pub
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def buscar_publicaciones(radicado_completo: str) -> List[PublicacionProcesal]:
-    """Public entry point used by the API router.
-    Returns a list of persisted ``PublicacionProcesal`` objects for the supplied radicado.
+    """Search, validate, and persist only confirmed publications for a radicado.
+    Returns a list of persisted ``PublicacionProcesal`` objects; empty list means
+    no valid publication was found.
     """
     components = _parse_radicado(radicado_completo)
-    params = _build_query_params(components)
-    html = _fetch_search_page(params)
-    if not html:
+    despacho = components["despacho"]
+    act_date = _get_case_actuation_date(radicado_completo)
+    if not act_date:
+        print(f"[publicaciones_service] No actuation date for radicado {radicado_completo}")
         return []
-    candidates = _extract_candidates(html)
-    valid = [c for c in candidates if _validate_candidate(c, radicado_completo)]
-    if not valid:
+    start_month = _first_day_of_month(act_date)
+    end_month = _last_day_of_month(act_date)
+
+    params = _build_search_params(components, start_month, end_month)
+    search_html = _fetch_page(SEARCH_ENDPOINT, params=params)
+    if not search_html:
         return []
+
+    cards = _extract_cards(search_html)
+    cards = [c for c in cards if _card_matches_despacho(c, despacho)]
+    if not cards:
+        return []
+
     session = SessionLocal()
     persisted: List[PublicacionProcesal] = []
     try:
-        for cand in valid:
-            pub = _persist_publication(session, radicado_completo, cand)
-            persisted.append(pub)
+        for card in cards:
+            detail_soup = _fetch_detail_page(card["detail_url"])
+            if not detail_soup:
+                continue
+            rows = _parse_rows_from_detail(detail_soup)
+            rows = [r for r in rows if r["fecha"] >= act_date]
+            for row in rows:
+                cuadro_txt = ""
+                if row["cuadro_url"]:
+                    pdf_bytes = _download_pdf(row["cuadro_url"])
+                    if pdf_bytes:
+                        cuadro_txt = _pdf_text(pdf_bytes)
+                is_strong = _strong_match(radicado_completo, despacho, cuadro_txt)
+                if not is_strong:
+                    print(f"[publicaciones_service] Discarded candidate from {row['cuadro_url']} – weak match")
+                    continue
+                providencia_txt = ""
+                if row["providencia_url"]:
+                    pdf_bytes = _download_pdf(row["providencia_url"])
+                    if pdf_bytes:
+                        providencia_txt = _pdf_text(pdf_bytes)
+                data = {
+                    "detail_url": card["detail_url"],
+                    "title": card.get("title", ""),
+                    "meta": card.get("meta", ""),
+                    "fecha_publicacion": row["fecha"],
+                    "cuadro_url": row["cuadro_url"],
+                    "providencia_url": row["providencia_url"],
+                    "texto_cuadro": cuadro_txt,
+                    "texto_providencia": providencia_txt,
+                    "match_fuerte": True,
+                    "match_type": "strong",
+                }
+                pub_obj = _persist_publication(session, radicado_completo, despacho, data)
+                persisted.append(pub_obj)
         session.commit()
     except Exception as exc:
         session.rollback()
