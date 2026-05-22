@@ -62,6 +62,30 @@ def run_migrations():
             # Usamos una sintaxis compatible con MySQL y Postgres
             conn.execute(text("ALTER TABLE case_events ADD COLUMN con_documentos BOOLEAN DEFAULT FALSE"))
 
+    # --- Tabla 'case_publications' ---
+    columns_pubs = [c['name'] for c in inspector.get_columns('case_publications')]
+    with engine.begin() as conn:
+        columns_to_add = [
+            ("url_fuente_principal", "TEXT"),
+            ("tipo_fuente_principal", "VARCHAR(100)"),
+            ("texto_fuente_principal", "TEXT"),
+            ("validada_por_fuente_principal", "BOOLEAN DEFAULT FALSE"),
+            ("numero_estado", "VARCHAR(100)"),
+            ("fecha_estado_electronico", "DATE"),
+            ("url_resumen_publicacion", "TEXT"),
+            ("url_cuadro", "TEXT"),
+            ("url_providencia", "TEXT"),
+            ("documentos_complementarios", "TEXT"),
+            ("match_fuerte", "BOOLEAN DEFAULT FALSE"),
+            ("match_type", "VARCHAR(100)"),
+            ("motivo_match", "TEXT"),
+            ("observacion", "TEXT")
+        ]
+        for col_name, col_type in columns_to_add:
+            if col_name not in columns_pubs:
+                print(f"[MIGRATION] case_publications: agregando '{col_name}'...")
+                conn.execute(text(f"ALTER TABLE case_publications ADD COLUMN {col_name} {col_type}"))
+
     # --- Tabla 'invalid_radicados' ---
     columns_invalid = [c['name'] for c in inspector.get_columns('invalid_radicados')]
     with engine.begin() as conn:

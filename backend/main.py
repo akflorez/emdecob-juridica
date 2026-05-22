@@ -2860,24 +2860,40 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
     """Tarea en segundo plano para sincronizar con el portal de Publicaciones."""
     try:
         from backend.models import CasePublication
+        from backend.service.publicaciones import consultar_publicaciones_rango, parse_fecha_pub
         radicado = case.radicado
         fecha_act = item_act.get("event_date") # "YYYY-MM-DD"
         
-        pubs = await consultar_publicaciones_rango(radicado, fecha_act, case.demandado or "")
+        pubs = await consultar_publicaciones_rango(radicado, fecha_act, case.demandante or "", case.demandado or "")
         
         if pubs:
             for p in pubs:
                 f_pub = parse_fecha_pub(p.get("fecha"))
                 exists = db_session.query(CasePublication).filter(CasePublication.source_id == p.get("source_id")).first()
                 if not exists:
+                    f_est = parse_fecha_pub(p.get("fecha_estado_electronico")) if p.get("fecha_estado_electronico") else f_pub
                     db_session.add(CasePublication(
                         case_id=case.id,
                         fecha_publicacion=f_pub,
                         tipo_publicacion=p.get("tipo"),
-                        descripcion=p.get("descripcion"),
+                        descripcion=p.get("descripcion") or p.get("snippet"),
                         documento_url=p.get("documento_url"),
                         source_url=p.get("source_url"),
-                        source_id=p.get("source_id")
+                        source_id=p.get("source_id"),
+                        url_fuente_principal=p.get("url_fuente_principal"),
+                        tipo_fuente_principal=p.get("tipo_fuente_principal"),
+                        texto_fuente_principal=p.get("texto_fuente_principal"),
+                        validada_por_fuente_principal=p.get("validada_por_fuente_principal", False),
+                        numero_estado=p.get("numero_estado"),
+                        fecha_estado_electronico=f_est,
+                        url_resumen_publicacion=p.get("url_resumen_publicacion"),
+                        url_cuadro=p.get("url_cuadro"),
+                        url_providencia=p.get("url_providencia"),
+                        documentos_complementarios=p.get("documentos_complementarios"),
+                        match_fuerte=p.get("match_fuerte", False),
+                        match_type=p.get("match_type"),
+                        motivo_match=p.get("motivo_match"),
+                        observacion=p.get("observacion")
                     ))
             db_session.commit()
             print(f"[sync-pub] {len(pubs)} publicaciones sincronizadas para {radicado}")
@@ -3867,14 +3883,30 @@ async def save_new_publications(case: Case, db: Session):
             if not sid or sid in seen_ids: continue
             seen_ids.add(sid)
             
+            f_pub = parse_fecha_pub(p.get("fecha"))
+            f_est = parse_fecha_pub(p.get("fecha_estado_electronico")) if p.get("fecha_estado_electronico") else f_pub
             new_pub = CasePublication(
                 case_id=case.id,
-                fecha_publicacion=parse_fecha_pub(p.get("fecha")),
+                fecha_publicacion=f_pub,
                 tipo_publicacion=p.get("tipo"),
-                descripcion=p.get("snippet"),
+                descripcion=p.get("snippet") or p.get("descripcion"),
                 documento_url=p.get("documento_url"),
                 source_url=p.get("source_url"),
-                source_id=sid
+                source_id=sid,
+                url_fuente_principal=p.get("url_fuente_principal"),
+                tipo_fuente_principal=p.get("tipo_fuente_principal"),
+                texto_fuente_principal=p.get("texto_fuente_principal"),
+                validada_por_fuente_principal=p.get("validada_por_fuente_principal", False),
+                numero_estado=p.get("numero_estado"),
+                fecha_estado_electronico=f_est,
+                url_resumen_publicacion=p.get("url_resumen_publicacion"),
+                url_cuadro=p.get("url_cuadro"),
+                url_providencia=p.get("url_providencia"),
+                documentos_complementarios=p.get("documentos_complementarios"),
+                match_fuerte=p.get("match_fuerte", False),
+                match_type=p.get("match_type"),
+                motivo_match=p.get("motivo_match"),
+                observacion=p.get("observacion")
             )
             db.add(new_pub)
             saved_count += 1

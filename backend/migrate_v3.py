@@ -79,9 +79,33 @@ def migrate():
             )
         """))
 
+        # 7. Agregar columnas a case_publications
+        print("Verificando columnas en 'case_publications'...")
+        columns_to_add = [
+            ("url_fuente_principal", "TEXT"),
+            ("tipo_fuente_principal", "VARCHAR(100)"),
+            ("texto_fuente_principal", "TEXT"),
+            ("validada_por_fuente_principal", "BOOLEAN DEFAULT FALSE"),
+            ("numero_estado", "VARCHAR(100)"),
+            ("fecha_estado_electronico", "DATE"),
+            ("url_resumen_publicacion", "TEXT"),
+            ("url_cuadro", "TEXT"),
+            ("url_providencia", "TEXT"),
+            ("documentos_complementarios", "TEXT"),
+            ("match_fuerte", "BOOLEAN DEFAULT FALSE"),
+            ("match_type", "VARCHAR(100)"),
+            ("motivo_match", "TEXT"),
+            ("observacion", "TEXT")
+        ]
+        for col_name, col_type in columns_to_add:
+            try:
+                conn.execute(text(f"ALTER TABLE case_publications ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+            except Exception as e:
+                print(f"Error agregando columna {col_name} a case_publications: {e}")
+
         conn.commit()
     
-    print("✅ Migración Experta completada exitosamente.")
+    print("Migracion Experta completada exitosamente.")
 
 if __name__ == "__main__":
     migrate()

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   FileDown, Download, Calendar, ExternalLink, 
-  RefreshCw, Loader2, AlertCircle, FileText 
+  RefreshCw, Loader2, AlertCircle, FileText, CheckCircle2, HelpCircle
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -135,6 +135,16 @@ export function PublicacionesPanel({
     } catch { return dateString; }
   };
 
+  const parseComplementarios = (jsonStr?: string | null): Array<{ url: string; nombre: string; contiene_radicado?: boolean }> => {
+    if (!jsonStr) return [];
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   if (initialLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -228,61 +238,162 @@ export function PublicacionesPanel({
         </Card>
       ) : (
         (publications.length > 0) && (
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border rounded-lg overflow-hidden bg-card text-card-foreground">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[120px]">Fecha</TableHead>
-                  <TableHead className="w-[150px]">Tipo</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead className="w-[160px] text-right">Acción</TableHead>
+                  <TableHead className="w-[170px]">Fecha / Estado</TableHead>
+                  <TableHead className="w-[200px]">Validación / Análisis</TableHead>
+                  <TableHead>Detalle de Publicación</TableHead>
+                  <TableHead className="w-[280px] text-right">Documentos y Fuente</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {publications.map((pub) => (
                   <TableRow key={pub.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        {formatDate(pub.fecha_publicacion)}
+                    {/* FECHA / ESTADO */}
+                    <TableCell className="align-top space-y-1.5 py-4">
+                      {pub.fecha_estado_electronico && (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">Estado</span>
+                          <span className="font-medium text-foreground">{formatDate(pub.fecha_estado_electronico)}</span>
+                        </div>
+                      )}
+                      {pub.fecha_publicacion && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="text-[10px] uppercase font-bold bg-muted px-1.5 py-0.5 rounded shrink-0 font-medium">Pub.</span>
+                          <span>{formatDate(pub.fecha_publicacion)}</span>
+                        </div>
+                      )}
+                      {pub.numero_estado && (
+                        <div className="mt-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                            No. {pub.numero_estado}
+                          </span>
+                        </div>
+                      )}
+                    </TableCell>
+
+                    {/* VALIDACIÓN / ANÁLISIS */}
+                    <TableCell className="align-top space-y-2 py-4">
+                      {pub.match_fuerte ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <CheckCircle2 className="h-3 w-3 shrink-0" />
+                          Match Fuerte
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                          <HelpCircle className="h-3 w-3 shrink-0" />
+                          Match Parcial
+                        </div>
+                      )}
+                      
+                      {pub.match_type && (
+                        <div className="text-xs">
+                          <span className="font-bold text-muted-foreground text-[9px] uppercase bg-muted px-1.5 py-0.5 rounded">
+                            Tipo {pub.match_type}
+                          </span>
+                          {pub.motivo_match && (
+                            <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
+                              {pub.motivo_match}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {pub.observacion && (
+                        <p className="text-[10px] text-muted-foreground italic leading-tight mt-1 max-w-[180px]">
+                          {pub.observacion}
+                        </p>
+                      )}
+                    </TableCell>
+
+                    {/* DETALLE DE PUBLICACIÓN */}
+                    <TableCell className="align-top py-4 text-sm">
+                      <div className="font-semibold text-foreground mb-1">
+                        {pub.tipo_publicacion || 'Publicación'}
                       </div>
+                      <p className="text-muted-foreground text-xs leading-relaxed max-w-md">
+                        {pub.descripcion || 'Sin descripción disponible'}
+                      </p>
                     </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
-                        {pub.tipo_publicacion || 'Estado'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {pub.descripcion || 'Sin descripción disponible'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-col items-end gap-2">
-                        {pub.documento_url ? (
+
+                    {/* ACCIONES Y DOCUMENTOS */}
+                    <TableCell className="align-top text-right space-y-2 py-4">
+                      {/* Descarga Principal */}
+                      {pub.url_fuente_principal ? (
+                        <div>
+                          <a 
+                            href={pub.url_fuente_principal} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {pub.tipo_fuente_principal === 'resumen_publicacion' ? 'Ver Resumen Estado' : 
+                             pub.tipo_fuente_principal === 'cuadro_consultar_aqui' ? 'Ver Cuadro' : 
+                             pub.tipo_fuente_principal === 'documento_estado' ? 'Ver Documento Estado' : 
+                             'Ver Doc Principal'}
+                          </a>
+                        </div>
+                      ) : pub.documento_url ? (
+                        <div>
                           <a 
                             href={pub.documento_url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-sm text-blue-500 hover:text-blue-700 font-medium"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-3.5 w-3.5" />
                             Ver Documento
                           </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">Doc. no disponible</span>
-                        )}
-                        
-                        {pub.source_url && (
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Sin documento principal</span>
+                      )}
+
+                      {/* Documentos Complementarios */}
+                      {(() => {
+                        const comps = parseComplementarios(pub.documentos_complementarios);
+                        if (comps.length === 0) return null;
+                        return (
+                          <div className="mt-2 space-y-1 text-left flex flex-col items-end border-t pt-2 border-dashed">
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Doc. Complementarios</span>
+                            {comps.map((doc, idx) => (
+                              <a 
+                                key={idx} 
+                                href={doc.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:underline transition-colors max-w-[260px] truncate"
+                                title={doc.nombre}
+                              >
+                                {doc.contiene_radicado ? (
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                                ) : (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0 mx-0.5 animate-pulse" />
+                                )}
+                                <span className="truncate">{doc.nombre || `Doc Complementario ${idx + 1}`}</span>
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Enlace original */}
+                      {pub.source_url && (
+                        <div className="pt-1.5">
                           <a 
                             href={pub.source_url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors"
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
                           >
-                            <ExternalLink className="h-3 w-3" />
-                            Ver en Portal Original
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            Ver en Portal Judicial
                           </a>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

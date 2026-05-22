@@ -187,6 +187,22 @@ class CasePublication(Base):
     source_url = Column(Text, nullable=True)     # URL original del portal
     source_id = Column(String(255), unique=True, index=True, nullable=True) # ID único del portal
 
+    # Nuevos campos para validación y detalle
+    url_fuente_principal = Column(Text, nullable=True)
+    tipo_fuente_principal = Column(String(100), nullable=True)
+    texto_fuente_principal = Column(Text, nullable=True)
+    validada_por_fuente_principal = Column(Boolean, default=False, nullable=True)
+    numero_estado = Column(String(100), nullable=True)
+    fecha_estado_electronico = Column(Date, nullable=True)
+    url_resumen_publicacion = Column(Text, nullable=True)
+    url_cuadro = Column(Text, nullable=True)
+    url_providencia = Column(Text, nullable=True)
+    documentos_complementarios = Column(Text, nullable=True) # JSON serializado
+    match_fuerte = Column(Boolean, default=False, nullable=True)
+    match_type = Column(String(100), nullable=True)
+    motivo_match = Column(Text, nullable=True)
+    observacion = Column(Text, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 

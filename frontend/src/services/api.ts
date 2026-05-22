@@ -717,6 +717,21 @@ export type CasePublication = {
   source_url?: string | null;
   source_id?: string | null;
   created_at?: string | null;
+  
+  url_fuente_principal?: string | null;
+  tipo_fuente_principal?: string | null;
+  texto_fuente_principal?: string | null;
+  validada_por_fuente_principal?: boolean;
+  numero_estado?: string | null;
+  fecha_estado_electronico?: string | null;
+  url_resumen_publicacion?: string | null;
+  url_cuadro?: string | null;
+  url_providencia?: string | null;
+  documentos_complementarios?: string | null;
+  match_fuerte?: boolean;
+  match_type?: string | null;
+  motivo_match?: string | null;
+  observacion?: string | null;
 };
 
 export function getCasePublications(radicado: string) {
