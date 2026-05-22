@@ -3066,6 +3066,11 @@ async def events_logic(c: Case, db: Session):
                 # Si ya hay datos, el refresh se hace en segundo plano
                 asyncio.create_task(sync_case_events_background(c.id))
 
+        # 2b. Disparar búsqueda automática de publicaciones si existen actuaciones relevantes
+        has_relevant = any(is_relevant_actuacion(e.title) for e in db_events)
+        if has_relevant:
+            asyncio.create_task(save_new_publications_task(c.id))
+
         # 3. Formatear para el frontend
         result_items = []
         for e in db_events:
@@ -3696,6 +3701,18 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
                 "documento_url": p.documento_url,
                 "source_url": p.source_url,
                 "source_id": p.source_id,
+                "fecha_estado_electronico": p.fecha_estado_electronico.isoformat() if p.fecha_estado_electronico else None,
+                "numero_estado": p.numero_estado,
+                "match_fuerte": p.match_fuerte,
+                "match_type": p.match_type,
+                "motivo_match": p.motivo_match,
+                "url_fuente_principal": p.url_fuente_principal,
+                "tipo_fuente_principal": p.tipo_fuente_principal,
+                "documentos_complementarios": p.documentos_complementarios,
+                "url_resumen_publicacion": p.url_resumen_publicacion,
+                "url_cuadro": p.url_cuadro,
+                "url_providencia": p.url_providencia,
+                "observacion": p.observacion,
             }
             for p in pubs
         ]
@@ -3756,6 +3773,165 @@ async def get_sync_logs(case_id: int, db: Session = Depends(get_db)):
                      {"cid": case_id}).fetchall()
     return [{"message": r[0], "at": r[1].isoformat()} for r in logs]
 
+class DebugSearchBody(BaseModel):
+    radicado: str
+    fecha_actuacion: str
+    demandante: Optional[str] = ""
+    demandado: Optional[str] = ""
+
+@app.post("/api/publicaciones/buscar/{radicado}")
+@app.post("/publicaciones/buscar/{radicado}")
+async def force_sync_publications_by_radicado(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    
+    case.sync_pub_progress = 5
+    case.sync_pub_status = "Iniciando búsqueda forzada..."
+    db.commit()
+    
+    async def run_force_sync():
+        async with sync_pub_semaphore:
+            db_session = SessionLocal()
+            try:
+                c = db_session.query(Case).filter(Case.id == case.id).first()
+                if c:
+                    await save_new_publications(c, db_session, force=True)
+            except Exception as e:
+                print(f"[force_sync] Error: {e}")
+            finally:
+                db_session.close()
+
+    background_tasks.add_task(run_force_sync)
+    return {"ok": True, "message": "Búsqueda forzada iniciada en segundo plano."}
+
+@app.post("/api/publicaciones/debug")
+@app.post("/publicaciones/debug")
+async def debug_publications_search(body: DebugSearchBody):
+    trace_logs = []
+    
+    def log(msg: str):
+        print(f"[debug-endpoint] {msg}")
+        trace_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        
+    log(f"Iniciando debug para radicado: {body.radicado} | Fecha actuación: {body.fecha_actuacion}")
+    
+    rad_digits = "".join(filter(str.isdigit, body.radicado))
+    if len(rad_digits) < 21:
+        log("Error: Radicado no tiene al menos 21 dígitos numéricos.")
+        return {"ok": False, "trace": trace_logs}
+        
+    from backend.service.publicaciones import (
+        parse_fecha_pub, get_month_range, build_portal_search_url,
+        HEADERS, parse_result_cards, filter_cards_by_despacho,
+        filter_cards_by_category, detect_main_sources, extract_text_content,
+        validate_strong_match, revisar_documentos_complementarios
+    )
+    import calendar
+    import json
+    
+    fecha_act = parse_fecha_pub(body.fecha_actuacion)
+    if not fecha_act:
+        log(f"Error parsing fecha_actuacion: {body.fecha_actuacion}")
+        return {"ok": False, "trace": trace_logs}
+        
+    fecha_ini_str, fecha_fin_str = get_month_range(fecha_act)
+    log(f"Rango de búsqueda calculado: {fecha_ini_str} a {fecha_fin_str}")
+    
+    despacho_codigo = rad_digits[:12]
+    log(f"Código de despacho: {despacho_codigo}")
+    
+    search_url = build_portal_search_url(despacho_codigo, fecha_ini_str, fecha_fin_str)
+    log(f"URL de búsqueda construida: {search_url}")
+    
+    candidates_found = []
+    
+    async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
+        try:
+            log("Enviando petición HTTP GET al portal...")
+            resp = await client.get(search_url)
+            log(f"Respuesta del portal: HTTP {resp.status_code}")
+            
+            if resp.status_code != 200:
+                log("Error: No se pudo obtener respuesta exitosa del portal.")
+                return {"ok": False, "trace": trace_logs}
+                
+            raw_cards = parse_result_cards(resp.text)
+            log(f"Tarjetas crudas parseadas: {len(raw_cards)}")
+            
+            filtered_by_despacho = filter_cards_by_despacho(raw_cards, despacho_codigo)
+            log(f"Tarjetas filtradas por despacho ({despacho_codigo}): {len(filtered_by_despacho)}")
+            
+            filtered_by_cat = filter_cards_by_category(filtered_by_despacho)
+            log(f"Tarjetas filtradas por categoría relevante: {len(filtered_by_cat)}")
+            
+            for idx, card in enumerate(filtered_by_cat):
+                log(f"--- Procesando Candidato #{idx+1}: {card['title']} ---")
+                log(f"URL detalle: {card['detail_url']}")
+                log(f"Categoría: {card['categoria']} | Fecha: {card['fecha_publicacion']}")
+                
+                detail_resp = await client.get(card["detail_url"])
+                if detail_resp.status_code != 200:
+                    log(f"Error: No se pudo obtener detalle para {card['title']}")
+                    continue
+                    
+                sources = detect_main_sources(detail_resp.text)
+                log(f"Fuentes principales detectadas: {sources}")
+                
+                validated_any = False
+                matched_source = None
+                
+                for source in sources:
+                    s_url = source["url"]
+                    s_tipo = source["tipo"]
+                    log(f"Descargando y validando fuente ({s_tipo}): {s_url}")
+                    
+                    doc_text = await extract_text_content(s_url, client)
+                    if not doc_text:
+                        log(f"Aviso: No se pudo extraer texto de {s_url}")
+                        continue
+                        
+                    log(f"Texto extraído de la fuente ({len(doc_text)} caracteres). Ejecutando match estricto...")
+                    match_res = validate_strong_match(doc_text, body.radicado, body.demandante, body.demandado)
+                    
+                    log(f"Resultado validación: {match_res.is_valid} | Tipo: {match_res.match_type} | Motivo: {match_res.reasons}")
+                    
+                    if match_res.is_valid:
+                        validated_any = True
+                        matched_source = {
+                            "url": s_url,
+                            "tipo": s_tipo,
+                            "match_type": match_res.match_type,
+                            "motivo": match_res.reasons
+                        }
+                        break
+                
+                comp_docs = []
+                if validated_any:
+                    log("Candidato validado con éxito. Revisando documentos complementarios...")
+                    comp_docs = await revisar_documentos_complementarios(detail_resp.text, body.radicado, [s["url"] for s in sources if "url" in s])
+                    log(f"Documentos complementarios revisados: {len(comp_docs)}")
+                else:
+                    log("Descartado: Ninguna fuente principal contiene coincidencia fuerte.")
+                
+                candidates_found.append({
+                    "card": card,
+                    "validado": validated_any,
+                    "matched_source": matched_source,
+                    "documentos_complementarios": comp_docs
+                })
+                
+        except Exception as e:
+            import traceback
+            log(f"Error inesperado en debug: {e}")
+            log(traceback.format_exc())
+            
+    return {
+        "ok": True,
+        "trace": trace_logs,
+        "candidates": candidates_found
+    }
+
 # Semáforo global para evitar saturación y bloqueos de DB (Máximo 2 sincronizaciones pesadas a la vez)
 sync_pub_semaphore = asyncio.Semaphore(2)
 
@@ -3782,6 +3958,19 @@ async def run_sync_publications_task(radicado: str):
         finally:
             db.close()
 
+async def save_new_publications_task(case_id: int):
+    """Wrapper task to run the sync logic in the background, avoiding NameError."""
+    async with sync_pub_semaphore:
+        db = SessionLocal()
+        try:
+            case = db.query(Case).filter(Case.id == case_id).first()
+            if case:
+                await save_new_publications(case, db)
+        except Exception as e:
+            print(f"[save_new_publications_task] Error: {e}")
+        finally:
+            db.close()
+
 def update_sync_progress(db: Session, case_id: int, progress: int, status: str = None):
     """Actualiza el progreso y guarda un log en la DB para diagnóstico."""
     try:
@@ -3804,75 +3993,124 @@ def update_sync_progress(db: Session, case_id: int, progress: int, status: str =
         print(f"[progress-error] {e}")
         db.rollback()
 
-async def save_new_publications(case: Case, db: Session):
+async def save_new_publications(case: Case, db: Session, force: bool = False):
     try:
-        from backend.service.publicaciones import is_relevant_actuacion, consultar_publicaciones_rango, parse_fecha_pub, validate_content, extract_text_content
-        from backend.models import CaseEvent, CasePublication
+        from backend.service.publicaciones import (
+            is_relevant_actuacion, consultar_publicaciones_rango, parse_fecha_pub,
+            guardar_estado_busqueda, guardar_publicacion_validada
+        )
+        from backend.models import CaseEvent, CasePublication, CasePublicationSearch
         import asyncio
-        import httpx
+        from datetime import datetime, timedelta, date
 
         # 0. Iniciar progreso
-        # LOG DE EMERGENCIA EN ARCHIVO
         with open("sync_emergency.log", "a") as f:
-            f.write(f"[{datetime.now()}] Iniciando tarea para {case.radicado} (ID: {case.id})\n")
+            f.write(f"[{datetime.now()}] Iniciando tarea para {case.radicado} (ID: {case.id}) | Force: {force}\n")
                 
-        update_sync_progress(db, case.id, 5, "Iniciando limpieza y búsqueda...")
+        update_sync_progress(db, case.id, 5, "Iniciando búsqueda...")
         
-        # LOG DE DEBUG LOCAL
         with open("sync_debug.log", "a") as f_log:
-            f_log.write(f"\n[{datetime.now()}] SYNC START: {case.radicado}")
-
-        try:
-            # --- LIMPIEZA ---
-            db.execute(text("SET statement_timeout = 5000")) 
-            db.execute(text("DELETE FROM case_publications WHERE case_id = :cid"), {"cid": case.id})
-            db.commit()
-            update_sync_progress(db, case.id, 8)
-        except Exception as e_cleanup:
-            print(f"[cleanup] Error en limpieza: {e_cleanup}")
-            db.rollback()
-            try: db.execute(text("SET statement_timeout = 0")) 
-            except: pass
+            f_log.write(f"\n[{datetime.now()}] SYNC START: {case.radicado} | Force: {force}")
 
         update_sync_progress(db, case.id, 10, "Analizando historial de actuaciones...")
         
-        # 1. Obtener actuaciones del caso (Fijación, Estado, Auto según Paso a Paso)
+        # 1. Obtener actuaciones del caso
         eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).order_by(CaseEvent.event_date.desc()).all()
         
-        # Agrupar por mes/año para optimizar (una búsqueda por mes)
-        months_to_check = set()
+        # Filtrar y agrupar actuaciones relevantes por fecha exacta
+        actuaciones_relevantes = []
+        seen_dates = set()
         for ev in eventos:
-            act_text = (getattr(ev, "title", "") or getattr(ev, "actuacion", "") or "").lower()
-            if any(k in act_text for k in ["fijación", "fijacion", "estado", "auto"]):
+            act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") or ""
+            if is_relevant_actuacion(act_text):
                 raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
                 if raw_date:
                     if isinstance(raw_date, (date, datetime)):
                         dt = raw_date
                     else:
-                        try: dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
-                        except: continue
-                    months_to_check.add((dt.year, dt.month, dt.strftime("%Y-%m-%d")))
+                        try:
+                            dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
+                        except:
+                            continue
+                    
+                    if isinstance(dt, datetime):
+                        dt = dt.date()
+                    if dt not in seen_dates:
+                        seen_dates.add(dt)
+                        actuaciones_relevantes.append(dt)
 
-        if not months_to_check:
-            update_sync_progress(db, case.id, 100, "No se detectaron actuaciones de tipo Auto/Estado.")
+        if not actuaciones_relevantes:
+            update_sync_progress(db, case.id, 100, "No se detectaron actuaciones relevantes.")
             return
 
-        # 2. Consultar scraper por cada mes único
+        # Para cada actuación relevante, comprobamos si ya se buscó o si debemos buscar
         found_pubs = []
-        months_list = sorted(list(months_to_check), reverse=True)
-        total_searches = len(months_list)
+        total_searches = len(actuaciones_relevantes)
         
-        for i, (year, month, f_act_str) in enumerate(months_list):
+        for i, dt in enumerate(actuaciones_relevantes):
             prog = 10 + int((i / total_searches) * 85)
-            month_name = MONTHS_ES[month-1] if 1 <= month <= 12 else str(month)
-            update_sync_progress(db, case.id, prog, f"Buscando en {month_name} {year}...")
+            month_name = MONTHS_ES[dt.month-1] if 1 <= dt.month <= 12 else str(dt.month)
+            update_sync_progress(db, case.id, prog, f"Buscando para actuación del {dt.day} {month_name}...")
+            
+            f_act_str = dt.strftime("%Y-%m-%d")
+            
+            import calendar
+            fecha_inicio_str = f"{dt.year}-{dt.month:02d}-01"
+            last_day = calendar.monthrange(dt.year, dt.month)[1]
+            fecha_fin_str = f"{dt.year}-{dt.month:02d}-{last_day:02d}"
+            
+            # Comprobar log de búsquedas
+            search_record = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.radicado == case.radicado,
+                CasePublicationSearch.fecha_actuacion == dt
+            ).first()
+            
+            should_search = True
+            if search_record and not force:
+                if search_record.estado in ["encontrada", "buscando"]:
+                    print(f"[sync] Saltando busqueda para {case.radicado} el {f_act_str} (estado: {search_record.estado})")
+                    should_search = False
+                elif search_record.estado in ["sin_resultado", "error"] and search_record.fecha_ultima_busqueda:
+                    if datetime.now() - search_record.fecha_ultima_busqueda < timedelta(hours=24):
+                        print(f"[sync] Saltando busqueda reciente (<24h) para {case.radicado} el {f_act_str} (estado: {search_record.estado})")
+                        should_search = False
+            
+            if not should_search:
+                continue
+                
+            # Registrar inicio de búsqueda en DB
+            guardar_estado_busqueda(db, {
+                "radicado": case.radicado,
+                "fecha_actuacion": dt,
+                "fecha_inicio_busqueda": parse_fecha_pub(fecha_inicio_str),
+                "fecha_fin_busqueda": parse_fecha_pub(fecha_fin_str),
+                "despacho_codigo": case.radicado[:12],
+                "estado_busqueda": "buscando",
+                "intento_manual": force
+            })
             
             try:
                 results = await consultar_publicaciones_rango(case.radicado, f_act_str, case.demandante, case.demandado)
+                
+                estado_fin = "encontrada" if results else "sin_resultado"
+                guardar_estado_busqueda(db, {
+                    "radicado": case.radicado,
+                    "fecha_actuacion": dt,
+                    "estado_busqueda": estado_fin,
+                    "intento_manual": force
+                })
+                
                 if results:
                     found_pubs.extend(results)
             except Exception as e:
-                print(f"[sync] Error en búsqueda de {month}/{year}: {e}")
+                print(f"[sync] Error en búsqueda de {f_act_str}: {e}")
+                guardar_estado_busqueda(db, {
+                    "radicado": case.radicado,
+                    "fecha_actuacion": dt,
+                    "estado_busqueda": "error",
+                    "error": str(e),
+                    "intento_manual": force
+                })
 
         # 3. Guardar resultados
         update_sync_progress(db, case.id, 96, "Guardando publicaciones encontradas...")
@@ -3880,57 +4118,31 @@ async def save_new_publications(case: Case, db: Session):
         seen_ids = set()
         for p in found_pubs:
             sid = p.get("source_id")
-            if not sid or sid in seen_ids: continue
+            if not sid or sid in seen_ids:
+                continue
             seen_ids.add(sid)
             
-            f_pub = parse_fecha_pub(p.get("fecha"))
-            f_est = parse_fecha_pub(p.get("fecha_estado_electronico")) if p.get("fecha_estado_electronico") else f_pub
-            new_pub = CasePublication(
-                case_id=case.id,
-                fecha_publicacion=f_pub,
-                tipo_publicacion=p.get("tipo"),
-                descripcion=p.get("snippet") or p.get("descripcion"),
-                documento_url=p.get("documento_url"),
-                source_url=p.get("source_url"),
-                source_id=sid,
-                url_fuente_principal=p.get("url_fuente_principal"),
-                tipo_fuente_principal=p.get("tipo_fuente_principal"),
-                texto_fuente_principal=p.get("texto_fuente_principal"),
-                validada_por_fuente_principal=p.get("validada_por_fuente_principal", False),
-                numero_estado=p.get("numero_estado"),
-                fecha_estado_electronico=f_est,
-                url_resumen_publicacion=p.get("url_resumen_publicacion"),
-                url_cuadro=p.get("url_cuadro"),
-                url_providencia=p.get("url_providencia"),
-                documentos_complementarios=p.get("documentos_complementarios"),
-                match_fuerte=p.get("match_fuerte", False),
-                match_type=p.get("match_type"),
-                motivo_match=p.get("motivo_match"),
-                observacion=p.get("observacion")
-            )
-            db.add(new_pub)
+            p["case_id"] = case.id
+            p["radicado"] = case.radicado
+            if "fecha_publicacion" not in p and "fecha" in p:
+                p["fecha_publicacion"] = p["fecha"]
+                
+            guardar_publicacion_validada(db, p)
             saved_count += 1
             
-        db.commit()
-        update_sync_progress(db, case.id, 100, f"Completado: {saved_count} publicaciones guardadas.")
+        update_sync_progress(db, case.id, 100, f"Completado: {saved_count} publicaciones procesadas.")
         
-        # Limpiar status después de un momento
         await asyncio.sleep(5)
         update_sync_progress(db, case.id, 0, "")
 
     except Exception as e:
         print(f"[save_new_pubs] Error general: {e}")
         update_sync_progress(db, case.id, 0, f"Error: {str(e)[:40]}")
-                
-    except Exception as e:
-        print(f"[refresh] Error guardando publicaciones: {e}")
         try:
             case.sync_pub_status = f"Error: {str(e)[:50]}"
             case.sync_pub_progress = 0
             db.commit()
         except: pass
-        case.sync_pub_progress = 0
-        db.commit()
 
 @app.post("/admin/backfill-publicaciones")
 async def backfill_publicaciones(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):

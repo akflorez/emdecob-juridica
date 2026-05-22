@@ -354,7 +354,7 @@ export function PublicacionesPanel({
 
                       {/* Documentos Complementarios */}
                       {(() => {
-                        const comps = parseComplementarios(pub.documentos_complementarios);
+                        const comps = parseComplementarios(pub.documentos_complementarios).filter(doc => doc.contiene_radicado);
                         if (comps.length === 0) return null;
                         return (
                           <div className="mt-2 space-y-1 text-left flex flex-col items-end border-t pt-2 border-dashed">

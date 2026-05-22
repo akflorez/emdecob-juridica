@@ -10,7 +10,8 @@ from backend.db import engine, Base
 from backend.models import (
     Case, CaseEvent, InvalidRadicado, User, CasePublication, SearchJob,
     IntegrationConfig, Workspace, WorkspaceMember, Folder, ProjectList, Task,
-    TaskComment, TaskChecklistItem, TaskAttachment, Tag, task_tags
+    TaskComment, TaskChecklistItem, TaskAttachment, Tag, task_tags,
+    CasePublicationSearch
 )
 
 def run_migrations():

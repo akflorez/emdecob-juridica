@@ -206,6 +206,32 @@ class CasePublication(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
+class CasePublicationSearch(Base):
+    """Historial y estado de las búsquedas de publicaciones procesales"""
+    __tablename__ = "publicaciones_busquedas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    radicado = Column(String(60), index=True, nullable=False)
+    fecha_actuacion = Column(Date, nullable=False)
+    fecha_inicio_busqueda = Column(Date, nullable=False)
+    fecha_fin_busqueda = Column(Date, nullable=False)
+    despacho_codigo = Column(String(20), nullable=True)
+    estado = Column(String(50), default="pendiente", nullable=False) # Para compatibilidad con lista de campos
+    estado_busqueda = Column(String(50), default="pendiente", nullable=False) # Para compatibilidad con guardar_estado_busqueda
+    fecha_ultima_busqueda = Column(DateTime, nullable=True)
+    intento_manual = Column(Boolean, default=False)
+    error = Column(Text, nullable=True)
+    debug = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class SearchJob(Base):
     """Trabajos de búsqueda masiva (nombres o radicados)"""
     __tablename__ = "search_jobs"
