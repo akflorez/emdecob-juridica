@@ -3738,7 +3738,7 @@ async def sync_case_publications(radicado: str, background_tasks: BackgroundTask
     case.sync_pub_status = "Iniciando búsqueda..."
     db.commit()
     
-    background_tasks.add_task(run_sync_publications_task, case.radicado)
+    background_tasks.add_task(run_sync_publications_task, case.radicado, True)
     return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
 @app.post("/api/cases/id/{case_id}/refresh-publicaciones")
@@ -3752,7 +3752,7 @@ async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundT
     case.sync_pub_status = "Iniciando búsqueda..."
     db.commit()
     
-    background_tasks.add_task(run_sync_publications_task, case.radicado)
+    background_tasks.add_task(run_sync_publications_task, case.radicado, True)
     return {"ok": True, "message": "Sincronización iniciada"}
 
 @app.post("/api/cases/{radicado}/reset-sync")
@@ -3935,7 +3935,7 @@ async def debug_publications_search(body: DebugSearchBody):
 # Semáforo global para evitar saturación y bloqueos de DB (Máximo 2 sincronizaciones pesadas a la vez)
 sync_pub_semaphore = asyncio.Semaphore(2)
 
-async def run_sync_publications_task(radicado: str):
+async def run_sync_publications_task(radicado: str, force: bool = False):
     """Wrapper para ejecutar la sincronización con su propia sesión de DB."""
     async with sync_pub_semaphore:
         db = SessionLocal()
@@ -3943,7 +3943,7 @@ async def run_sync_publications_task(radicado: str):
             # Refresh del objeto en esta sesión
             case = db.query(Case).filter(Case.radicado == radicado).first()
             if case:
-                await save_new_publications(case, db)
+                await save_new_publications(case, db, force=force)
         except Exception as e:
             print(f"[sync_task] Error crítico: {e}")
             # Limpiar estado en caso de error fatal
