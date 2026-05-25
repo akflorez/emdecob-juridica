@@ -91,7 +91,7 @@ export function PublicacionesPanel({
         } catch (e) {
           console.error("Error polling progress:", e);
         }
-      }, 1000); // Polling agresivo de 1 segundo para feedback instantáneo
+      }, 5000); // Polling de 5 segundos para evitar bloqueos de firewall
     }
 
     return () => { if (interval) clearInterval(interval); };

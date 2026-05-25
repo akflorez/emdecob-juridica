@@ -74,7 +74,7 @@ export default function BulkSearchPage() {
           } catch (error) {
             console.error("Error polling job:", error);
           }
-        }, 3000);
+        }, 10000); // Polling de 10 segundos para no saturar Cloudflare
       }
     } else if (pollInterval.current) {
       clearInterval(pollInterval.current);

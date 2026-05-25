@@ -164,7 +164,7 @@ export default function CasosPage() {
         } catch (e) {
           console.error('Error polling bulk sync status:', e);
         }
-      }, 3000);
+      }, 10000);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [isSyncingPublications, bulkSyncProgress, API_BASE]);
