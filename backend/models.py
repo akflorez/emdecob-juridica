@@ -176,6 +176,9 @@ class User(Base):
 class CasePublication(Base):
     """Publicaciones procesales (Estados/Edictos) del portal nuevo"""
     __tablename__ = "case_publications"
+    __table_args__ = (
+        UniqueConstraint('case_id', 'source_id', name='uq_case_publication_case_source'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)

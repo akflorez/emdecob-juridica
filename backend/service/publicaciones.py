@@ -967,12 +967,12 @@ async def consultar_publicaciones_rango(
             # Log individual cards
             for card in raw_cards:
                 is_accepted = card in candidates
-                motivo = "" if is_accepted else "Descartado por despacho o categoria"
-                print(f"[PUBLICACIONES][CARD]\nmes={year}-{month:02d}\ncategoria={card.get('categoria')}\nfecha_publicacion={card.get('fecha_publicacion')}\ndespacho_detectado={card.get('despacho')}\nurl_detalle={card.get('detail_url')}\naceptada={'true' if is_accepted else 'false'}\nmotivo_descarte={motivo}")
+                # motivo = "" if is_accepted else "Descartado por despacho o categoria"
+                # print(f"[PUBLICACIONES][CARD]\nmes={year}-{month:02d}\ncategoria={card.get('categoria')}\nfecha_publicacion={card.get('fecha_publicacion')}\ndespacho_detectado={card.get('despacho')}\nurl_detalle={card.get('detail_url')}\naceptada={'true' if is_accepted else 'false'}\nmotivo_descarte={motivo}")
 
             print(f"[scraper] Candidatos validos encontrados: {len(candidates)}")
             
-            sem = asyncio.Semaphore(2)
+            sem = asyncio.Semaphore(5)
 
             async def process_candidate(cand):
                 async with sem:
