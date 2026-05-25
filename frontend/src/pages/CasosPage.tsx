@@ -141,10 +141,33 @@ export default function CasosPage() {
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
   const [abogadosList, setAbogadosList] = useState<string[]>([]);
   const [isSyncingPublications, setIsSyncingPublications] = useState(false);
+  const [bulkSyncProgress, setBulkSyncProgress] = useState<{running: boolean; reviewed: number; total: number; percent: number} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const API_BASE = (import.meta.env.VITE_API_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '');
 
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Polling del progreso de sincronización masiva
+  useEffect(() => {
+    let interval: any;
+    if (isSyncingPublications || (bulkSyncProgress && bulkSyncProgress.running)) {
+      interval = setInterval(async () => {
+        try {
+          const resp = await fetch(`${API_BASE}/cases/sync-publications-status`);
+          const data = await resp.json();
+          setBulkSyncProgress(data);
+          if (!data.running) {
+            setIsSyncingPublications(false);
+            clearInterval(interval);
+          }
+        } catch (e) {
+          console.error('Error polling bulk sync status:', e);
+        }
+      }, 3000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [isSyncingPublications, bulkSyncProgress, API_BASE]);
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return "—";
@@ -346,17 +369,28 @@ export default function CasosPage() {
   };
 
   const handleSyncAllPublicaciones = async () => {
-    if (!confirm("¿Iniciar sincronización masiva de Publicaciones Procesales para todos los casos?\n\nEste proceso se ejecuta en segundo plano y puede tardar varios minutos.")) return;
+    if (bulkSyncProgress?.running) {
+      toast({
+        title: 'Sincronización en curso',
+        description: `Revisados ${bulkSyncProgress.reviewed} de ${bulkSyncProgress.total} radicados (${bulkSyncProgress.percent}%)`,
+      });
+      return;
+    }
+    if (!confirm('¿Iniciar sincronización masiva de Publicaciones Procesales para todos los casos?\n\nEste proceso se ejecuta en segundo plano y puede tardar varios minutos.')) return;
     setIsSyncingPublications(true);
+    setBulkSyncProgress(null);
     try {
       const result = await syncAllPublications();
-      toast({
-        title: "Sincronización iniciada",
-        description: result.message || `Se procesarán ${result.total} casos en segundo plano.`,
-      });
+      if (!result.ok) {
+        toast({ title: 'Aviso', description: result.message });
+      } else {
+        toast({
+          title: 'Sincronización iniciada',
+          description: result.message || `Se procesarán ${result.total} casos en segundo plano.`,
+        });
+      }
     } catch (error: any) {
-      toast({ title: "Error", description: error?.message || "No se pudo iniciar la sincronización", variant: "destructive" });
-    } finally {
+      toast({ title: 'Error', description: error?.message || 'No se pudo iniciar la sincronización', variant: 'destructive' });
       setIsSyncingPublications(false);
     }
   };
@@ -632,13 +666,21 @@ export default function CasosPage() {
 
           <Button
             onClick={handleSyncAllPublicaciones}
-            disabled={isSyncingPublications}
+            disabled={false}
             variant="outline"
             size="sm"
-            className="border-emerald-500/50 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+            className={`border-emerald-500/50 hover:bg-emerald-500/10 dark:text-emerald-400 ${
+              bulkSyncProgress?.running
+                ? 'text-emerald-600 border-emerald-500'
+                : 'text-emerald-700'
+            }`}
           >
-            {isSyncingPublications ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Sincronizar publicaciones
+            {(isSyncingPublications || bulkSyncProgress?.running)
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <RefreshCw className="h-4 w-4 mr-2" />}
+            {bulkSyncProgress?.running
+              ? `Publicaciones: ${bulkSyncProgress.reviewed}/${bulkSyncProgress.total}`
+              : 'Sincronizar publicaciones'}
           </Button>
           <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="default" size="sm">
             {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}

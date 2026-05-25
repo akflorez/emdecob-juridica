@@ -3843,6 +3843,27 @@ async def reset_case_sync(radicado: str, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "message": "Estado de sincronización reseteado."}
 
+# Estado global del proceso de sincronización masiva (en memoria, suficiente para un proceso)
+_bulk_sync_state = {
+    "running": False,
+    "total": 0,
+    "reviewed": 0,
+    "errors": 0,
+}
+
+@app.get("/api/cases/sync-publications-status")
+@app.get("/cases/sync-publications-status")
+async def get_sync_publications_status():
+    """Devuelve el progreso actual de la sincronización masiva."""
+    return {
+        "running": _bulk_sync_state["running"],
+        "total": _bulk_sync_state["total"],
+        "reviewed": _bulk_sync_state["reviewed"],
+        "errors": _bulk_sync_state["errors"],
+        "percent": round((_bulk_sync_state["reviewed"] / _bulk_sync_state["total"]) * 100)
+                   if _bulk_sync_state["total"] > 0 else 0,
+    }
+
 @app.post("/api/cases/sync-all-publications")
 @app.post("/cases/sync-all-publications")
 async def sync_all_publications(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -3850,22 +3871,39 @@ async def sync_all_publications(background_tasks: BackgroundTasks, db: Session =
     Inicia la sincronización masiva de publicaciones procesales para todos los casos válidos.
     El proceso se ejecuta en segundo plano con baja concurrencia para no saturar el portal.
     """
-    cases = db.query(Case).filter(Case.is_valid == True).all()
+    # Casos válidos = los que ya tienen juzgado asignado (fueron encontrados en Rama Judicial)
+    cases = db.query(Case).filter(Case.juzgado.isnot(None)).all()
     total = len(cases)
     if total == 0:
         return {"ok": True, "message": "No hay casos válidos para sincronizar.", "total": 0}
 
+    if _bulk_sync_state["running"]:
+        return {
+            "ok": False,
+            "message": f"Ya hay una sincronización en curso ({_bulk_sync_state['reviewed']}/{_bulk_sync_state['total']} revisados).",
+            "total": _bulk_sync_state["total"],
+            "reviewed": _bulk_sync_state["reviewed"],
+        }
+
     async def run_bulk_sync():
+        _bulk_sync_state["running"] = True
+        _bulk_sync_state["total"] = total
+        _bulk_sync_state["reviewed"] = 0
+        _bulk_sync_state["errors"] = 0
         db_bulk = SessionLocal()
         try:
-            all_cases = db_bulk.query(Case).filter(Case.is_valid == True).all()
-            for c in all_cases:
+            radicados = [c.radicado for c in db_bulk.query(Case).filter(Case.juzgado.isnot(None)).all()]
+            for radicado in radicados:
                 try:
-                    await run_sync_publications_task(c.radicado, force=False)
+                    await run_sync_publications_task(radicado, force=False)
                 except Exception as e:
-                    print(f"[bulk_sync] Error en {c.radicado}: {e}")
+                    _bulk_sync_state["errors"] += 1
+                    print(f"[bulk_sync] Error en {radicado}: {e}")
+                finally:
+                    _bulk_sync_state["reviewed"] += 1
         finally:
             db_bulk.close()
+            _bulk_sync_state["running"] = False
 
     background_tasks.add_task(run_bulk_sync)
     return {
