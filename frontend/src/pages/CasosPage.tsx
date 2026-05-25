@@ -634,6 +634,39 @@ export default function CasosPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+
+      {/* ─── BANNER PROGRESO SINCRONIZACIÓN MASIVA ─── */}
+      {(bulkSyncProgress?.running || isSyncingPublications) && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 animate-in fade-in slide-in-from-top-2 duration-500">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 text-emerald-600 animate-spin" />
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                Sincronizando Publicaciones Procesales...
+              </span>
+            </div>
+            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+              {bulkSyncProgress
+                ? `${bulkSyncProgress.reviewed} / ${bulkSyncProgress.total} radicados (${bulkSyncProgress.percent}%)`
+                : 'Iniciando...'}
+            </span>
+          </div>
+          {/* Barra de progreso manual con div */}
+          <div className="w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full h-3 overflow-hidden">
+            <div
+              className="h-3 bg-emerald-500 rounded-full transition-all duration-700 ease-in-out"
+              style={{ width: `${bulkSyncProgress?.percent ?? 2}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2 text-xs text-emerald-600/70 dark:text-emerald-400/70">
+            <span>Revisando el portal de Publicaciones Procesales de Rama Judicial para cada radicado</span>
+            {(bulkSyncProgress?.errors ?? 0) > 0 && (
+              <span className="text-amber-600 font-medium">{bulkSyncProgress!.errors} con error</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Todos los Casos</h1>
