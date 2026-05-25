@@ -3692,30 +3692,72 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
         
     pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
     
-    # Si no hay publicaciones guardadas, pero existen actuaciones relevantes,
-    # el backend debe iniciar automáticamente la búsqueda.
-    if not pubs:
-        from backend.models import CaseEvent, CasePublicationSearch
-        from backend.service.publicaciones import is_relevant_actuacion
-        
-        eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
-        has_relevant = any(is_relevant_actuacion(getattr(ev, "title", "") or "") for ev in eventos)
-        if has_relevant:
-            # Check if we are already searching or if search is recent
-            is_active_search = case.sync_pub_status in ["buscando", "Iniciando búsqueda...", "Buscando publicaciones procesales...", "Iniciando..."]
+    # Búsqueda automática basada en actuaciones relevantes
+    from backend.models import CaseEvent, CasePublicationSearch
+    from backend.service.publicaciones import is_relevant_actuacion, get_search_months_for_actuacion
+    import calendar
+    from datetime import datetime, timedelta, date
+    
+    eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
+    actuaciones_relevantes = []
+    for ev in eventos:
+        act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") or ""
+        if is_relevant_actuacion(act_text):
+            raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
+            if raw_date:
+                if isinstance(raw_date, (date, datetime)):
+                    dt = raw_date
+                else:
+                    try:
+                        dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
+                    except:
+                        continue
+                if isinstance(dt, datetime):
+                    dt = dt.date()
+                actuaciones_relevantes.append(dt)
+                
+    if actuaciones_relevantes:
+        meses_a_buscar = set()
+        for dt in actuaciones_relevantes:
+            for mes in get_search_months_for_actuacion(dt):
+                meses_a_buscar.add(mes)
+                
+        necesita_busqueda = False
+        for year, month in meses_a_buscar:
+            fecha_inicio = date(year, month, 1)
+            fecha_fin = date(year, month, calendar.monthrange(year, month)[1])
             
-            # Let's check search records to see if there was any search in the last 24h
-            from datetime import datetime, timedelta
+            # Verificar si ya existe publicación válida para este mes
+            ya_existe_valida = db.query(CasePublication).filter(
+                CasePublication.case_id == case.id,
+                CasePublication.match_fuerte == True,
+                (
+                    ((CasePublication.fecha_publicacion >= fecha_inicio) & (CasePublication.fecha_publicacion <= fecha_fin)) |
+                    ((CasePublication.fecha_estado_electronico >= fecha_inicio) & (CasePublication.fecha_estado_electronico <= fecha_fin))
+                )
+            ).count() > 0
+            
+            if ya_existe_valida:
+                continue
+                
+            # Verificar si hay una búsqueda reciente (<24h)
             recent_search = db.query(CasePublicationSearch).filter(
                 CasePublicationSearch.radicado == case.radicado,
+                CasePublicationSearch.fecha_inicio_busqueda == fecha_inicio,
                 CasePublicationSearch.fecha_ultima_busqueda >= datetime.now() - timedelta(hours=24)
             ).first()
             
-            if not is_active_search and not recent_search:
+            if not recent_search:
+                necesita_busqueda = True
+                break
+                
+        if necesita_busqueda:
+            is_active_search = case.sync_pub_status in ["buscando", "Iniciando búsqueda...", "Buscando publicaciones procesales...", "Iniciando...", "Iniciando búsqueda forzada..."]
+            if not is_active_search:
                 case.sync_pub_progress = 5
                 case.sync_pub_status = "Buscando publicaciones procesales..."
                 db.commit()
-                # Run background task
+                # Ejecutar tarea en segundo plano
                 asyncio.create_task(save_new_publications_task(case.id))
                 
     return {
