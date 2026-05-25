@@ -96,6 +96,13 @@ export default function CasoDetailPage() {
             ]);
             setEvents(eventsResult.items || []);
             setPublications(pubsResult.items || []);
+            if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
+              setCaseData((prev: any) => prev ? {
+                ...prev,
+                sync_pub_status: (pubsResult as any).sync_pub_status,
+                sync_pub_progress: (pubsResult as any).sync_pub_progress
+              } : null);
+            }
           } catch (e) {
             console.error('Error cargando adicionales por ID:', e);
           } finally {
@@ -119,6 +126,13 @@ export default function CasoDetailPage() {
               ]);
               setEvents(eventsResult.items || []);
               setPublications(pubsResult.items || []);
+              if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
+                setCaseData((prev: any) => prev ? {
+                  ...prev,
+                  sync_pub_status: (pubsResult as any).sync_pub_status,
+                  sync_pub_progress: (pubsResult as any).sync_pub_progress
+                } : null);
+              }
             } catch (e) {
               console.error('Error cargando adicionales por radicado:', e);
             } finally {
@@ -276,19 +290,33 @@ export default function CasoDetailPage() {
         setEvents(eventsResult.items || []);
         setPublications(pubsResult.items || []);
         setTasks(tasksResult || []);
+        if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
+          setCaseData((prev: any) => prev ? {
+            ...prev,
+            sync_pub_status: (pubsResult as any).sync_pub_status,
+            sync_pub_progress: (pubsResult as any).sync_pub_progress
+          } : null);
+        }
       } else {
         // Fallback a radicado (solo si no hay ID, ej. búsqueda inicial)
         const results = await getCaseByRadicado(decoded);
         if (results.length === 1) {
           setCaseData(results[0]);
-          const [eventsResult, pubsResult, tasksResult] = await Promise.all([
-            getCaseEventsById(results[0].id),
-            getCasePublicationsById(results[0].id),
-            getCaseTasks(results[0].id)
-          ]);
-          setEvents(eventsResult.items || []);
-          setPublications(pubsResult.items || []);
-          setTasks(tasksResult || []);
+            const [eventsResult, pubsResult, tasksResult] = await Promise.all([
+              getCaseEventsById(results[0].id),
+              getCasePublicationsById(results[0].id),
+              getCaseTasks(results[0].id)
+            ]);
+            setEvents(eventsResult.items || []);
+            setPublications(pubsResult.items || []);
+            setTasks(tasksResult || []);
+            if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
+              setCaseData((prev: any) => prev ? {
+                ...prev,
+                sync_pub_status: (pubsResult as any).sync_pub_status,
+                sync_pub_progress: (pubsResult as any).sync_pub_progress
+              } : null);
+            }
         } else if (results.length > 1) {
           setMultipleCases(results);
         } else {

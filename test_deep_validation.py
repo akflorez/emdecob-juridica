@@ -2,10 +2,10 @@ import asyncio
 from backend.service.publicaciones import consultar_publicaciones_rango, normalize_text, validate_content
 
 async def main():
-    radicado = "25286310500220240014000"
-    fecha = "2024-06-01"
-    demandante = "SISTEMA DE GESTION Y COBRANZAS S.A.S"
-    demandado = "ALVARO IVAN GUERRERO PEREZ"
+    radicado = "11001400300720250052200"
+    fecha = "2026-04-27"
+    demandante = ""
+    demandado = ""
     
     print(f"--- [TEST] PROBANDO VISION INTERNA DE DOCUMENTOS ---")
     print(f"Radicado: {radicado}")

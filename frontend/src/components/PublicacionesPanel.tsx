@@ -34,6 +34,15 @@ export function PublicacionesPanel({
   const [syncStatus, setSyncStatus] = useState<string | null>(initialSyncStatus || null);
   const [syncProgress, setSyncProgress] = useState<number>(initialSyncProgress);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setSyncStatus(initialSyncStatus || null);
+  }, [initialSyncStatus]);
+
+  useEffect(() => {
+    setSyncProgress(initialSyncProgress);
+  }, [initialSyncProgress]);
+
   
   const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;

@@ -3,7 +3,8 @@ import os
 import asyncio
 sys.path.append(os.getcwd())
 
-from backend.database import SessionLocal, Case
+from backend.db import SessionLocal
+from backend.models import Case
 from backend.main import save_new_publications
 
 async def main():

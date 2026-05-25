@@ -103,23 +103,48 @@ def is_relevant_actuacion(actuacion_text: str) -> bool:
         return False
     texto = normalize_text(actuacion_text)
     
-    tiene_auto = "auto" in texto
-    tiene_estado = (
-        "estado" in texto
-        or "fijacion estado" in texto
-        or "fijacion de estado" in texto
-        or "fijacion en estado" in texto
-        or "notificacion por estado" in texto
-        or "notificado por estado" in texto
-        or "publicado por estado" in texto
-        or "publicacion por estado" in texto
-    )
-    tiene_fijacion_estado = (
-        "fijacion de estado" in texto
-        or "fijacion estado" in texto
-        or "fijacion en estado" in texto
-    )
-    return (tiene_auto and tiene_estado) or tiene_fijacion_estado
+    # Debe detectar actuaciones relevantes si contienen cualquiera de estas palabras clave
+    keywords = [
+        "auto",
+        "estado",
+        "fijacion estado",
+        "fijacion de estado",
+        "fijacion en estado",
+        "notificacion por estado",
+        "notificado por estado",
+        "publicacion por estado",
+        "publicado por estado"
+    ]
+    for kw in keywords:
+        if kw in texto:
+            return True
+    return False
+
+def get_search_months_for_actuacion(fecha) -> list:
+    """Retorna una lista de tuplas (año, mes) para la fecha dada. 
+    Si la fecha es del día 25 en adelante, agrega también el mes siguiente."""
+    if isinstance(fecha, str):
+        try:
+            fecha = datetime.strptime(fecha[:10], "%Y-%m-%d").date()
+        except:
+            return []
+    elif isinstance(fecha, datetime):
+        fecha = fecha.date()
+        
+    if not isinstance(fecha, date):
+        return []
+        
+    meses = [(fecha.year, fecha.month)]
+    
+    if fecha.day >= 25:
+        if fecha.month == 12:
+            next_month = (fecha.year + 1, 1)
+        else:
+            next_month = (fecha.year, fecha.month + 1)
+        meses.append(next_month)
+        
+    return meses
+
 
 def get_month_range(fecha) -> tuple:
     if isinstance(fecha, str):
@@ -221,141 +246,107 @@ def find_radicado_in_context(text: str, radicado: str, demandante: str = "", dem
     if len(digits) != 23:
         return MatchResult(False, None, "Radicado incompleto")
         
-    # Check if there is a strong match (Conditions A to E)
-    # A. Radicado completo sin guiones
-    if digits in text.replace(" ", "").replace("-", ""):
-        pattern_flex = "".join([c + r"[\s-]*" for c in digits[:-1]]) + digits[-1]
-        if re.search(pattern_flex, text):
-            return MatchResult(True, "radicado_completo", f"Coincidencia con radicado completo {digits}")
-            
-    # B. Radicado completo con guiones
+    text_norm = normalize_text(text)
+    text_digits = "".join(c for c in text if c.isdigit())
+    
+    # 1. Radicado completo sin guiones
+    if digits in text_digits:
+        return MatchResult(True, "radicado_completo", f"Coincidencia con radicado completo sin guiones: {digits}")
+        
+    # 2. Radicado completo con guiones
     rad_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}-{digits[12:16]}-{digits[16:21]}-{digits[21:]}"
     if rad_hyphenated in text:
-        return MatchResult(True, "radicado_completo_con_guiones", f"Coincidencia con radicado con guiones {rad_hyphenated}")
+        return MatchResult(True, "radicado_completo_con_guiones", f"Coincidencia con radicado con guiones: {rad_hyphenated}")
         
-    # C. Radicado completo separado por espacios
+    # 3. Radicado completo con espacios
     rad_spaces = f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]} {digits[12:16]} {digits[16:21]} {digits[21:]}"
     if rad_spaces in text:
-        return MatchResult(True, "radicado_completo_con_espacios", f"Coincidencia con radicado con espacios {rad_spaces}")
+        return MatchResult(True, "radicado_completo_con_espacios", f"Coincidencia con radicado con espacios: {rad_spaces}")
 
-    # D. Despacho + número interno
+    # Extraer componentes
     despacho = digits[:12]
     year = digits[12:16]
     consecutivo = digits[16:21]
-    internal_num_no_dash = f"{year}{consecutivo}"
-    internal_num_dash = f"{year}-{consecutivo}"
     
-    despacho_consecutivo = despacho + internal_num_no_dash
-    pattern_d = "".join([c + r"[\s-]*" for c in despacho_consecutivo[:-1]]) + despacho_consecutivo[-1]
-    if re.search(pattern_d, text):
-        return MatchResult(True, "despacho_consecutivo_junto", f"Coincidencia con despacho + consecutivo: {despacho_consecutivo}")
-        
-    # E. Despacho con guiones + número interno con guion
-    despacho_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}"
-    if despacho_hyphenated in text and internal_num_dash in text:
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        cleaned_text = "\n".join(lines)
-        idx_desp = [m.start() for m in re.finditer(re.escape(despacho_hyphenated), cleaned_text)]
-        idx_num = [m.start() for m in re.finditer(re.escape(internal_num_dash), cleaned_text)]
-        for id_d in idx_desp:
-            for id_n in idx_num:
-                if abs(id_d - id_n) < 200:
-                    return MatchResult(True, "despacho_interno_proximidad", f"Despacho ({despacho_hyphenated}) cerca de número interno ({internal_num_dash})")
+    # 4. Despacho + número interno (21 dígitos)
+    twenty_one_digits = despacho + year + consecutivo
+    if twenty_one_digits in text_digits:
+        return MatchResult(True, "despacho_interno_21_digitos", f"Coincidencia con despacho + número interno: {twenty_one_digits}")
 
-    # F. Búsqueda por contexto cercano
-    patterns = [internal_num_dash, internal_num_no_dash]
-    for pattern in patterns:
-        for match in re.finditer(re.escape(pattern), text):
-            start_pos = max(0, match.start() - 1000)
-            end_pos = min(len(text), match.end() + 1000)
-            context = text[start_pos:end_pos]
-            
-            # Check despacho
-            if despacho in context or despacho_hyphenated in context or f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]}" in context:
-                return MatchResult(True, "interno_con_despacho_en_contexto", f"Número interno ({pattern}) encontrado con despacho en ventana de contexto")
-                
-            # Check full radicado
-            if digits in context.replace(" ", "").replace("-", ""):
-                return MatchResult(True, "interno_con_radicado_en_contexto", f"Número interno ({pattern}) encontrado con radicado completo en ventana de contexto")
-                
-            # Check demandante / demandado tokens
-            def get_party_tokens(name: str) -> List[str]:
-                if not name: return []
-                name_clean = normalize_text(name).upper()
-                for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
-                    name_clean = name_clean.replace(suffix, "")
-                blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus"}
-                tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
-                return tokens
-
-            dante_tokens = get_party_tokens(demandante)
-            dado_tokens = get_party_tokens(demandado)
-            all_party_tokens = dante_tokens + dado_tokens
-            
-            if all_party_tokens:
-                context_norm = normalize_text(context)
-                matched_tokens = [t for t in all_party_tokens if t in context_norm]
-                if matched_tokens:
-                    return MatchResult(True, "interno_con_partes_en_contexto", f"Número interno ({pattern}) encontrado cerca de partes matched: {matched_tokens}")
-
-    # G. Proximidad en texto plano
-    text_flat = " ".join(text.split())
-    consecutivo_short = str(int(consecutivo)) if consecutivo.isdigit() else consecutivo
+    # 4b. Proximidad de componentes del radicado (útil para PDFs con diseño vertical/columnas)
+    dep_code = digits[:5]
+    juz_code = digits[9:12]
+    juz_code_short = str(int(juz_code)) if juz_code.isdigit() else juz_code
+    consecutivo_variants = [consecutivo, str(int(consecutivo)) if consecutivo.isdigit() else consecutivo]
     
-    prox_patterns = [
-        r'\b' + re.escape(consecutivo) + r'\b.{0,50}\b' + re.escape(year) + r'\b',
-        r'\b' + re.escape(year) + r'\b.{0,50}\b' + re.escape(consecutivo) + r'\b',
-        r'\b' + re.escape(consecutivo_short) + r'\b.{0,50}\b' + re.escape(year) + r'\b',
-        r'\b' + re.escape(year) + r'\b.{0,50}\b' + re.escape(consecutivo_short) + r'\b'
-    ]
-    
-    for pat in prox_patterns:
-        for match in re.finditer(pat, text_flat, re.IGNORECASE):
-            start_pos = max(0, match.start() - 1000)
-            end_pos = min(len(text_flat), match.end() + 1000)
-            context = text_flat[start_pos:end_pos]
+    for cv in consecutivo_variants:
+        for match in re.finditer(re.escape(cv), text_norm):
+            start_pos = max(0, match.start() - 500)
+            end_pos = min(len(text_norm), match.end() + 500)
+            window = text_norm[start_pos:end_pos]
             
-            desp_last3 = digits[9:12]
-            desp_last3_short = str(int(desp_last3)) if desp_last3.isdigit() else desp_last3
+            has_dep = dep_code in window
+            has_year = year in window
+            has_juz = (juz_code in window) or (juz_code_short in window)
             
-            has_despacho = (
-                despacho in context.replace(" ", "")
-                or digits[:5] in context
-                or (desp_last3 in context and digits[:5] in context)
-                or (desp_last3_short in context and digits[:5] in context)
-            )
-            
-            if has_despacho:
+            if has_dep and has_year and has_juz:
                 return MatchResult(
-                    True, 
-                    "proximidad_plana_con_despacho", 
-                    f"Consecutivo ({consecutivo}) y año ({year}) encontrados cerca de componentes de despacho ({digits[:5]}, {desp_last3})"
+                    True,
+                    "componentes_proximidad",
+                    f"Componentes del radicado encontrados en proximidad: dpto/mun={dep_code}, juzgado={juz_code}, año={year}, consecutivo={cv}"
                 )
-                
-            def get_party_tokens(name: str) -> List[str]:
-                if not name: return []
-                name_clean = normalize_text(name).upper()
-                for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
-                    name_clean = name_clean.replace(suffix, "")
-                blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus"}
-                tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
-                return tokens
 
-            dante_tokens = get_party_tokens(demandante)
-            dado_tokens = get_party_tokens(demandado)
-            all_party_tokens = dante_tokens + dado_tokens
-            
-            if all_party_tokens:
-                context_norm = normalize_text(context)
-                matched_tokens = [t for t in all_party_tokens if t in context_norm]
-                if len(matched_tokens) >= 1:
+    # 5. Despacho con guiones + número interno con guion (o variantes) en proximidad
+    despacho_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}"
+    despacho_space = f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]}"
+    internal_num_dash = f"{year}-{consecutivo}"
+    internal_num_no_dash = f"{year}{consecutivo}"
+    internal_num_short_dash = f"{year}-{int(consecutivo)}" if consecutivo.isdigit() else consecutivo
+    internal_num_short_no_dash = f"{year}{int(consecutivo)}" if consecutivo.isdigit() else consecutivo
+    
+    internal_variants = [internal_num_dash, internal_num_no_dash, internal_num_short_dash, internal_num_short_no_dash]
+    despacho_variants = [despacho_hyphenated, despacho_space, despacho]
+    
+    for iv in internal_variants:
+        for match in re.finditer(re.escape(iv), text):
+            start_pos = max(0, match.start() - 300)
+            end_pos = min(len(text), match.end() + 300)
+            window = text[start_pos:end_pos]
+            for dv in despacho_variants:
+                if dv in window:
+                    return MatchResult(True, "despacho_interno_proximidad", f"Despacho ({dv}) cerca de número interno ({iv})")
+
+    # 6. Número interno + demandante + demandado en proximidad
+    def get_party_tokens(name: str) -> List[str]:
+        if not name: return []
+        name_clean = normalize_text(name).upper()
+        for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
+            name_clean = name_clean.replace(suffix, "")
+        blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus", "y", "o", "de", "la", "el", "en"}
+        tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
+        return tokens
+
+    dante_tokens = get_party_tokens(demandante)
+    dado_tokens = get_party_tokens(demandado)
+    
+    if dante_tokens and dado_tokens:
+        for iv in internal_variants:
+            for match in re.finditer(re.escape(iv), text):
+                start_pos = max(0, match.start() - 400)
+                end_pos = min(len(text), match.end() + 400)
+                window_norm = normalize_text(text[start_pos:end_pos])
+                
+                has_dante = any(t in window_norm for t in dante_tokens)
+                has_dado = any(t in window_norm for t in dado_tokens)
+                
+                if has_dante and has_dado:
                     return MatchResult(
                         True, 
-                        "proximidad_plana_con_partes", 
-                        f"Consecutivo ({consecutivo}) y año ({year}) encontrados cerca de partes matched: {matched_tokens}"
+                        "interno_partes_proximidad", 
+                        f"Número interno ({iv}) cerca de partes ({demandante} / {demandado})"
                     )
                     
-    return MatchResult(False, None, "No se encontró coincidencia fuerte para el radicado o sus variantes dentro de la ventana de contexto")
+    return MatchResult(False, None, "No se encontró coincidencia fuerte para el radicado o sus variantes dentro del texto.")
 
 def validate_strong_match(text: str, radicado_completo: str, demandante: str = "", demandado: str = "") -> MatchResult:
     return find_radicado_in_context(text, radicado_completo, demandante, demandado)
@@ -450,11 +441,24 @@ def guardar_estado_busqueda(db, data: dict):
     fecha_fin = data.get("fecha_fin_busqueda")
     if isinstance(fecha_fin, str):
         fecha_fin = parse_fecha_pub(fecha_fin)
+
+    if not fecha_act:
+        fecha_act = date.today()
+    if not fecha_ini:
+        fecha_ini = fecha_act
+    if not fecha_fin:
+        fecha_fin = fecha_act
         
-    existing = db.query(CasePublicationSearch).filter(
-        CasePublicationSearch.radicado == radicado,
-        CasePublicationSearch.fecha_actuacion == fecha_act
-    ).first()
+    if fecha_ini:
+        existing = db.query(CasePublicationSearch).filter(
+            CasePublicationSearch.radicado == radicado,
+            CasePublicationSearch.fecha_inicio_busqueda == fecha_ini
+        ).first()
+    else:
+        existing = db.query(CasePublicationSearch).filter(
+            CasePublicationSearch.radicado == radicado,
+            CasePublicationSearch.fecha_actuacion == fecha_act
+        ).first()
     
     estado = data.get("estado_busqueda") or data.get("estado") or "pendiente"
     
@@ -474,7 +478,7 @@ def guardar_estado_busqueda(db, data: dict):
     else:
         new_search = CasePublicationSearch(
             radicado=radicado,
-            fecha_actuacion=fecha_act,
+            fecha_actuacion=fecha_act or date.today(),
             fecha_inicio_busqueda=fecha_ini,
             fecha_fin_busqueda=fecha_fin,
             despacho_codigo=data.get("despacho_codigo"),
@@ -699,6 +703,29 @@ def extract_pdf_text(file: bytes) -> str:
             print(f"[pdf_extractor] Error fitz: {e}")
     return text
 
+def doc_name_matches_radicado(doc_name: str, radicado: str) -> bool:
+    if not doc_name:
+        return False
+    name_norm = normalize_text(doc_name)
+    digits = only_digits(radicado)
+    if len(digits) != 23:
+        return False
+        
+    year = digits[12:16]
+    consecutivo = digits[16:21]
+    internal_no_dash = f"{year}{consecutivo}"
+    internal_dash = f"{year}-{consecutivo}"
+    internal_space = f"{year} {consecutivo}"
+    
+    if internal_no_dash in name_norm.replace(" ", "").replace("-", ""):
+        return True
+    if internal_dash in name_norm or internal_space in name_norm:
+        return True
+    consecutivo_short = str(int(consecutivo))
+    if f"{year}-{consecutivo_short}" in name_norm or f"{year}{consecutivo_short}" in name_norm:
+        return True
+    return False
+
 async def revisar_documentos_complementarios(detalle_html: str, radicado: str, seen_urls: list = None) -> list:
     if seen_urls is None:
         seen_urls = []
@@ -718,6 +745,20 @@ async def revisar_documentos_complementarios(detalle_html: str, radicado: str, s
                 seen_set.add(href)
                 
                 doc_name = a.get_text(strip=True)
+                
+                # Check match by name first (fast path)
+                if doc_name_matches_radicado(doc_name, radicado):
+                    print(f"[revisar_documentos_complementarios] Match rápido por nombre: {doc_name}")
+                    documentos_complementarios.append({
+                        "url": href,
+                        "nombre": doc_name,
+                        "contiene_radicado": True,
+                        "match_type": "name_match",
+                        "observacion": f"Coincidencia en el nombre del archivo: {doc_name}"
+                    })
+                    continue
+                
+                # Otherwise, download and read content
                 print(f"[revisar_documentos_complementarios] Descargando comp: {doc_name}...")
                 try:
                     doc_text = await extract_text_content(href, client)
@@ -729,8 +770,14 @@ async def revisar_documentos_complementarios(detalle_html: str, radicado: str, s
                             "nombre": doc_name,
                             "contiene_radicado": True,
                             "match_type": match_comp.match_type,
-                            "texto_extraido": doc_text[:200] if doc_text else "",
                             "observacion": match_comp.reasons
+                        })
+                    else:
+                        documentos_complementarios.append({
+                            "url": href,
+                            "nombre": doc_name,
+                            "contiene_radicado": False,
+                            "match_type": "no_match"
                         })
                 except Exception as ex:
                     print(f"[revisar_documentos_complementarios] Error: {ex}")
@@ -810,7 +857,14 @@ def parse_url_params(url: str) -> Dict[str, str]:
     except:
         return {}
 
-async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: str, demandante: str = "", demandado: str = ""):
+async def consultar_publicaciones_rango(
+    radicado_completo: str, 
+    fecha_act_str: str, 
+    demandante: str = "", 
+    demandado: str = "",
+    year: Optional[int] = None,
+    month: Optional[int] = None
+):
     import json
     import calendar
     results = []
@@ -819,8 +873,6 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
         return []
         
     fecha_act_min = parse_fecha_pub(fecha_act_str)
-    if not fecha_act_min:
-        return []
 
     # 1. Bypass especial si aplica
     if rad_digits == "11001400302420240140300":
@@ -846,9 +898,18 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
         return results
 
     # 2. Calcular rango completo del mes
-    fecha_inicio_str = f"{fecha_act_min.year}-{fecha_act_min.month:02d}-01"
-    last_day = calendar.monthrange(fecha_act_min.year, fecha_act_min.month)[1]
-    fecha_fin_str = f"{fecha_act_min.year}-{fecha_act_min.month:02d}-{last_day:02d}"
+    if year is not None and month is not None:
+        fecha_inicio_str = f"{year}-{month:02d}-01"
+        last_day = calendar.monthrange(year, month)[1]
+        fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
+    else:
+        if not fecha_act_min:
+            return []
+        fecha_inicio_str = f"{fecha_act_min.year}-{fecha_act_min.month:02d}-01"
+        last_day = calendar.monthrange(fecha_act_min.year, fecha_act_min.month)[1]
+        fecha_fin_str = f"{fecha_act_min.year}-{fecha_act_min.month:02d}-{last_day:02d}"
+        year = fecha_act_min.year
+        month = fecha_act_min.month
 
     # 3. Código despacho y depto
     id_depto = rad_digits[:2]
@@ -875,6 +936,12 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
             async def process_candidate(cand):
                 async with sem:
                     try:
+                        cand_date = parse_fecha_pub(cand["fecha_publicacion"])
+                        if cand_date and fecha_act_min:
+                            if cand_date < fecha_act_min and year == fecha_act_min.year and month == fecha_act_min.month:
+                                print(f"[scraper] Descartando {cand['title']}: fecha {cand['fecha_publicacion']} anterior a actuación {fecha_act_str} en el mismo mes.")
+                                return None
+
                         print(f"[scraper] Obteniendo detalle de: {cand['detail_url']}")
                         detail_resp = await client.get(cand["detail_url"])
                         if detail_resp.status_code != 200:
@@ -971,7 +1038,9 @@ async def consultar_publicaciones_rango(radicado_completo: str, fecha_act_str: s
                     results.append(res)
 
         except Exception as e:
-            print(f"[scraper] Error en consulta: {e}")
+            import traceback
+            print("[scraper] Error en consulta:")
+            traceback.print_exc()
 
     final = []
     seen = set()

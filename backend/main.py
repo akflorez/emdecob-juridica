@@ -3691,6 +3691,33 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Caso no encontrado")
         
     pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
+    
+    # Si no hay publicaciones guardadas, pero existen actuaciones relevantes,
+    # el backend debe iniciar automáticamente la búsqueda.
+    if not pubs:
+        from backend.models import CaseEvent, CasePublicationSearch
+        from backend.service.publicaciones import is_relevant_actuacion
+        
+        eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
+        has_relevant = any(is_relevant_actuacion(getattr(ev, "title", "") or "") for ev in eventos)
+        if has_relevant:
+            # Check if we are already searching or if search is recent
+            is_active_search = case.sync_pub_status in ["buscando", "Iniciando búsqueda...", "Buscando publicaciones procesales...", "Iniciando..."]
+            
+            # Let's check search records to see if there was any search in the last 24h
+            from datetime import datetime, timedelta
+            recent_search = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.radicado == case.radicado,
+                CasePublicationSearch.fecha_ultima_busqueda >= datetime.now() - timedelta(hours=24)
+            ).first()
+            
+            if not is_active_search and not recent_search:
+                case.sync_pub_progress = 5
+                case.sync_pub_status = "Buscando publicaciones procesales..."
+                db.commit()
+                # Run background task
+                asyncio.create_task(save_new_publications_task(case.id))
+                
     return {
         "items": [
             {
@@ -3715,7 +3742,9 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
                 "observacion": p.observacion,
             }
             for p in pubs
-        ]
+        ],
+        "sync_pub_status": case.sync_pub_status,
+        "sync_pub_progress": case.sync_pub_progress
     }
 
 @app.get("/api/cases/id/{case_id}/publicaciones")
@@ -3996,11 +4025,13 @@ def update_sync_progress(db: Session, case_id: int, progress: int, status: str =
 async def save_new_publications(case: Case, db: Session, force: bool = False):
     try:
         from backend.service.publicaciones import (
-            is_relevant_actuacion, consultar_publicaciones_rango, parse_fecha_pub,
+            is_relevant_actuacion, get_search_months_for_actuacion,
+            consultar_publicaciones_rango, parse_fecha_pub,
             guardar_estado_busqueda, guardar_publicacion_validada
         )
         from backend.models import CaseEvent, CasePublication, CasePublicationSearch
         import asyncio
+        import calendar
         from datetime import datetime, timedelta, date
 
         # 0. Iniciar progreso
@@ -4040,77 +4071,135 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                         actuaciones_relevantes.append(dt)
 
         if not actuaciones_relevantes:
+            # Marcar no requiere búsqueda
+            guardar_estado_busqueda(db, {
+                "radicado": case.radicado,
+                "fecha_actuacion": date.today(),
+                "estado_busqueda": "no_requiere_busqueda",
+                "debug": "No se encontraron actuaciones relevantes para este radicado."
+            })
             update_sync_progress(db, case.id, 100, "No se detectaron actuaciones relevantes.")
             return
 
-        # Para cada actuación relevante, comprobamos si ya se buscó o si debemos buscar
+        # Calcular todos los meses a buscar (evitando duplicados)
+        meses_a_buscar = set()
+        for dt in actuaciones_relevantes:
+            for mes in get_search_months_for_actuacion(dt):
+                meses_a_buscar.add(mes)
+
         found_pubs = []
-        total_searches = len(actuaciones_relevantes)
+        total_months = len(meses_a_buscar)
         
-        for i, dt in enumerate(actuaciones_relevantes):
-            prog = 10 + int((i / total_searches) * 85)
-            month_name = MONTHS_ES[dt.month-1] if 1 <= dt.month <= 12 else str(dt.month)
-            update_sync_progress(db, case.id, prog, f"Buscando para actuación del {dt.day} {month_name}...")
+        for i, (year, month) in enumerate(sorted(meses_a_buscar)):
+            prog = 10 + int((i / total_months) * 85)
+            month_name = MONTHS_ES[month-1] if 1 <= month <= 12 else str(month)
+            update_sync_progress(db, case.id, prog, f"Buscando para {month_name} de {year}...")
             
-            f_act_str = dt.strftime("%Y-%m-%d")
+            fecha_inicio = date(year, month, 1)
+            fecha_fin = date(year, month, calendar.monthrange(year, month)[1])
             
-            import calendar
-            fecha_inicio_str = f"{dt.year}-{dt.month:02d}-01"
-            last_day = calendar.monthrange(dt.year, dt.month)[1]
-            fecha_fin_str = f"{dt.year}-{dt.month:02d}-{last_day:02d}"
-            
-            # Comprobar log de búsquedas
-            search_record = db.query(CasePublicationSearch).filter(
-                CasePublicationSearch.radicado == case.radicado,
-                CasePublicationSearch.fecha_actuacion == dt
-            ).first()
-            
-            should_search = True
-            if search_record and not force:
-                if search_record.estado in ["encontrada", "buscando"]:
-                    print(f"[sync] Saltando busqueda para {case.radicado} el {f_act_str} (estado: {search_record.estado})")
-                    should_search = False
-                elif search_record.estado in ["sin_resultado", "error"] and search_record.fecha_ultima_busqueda:
-                    if datetime.now() - search_record.fecha_ultima_busqueda < timedelta(hours=24):
-                        print(f"[sync] Saltando busqueda reciente (<24h) para {case.radicado} el {f_act_str} (estado: {search_record.estado})")
+            # Buscar si ya existe publicación válida para este mes (si no es forzado)
+            if not force:
+                ya_existe_valida = db.query(CasePublication).filter(
+                    CasePublication.case_id == case.id,
+                    CasePublication.match_fuerte == True,
+                    (
+                        ((CasePublication.fecha_publicacion >= fecha_inicio) & (CasePublication.fecha_publicacion <= fecha_fin)) |
+                        ((CasePublication.fecha_estado_electronico >= fecha_inicio) & (CasePublication.fecha_estado_electronico <= fecha_fin))
+                    )
+                ).count() > 0
+                if ya_existe_valida:
+                    print(f"[sync] Saltando busqueda para {case.radicado} en {year}-{month:02d} (ya existe publicacion valida)")
+                    continue
+
+                # Comprobar log de búsquedas recientes (<24 horas)
+                search_record = db.query(CasePublicationSearch).filter(
+                    CasePublicationSearch.radicado == case.radicado,
+                    CasePublicationSearch.fecha_inicio_busqueda == fecha_inicio
+                ).first()
+                
+                should_search = True
+                if search_record:
+                    if search_record.estado_busqueda == "buscando":
+                        print(f"[sync] Saltando busqueda para {case.radicado} en {year}-{month:02d} (ya hay una busqueda activa)")
                         should_search = False
-            
-            if not should_search:
-                continue
+                    elif search_record.estado_busqueda in ["sin_resultado", "error", "no_requiere_busqueda"] and search_record.fecha_ultima_busqueda:
+                        if datetime.now() - search_record.fecha_ultima_busqueda < timedelta(hours=24):
+                            print(f"[sync] Saltando busqueda reciente (<24h) para {case.radicado} en {year}-{month:02d} (estado: {search_record.estado_busqueda})")
+                            should_search = False
+                
+                if not should_search:
+                    continue
+
+            # Determinar fecha de actuación desencadenante para este mes
+            fecha_actuacion_del_mes = None
+            for dt in sorted(seen_dates):
+                if dt.year == year and dt.month == month:
+                    fecha_actuacion_del_mes = dt
+                    break
+            if not fecha_actuacion_del_mes:
+                # Comprobar si fue desencadenada por el mes anterior (fin de mes)
+                if month == 1:
+                    prev_year, prev_month = year - 1, 12
+                else:
+                    prev_year, prev_month = year, month - 1
+                for dt in sorted(seen_dates):
+                    if dt.year == prev_year and dt.month == prev_month and dt.day >= 25:
+                        fecha_actuacion_del_mes = dt
+                        break
+            if not fecha_actuacion_del_mes:
+                fecha_actuacion_del_mes = list(seen_dates)[0]
                 
             # Registrar inicio de búsqueda en DB
             guardar_estado_busqueda(db, {
                 "radicado": case.radicado,
-                "fecha_actuacion": dt,
-                "fecha_inicio_busqueda": parse_fecha_pub(fecha_inicio_str),
-                "fecha_fin_busqueda": parse_fecha_pub(fecha_fin_str),
+                "fecha_actuacion": fecha_actuacion_del_mes,
+                "fecha_inicio_busqueda": fecha_inicio,
+                "fecha_fin_busqueda": fecha_fin,
                 "despacho_codigo": case.radicado[:12],
                 "estado_busqueda": "buscando",
                 "intento_manual": force
             })
+            db.commit()
             
             try:
-                results = await consultar_publicaciones_rango(case.radicado, f_act_str, case.demandante, case.demandado)
+                # Ejecutar búsqueda para el mes
+                results = await consultar_publicaciones_rango(
+                    radicado_completo=case.radicado,
+                    fecha_act_str=fecha_actuacion_del_mes.strftime("%Y-%m-%d"),
+                    demandante=case.demandante or "",
+                    demandado=case.demandado or "",
+                    year=year,
+                    month=month
+                )
                 
                 estado_fin = "encontrada" if results else "sin_resultado"
                 guardar_estado_busqueda(db, {
                     "radicado": case.radicado,
-                    "fecha_actuacion": dt,
+                    "fecha_actuacion": fecha_actuacion_del_mes,
+                    "fecha_inicio_busqueda": fecha_inicio,
+                    "fecha_fin_busqueda": fecha_fin,
+                    "despacho_codigo": case.radicado[:12],
                     "estado_busqueda": estado_fin,
                     "intento_manual": force
                 })
+                db.commit()
                 
                 if results:
                     found_pubs.extend(results)
             except Exception as e:
-                print(f"[sync] Error en búsqueda de {f_act_str}: {e}")
+                print(f"[sync] Error en búsqueda de {year}-{month:02d}: {e}")
                 guardar_estado_busqueda(db, {
                     "radicado": case.radicado,
-                    "fecha_actuacion": dt,
+                    "fecha_actuacion": fecha_actuacion_del_mes,
+                    "fecha_inicio_busqueda": fecha_inicio,
+                    "fecha_fin_busqueda": fecha_fin,
+                    "despacho_codigo": case.radicado[:12],
                     "estado_busqueda": "error",
                     "error": str(e),
                     "intento_manual": force
                 })
+                db.commit()
 
         # 3. Guardar resultados
         update_sync_progress(db, case.id, 96, "Guardando publicaciones encontradas...")
@@ -4136,7 +4225,9 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
         update_sync_progress(db, case.id, 0, "")
 
     except Exception as e:
+        import traceback
         print(f"[save_new_pubs] Error general: {e}")
+        traceback.print_exc()
         update_sync_progress(db, case.id, 0, f"Error: {str(e)[:40]}")
         try:
             case.sync_pub_status = f"Error: {str(e)[:50]}"
