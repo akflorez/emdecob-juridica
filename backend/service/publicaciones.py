@@ -177,7 +177,8 @@ def build_portal_search_url(despacho_codigo: str, fecha_inicio: str, fecha_fin: 
         (f"_{PORTLET_ID}_fechaFin", fecha_fin),
         (f"_{PORTLET_ID}_idDepto", id_depto),
         (f"_{PORTLET_ID}_idDespacho", despacho_codigo),
-        (f"_{PORTLET_ID}_verTotales", "true")
+        (f"_{PORTLET_ID}_verTotales", "true"),
+        (f"_{PORTLET_ID}_delta", "100")
     ]
     from urllib.parse import urlencode
     return f"{BASE_URL}?{urlencode(params)}"
@@ -345,6 +346,25 @@ def find_radicado_in_context(text: str, radicado: str, demandante: str = "", dem
                         "interno_partes_proximidad", 
                         f"Número interno ({iv}) cerca de partes ({demandante} / {demandado})"
                     )
+
+    # 7. Número interno + al menos una parte (demandante O demandado) en proximidad
+    if dante_tokens or dado_tokens:
+        for iv in internal_variants:
+            for match in re.finditer(re.escape(iv), text):
+                start_pos = max(0, match.start() - 400)
+                end_pos = min(len(text), match.end() + 400)
+                window_norm = normalize_text(text[start_pos:end_pos])
+                
+                has_dante = any(t in window_norm for t in dante_tokens) if dante_tokens else False
+                has_dado = any(t in window_norm for t in dado_tokens) if dado_tokens else False
+                
+                if has_dante or has_dado:
+                    part_matched = demandante if has_dante else demandado
+                    return MatchResult(
+                        True,
+                        "interno_una_parte_proximidad",
+                        f"Número interno ({iv}) cerca de parte ({part_matched})"
+                    )
                     
     return MatchResult(False, None, "No se encontró coincidencia fuerte para el radicado o sus variantes dentro del texto.")
 
@@ -365,6 +385,7 @@ def guardar_publicacion_validada(db, data: dict):
             
     if not case_id:
         print("[guardar_publicacion_validada] Error: No se encontro el caso para guardar la publicacion.")
+        print("[PUBLICACIONES][GUARDADO]\nmes=N/A\nguardado=false\nmotivo_no_guardado=No se encontro el caso para guardar la publicacion")
         return None
         
     fecha_pub = parse_fecha_pub(data.get("fecha_publicacion")) if isinstance(data.get("fecha_publicacion"), str) else data.get("fecha_publicacion")
@@ -397,6 +418,7 @@ def guardar_publicacion_validada(db, data: dict):
         existing.observacion = data.get("observacion") or existing.observacion
         db.flush()
         db.commit()
+        print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=Actualizado (ya existia)")
         return existing
     else:
         new_pub = CasePublication(
@@ -425,6 +447,7 @@ def guardar_publicacion_validada(db, data: dict):
         db.add(new_pub)
         db.flush()
         db.commit()
+        print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=")
         return new_pub
 
 def guardar_estado_busqueda(db, data: dict):
@@ -593,8 +616,16 @@ def filter_cards_by_category(cards: list) -> list:
         "notificacion por estados",
         "estado",
         "estados",
+        "estados electronicos",
         "fijacion",
         "fijaciones",
+        "fijacion estado",
+        "fijacion de estado",
+        "fijaciones de estado",
+        "documentos estado",
+        "documento estado",
+        "documentos de la publicacion",
+        "documentos de la publicaciones",
         "traslado",
         "traslados",
         "traslados especiales y ordinarios",
@@ -917,17 +948,27 @@ async def consultar_publicaciones_rango(
 
     search_url = build_portal_search_url(id_despacho, fecha_inicio_str, fecha_fin_str)
     print(f"[scraper] Busqueda dirigida para radicado {radicado_completo} | Despacho: {id_despacho} | Rango: {fecha_inicio_str} a {fecha_fin_str}")
+    print(f"[PUBLICACIONES][BUSCANDO_MES]\nmes={year}-{month:02d}\nfechaInicio={fecha_inicio_str}\nfechaFin={fecha_fin_str}\ndespacho={id_despacho}\nurl={search_url}")
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
         try:
             resp = await client.get(search_url)
             if resp.status_code != 200:
                 print(f"[scraper] Error consultando portal oficial: HTTP {resp.status_code}")
+                print(f"[PUBLICACIONES][RESULTADO_PORTAL]\nmes={year}-{month:02d}\nstatus_code={resp.status_code}\nhtml_size=0\ncards_count=0")
                 return []
                 
             raw_cards = parse_result_cards(resp.text)
+            print(f"[PUBLICACIONES][RESULTADO_PORTAL]\nmes={year}-{month:02d}\nstatus_code={resp.status_code}\nhtml_size={len(resp.text)}\ncards_count={len(raw_cards)}")
+            
             filtered_by_despacho = filter_cards_by_despacho(raw_cards, id_despacho)
             candidates = filter_cards_by_category(filtered_by_despacho)
+
+            # Log individual cards
+            for card in raw_cards:
+                is_accepted = card in candidates
+                motivo = "" if is_accepted else "Descartado por despacho o categoria"
+                print(f"[PUBLICACIONES][CARD]\nmes={year}-{month:02d}\ncategoria={card.get('categoria')}\nfecha_publicacion={card.get('fecha_publicacion')}\ndespacho_detectado={card.get('despacho')}\nurl_detalle={card.get('detail_url')}\naceptada={'true' if is_accepted else 'false'}\nmotivo_descarte={motivo}")
 
             print(f"[scraper] Candidatos validos encontrados: {len(candidates)}")
             
@@ -964,6 +1005,7 @@ async def consultar_publicaciones_rango(
 
                         # Fuentes principales usando el helper
                         fuentes = detect_main_sources(detail_resp.text)
+                        print(f"[PUBLICACIONES][DETALLE]\nmes={year}-{month:02d}\nurl_detalle={cand['detail_url']}\nfuentes_detectadas_count={len(fuentes)}\nfuentes={[f['url'] for f in fuentes]}")
                         
                         match_principal = None
                         fuente_validada_url = None
@@ -975,7 +1017,11 @@ async def consultar_publicaciones_rango(
                             s_tipo = source["tipo"]
                             print(f"[scraper] Descargando y validando fuente principal ({s_tipo}): {s_url}")
                             doc_text = await extract_text_content(s_url, client)
+                            print(f"[PUBLICACIONES][FUENTE]\nmes={year}-{month:02d}\nurl_fuente={s_url}\ntipo_fuente={s_tipo}\ncontent_type=application/octet-stream\ntexto_size={len(doc_text)}")
+                            
                             match = validate_strong_match(doc_text, radicado_completo, demandante, demandado)
+                            print(f"[PUBLICACIONES][MATCH]\nmes={year}-{month:02d}\nmatch_fuerte={'true' if match.is_valid else 'false'}\nmatch_type={match.match_type or 'None'}\nmotivo={match.reasons or 'No match'}")
+                            
                             if match.is_valid:
                                 match_principal = match
                                 fuente_validada_url = s_url

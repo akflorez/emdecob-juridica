@@ -185,7 +185,7 @@ class CasePublication(Base):
     descripcion = Column(Text, nullable=True)
     documento_url = Column(Text, nullable=True)
     source_url = Column(Text, nullable=True)     # URL original del portal
-    source_id = Column(String(255), unique=True, index=True, nullable=True) # ID único del portal
+    source_id = Column(String(255), unique=False, index=True, nullable=True) # ID único del portal
 
     # Nuevos campos para validación y detalle
     url_fuente_principal = Column(Text, nullable=True)

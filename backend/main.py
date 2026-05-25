@@ -2869,7 +2869,10 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
         if pubs:
             for p in pubs:
                 f_pub = parse_fecha_pub(p.get("fecha"))
-                exists = db_session.query(CasePublication).filter(CasePublication.source_id == p.get("source_id")).first()
+                exists = db_session.query(CasePublication).filter(
+                    CasePublication.case_id == case.id,
+                    CasePublication.source_id == p.get("source_id")
+                ).first()
                 if not exists:
                     f_est = parse_fecha_pub(p.get("fecha_estado_electronico")) if p.get("fecha_estado_electronico") else f_pub
                     db_session.add(CasePublication(
@@ -3155,7 +3158,7 @@ async def sync_case_events_background(case_id: int):
                 # AUTOMATIZACIÓN: Si la nueva actuación es relevante, disparar búsqueda de publicaciones
                 if is_relevant_actuacion(it["title"]):
                     # Usamos la función local definida más abajo en este mismo archivo
-                    background_tasks.add_task(save_new_publications_task, c.id)
+                    asyncio.create_task(save_new_publications_task(c.id))
 
                 if con_docs: c.has_documents = True
                 new_count += 1
@@ -3692,6 +3695,9 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
         
     pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
     
+    meses_retornados = sorted(list(set(p.fecha_publicacion.strftime('%Y-%m') for p in pubs if p.fecha_publicacion)))
+    print(f"[PUBLICACIONES][FRONTEND_RESPONSE]\ntotal_publicaciones={len(pubs)}\nmeses_retornados={meses_retornados}")
+    
     # Búsqueda automática basada en actuaciones relevantes
     from backend.models import CaseEvent, CasePublicationSearch
     from backend.service.publicaciones import is_relevant_actuacion, get_search_months_for_actuacion
@@ -3844,13 +3850,10 @@ async def get_sync_logs(case_id: int, db: Session = Depends(get_db)):
                      {"cid": case_id}).fetchall()
     return [{"message": r[0], "at": r[1].isoformat()} for r in logs]
 
-class DebugSearchBody(BaseModel):
+class PublicacionesDebugBody(BaseModel):
     radicado: str
-    fecha_actuacion: str
-    demandante: Optional[str] = ""
-    demandado: Optional[str] = ""
+    force: Optional[bool] = False
 
-@app.post("/api/publicaciones/buscar/{radicado}")
 @app.post("/publicaciones/buscar/{radicado}")
 async def force_sync_publications_by_radicado(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.radicado == radicado).first()
@@ -3878,129 +3881,180 @@ async def force_sync_publications_by_radicado(radicado: str, background_tasks: B
 
 @app.post("/api/publicaciones/debug")
 @app.post("/publicaciones/debug")
-async def debug_publications_search(body: DebugSearchBody):
-    trace_logs = []
-    
-    def log(msg: str):
-        print(f"[debug-endpoint] {msg}")
-        trace_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
-        
-    log(f"Iniciando debug para radicado: {body.radicado} | Fecha actuación: {body.fecha_actuacion}")
-    
-    rad_digits = "".join(filter(str.isdigit, body.radicado))
-    if len(rad_digits) < 21:
-        log("Error: Radicado no tiene al menos 21 dígitos numéricos.")
-        return {"ok": False, "trace": trace_logs}
-        
+async def debug_publications_search(body: PublicacionesDebugBody, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.radicado == body.radicado).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado en la base de datos.")
+
     from backend.service.publicaciones import (
-        parse_fecha_pub, get_month_range, build_portal_search_url,
-        HEADERS, parse_result_cards, filter_cards_by_despacho,
-        filter_cards_by_category, detect_main_sources, extract_text_content,
-        validate_strong_match, revisar_documentos_complementarios
+        is_relevant_actuacion, get_search_months_for_actuacion,
+        build_portal_search_url, parse_fecha_pub,
+        parse_result_cards, filter_cards_by_despacho, filter_cards_by_category,
+        detect_main_sources, extract_text_content, validate_strong_match,
+        revisar_documentos_complementarios, guardar_publicacion_validada,
+        parse_spanish_date, extract_metadata_field, HEADERS
     )
     import calendar
-    import json
+    import hashlib
+    from datetime import date, datetime
+    import httpx
+    from bs4 import BeautifulSoup
+    import re
+
+    # 1. Obtener actuaciones del caso
+    eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).order_by(CaseEvent.event_date.asc()).all()
     
-    fecha_act = parse_fecha_pub(body.fecha_actuacion)
-    if not fecha_act:
-        log(f"Error parsing fecha_actuacion: {body.fecha_actuacion}")
-        return {"ok": False, "trace": trace_logs}
-        
-    fecha_ini_str, fecha_fin_str = get_month_range(fecha_act)
-    log(f"Rango de búsqueda calculado: {fecha_ini_str} a {fecha_fin_str}")
+    actuaciones_relevantes = []
+    seen_dates = set()
+    for ev in eventos:
+        act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") or ""
+        if is_relevant_actuacion(act_text):
+            raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
+            if raw_date:
+                if isinstance(raw_date, (date, datetime)):
+                    dt = raw_date
+                else:
+                    try:
+                        dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
+                    except:
+                        continue
+                if isinstance(dt, datetime):
+                    dt = dt.date()
+                
+                if dt not in seen_dates:
+                    seen_dates.add(dt)
+                    actuaciones_relevantes.append({
+                        "fecha": dt.strftime("%Y-%m-%d"),
+                        "descripcion": act_text
+                    })
+
+    # 2. Calcular meses a buscar
+    meses_a_buscar_tuples = set()
+    for dt in seen_dates:
+        for mes in get_search_months_for_actuacion(dt):
+            meses_a_buscar_tuples.add(mes)
+            
+    meses_a_buscar = [f"{y}-{m:02d}" for y, m in sorted(meses_a_buscar_tuples)]
+
+    resultados_por_mes = {}
     
-    despacho_codigo = rad_digits[:12]
-    log(f"Código de despacho: {despacho_codigo}")
-    
-    search_url = build_portal_search_url(despacho_codigo, fecha_ini_str, fecha_fin_str)
-    log(f"URL de búsqueda construida: {search_url}")
-    
-    candidates_found = []
-    
+    # 3. Buscar para cada mes si force es True, o si no se ha buscado
     async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
-        try:
-            log("Enviando petición HTTP GET al portal...")
-            resp = await client.get(search_url)
-            log(f"Respuesta del portal: HTTP {resp.status_code}")
+        for year, month in sorted(meses_a_buscar_tuples):
+            month_str = f"{year}-{month:02d}"
+            fecha_inicio_str = f"{year}-{month:02d}-01"
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
             
-            if resp.status_code != 200:
-                log("Error: No se pudo obtener respuesta exitosa del portal.")
-                return {"ok": False, "trace": trace_logs}
-                
-            raw_cards = parse_result_cards(resp.text)
-            log(f"Tarjetas crudas parseadas: {len(raw_cards)}")
+            search_url = build_portal_search_url(case.radicado[:12], fecha_inicio_str, fecha_fin_str)
             
-            filtered_by_despacho = filter_cards_by_despacho(raw_cards, despacho_codigo)
-            log(f"Tarjetas filtradas por despacho ({despacho_codigo}): {len(filtered_by_despacho)}")
+            month_res = {
+                "buscado": True,
+                "url": search_url,
+                "cards_count": 0,
+                "detalles_abiertos": 0,
+                "fuentes_revisadas": 0,
+                "matches": [],
+                "guardadas": [],
+                "motivo_no_resultado": ""
+            }
             
-            filtered_by_cat = filter_cards_by_category(filtered_by_despacho)
-            log(f"Tarjetas filtradas por categoría relevante: {len(filtered_by_cat)}")
-            
-            for idx, card in enumerate(filtered_by_cat):
-                log(f"--- Procesando Candidato #{idx+1}: {card['title']} ---")
-                log(f"URL detalle: {card['detail_url']}")
-                log(f"Categoría: {card['categoria']} | Fecha: {card['fecha_publicacion']}")
-                
-                detail_resp = await client.get(card["detail_url"])
-                if detail_resp.status_code != 200:
-                    log(f"Error: No se pudo obtener detalle para {card['title']}")
+            try:
+                resp = await client.get(search_url)
+                if resp.status_code != 200:
+                    month_res["motivo_no_resultado"] = f"Error portal HTTP {resp.status_code}"
+                    resultados_por_mes[month_str] = month_res
                     continue
                     
-                sources = detect_main_sources(detail_resp.text)
-                log(f"Fuentes principales detectadas: {sources}")
+                raw_cards = parse_result_cards(resp.text)
+                month_res["cards_count"] = len(raw_cards)
                 
-                validated_any = False
-                matched_source = None
+                filtered_by_despacho = filter_cards_by_despacho(raw_cards, case.radicado[:12])
+                candidates = filter_cards_by_category(filtered_by_despacho)
                 
-                for source in sources:
-                    s_url = source["url"]
-                    s_tipo = source["tipo"]
-                    log(f"Descargando y validando fuente ({s_tipo}): {s_url}")
+                if not candidates:
+                    month_res["motivo_no_resultado"] = "No se encontraron candidatos despues de filtrar por despacho y categoria."
+                    resultados_por_mes[month_str] = month_res
+                    continue
                     
-                    doc_text = await extract_text_content(s_url, client)
-                    if not doc_text:
-                        log(f"Aviso: No se pudo extraer texto de {s_url}")
+                for cand in candidates:
+                    month_res["detalles_abiertos"] += 1
+                    detail_resp = await client.get(cand["detail_url"])
+                    if detail_resp.status_code != 200:
                         continue
                         
-                    log(f"Texto extraído de la fuente ({len(doc_text)} caracteres). Ejecutando match estricto...")
-                    match_res = validate_strong_match(doc_text, body.radicado, body.demandante, body.demandado)
+                    detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
+                    estado_no = extract_metadata_field(detail_soup, "Estado No.")
+                    if not estado_no:
+                        title_match = re.search(r'Estado No\.?\s*(\d+)', cand["title"], re.IGNORECASE)
+                        if title_match:
+                            estado_no = title_match.group(1)
+                            
+                    fecha_estado_electronico_str = extract_metadata_field(detail_soup, "Fecha de Estado Electrónico")
+                    fecha_estado_electronico = None
+                    if fecha_estado_electronico_str:
+                        fecha_estado_electronico = parse_spanish_date(fecha_estado_electronico_str)
+                    if not fecha_estado_electronico:
+                        fecha_estado_electronico = parse_fecha_pub(cand["fecha_publicacion"])
+                        
+                    fuentes = detect_main_sources(detail_resp.text)
                     
-                    log(f"Resultado validación: {match_res.is_valid} | Tipo: {match_res.match_type} | Motivo: {match_res.reasons}")
+                    matched_any = False
+                    for source in fuentes:
+                        month_res["fuentes_revisadas"] += 1
+                        doc_text = await extract_text_content(source["url"], client)
+                        match = validate_strong_match(doc_text, case.radicado, case.demandante or "", case.demandado or "")
+                        
+                        if match.is_valid:
+                            matched_any = True
+                            month_res["matches"].append({
+                                "title": cand["title"],
+                                "match_type": match.match_type,
+                                "reasons": match.reasons
+                            })
+                            
+                            # Guardar la publicación validada
+                            p_data = {
+                                "radicado": case.radicado,
+                                "case_id": case.id,
+                                "fecha_publicacion": cand["fecha_publicacion"],
+                                "tipo": cand["categoria"],
+                                "descripcion": cand["title"],
+                                "documento_url": source["url"],
+                                "source_url": cand["detail_url"],
+                                "source_id": hashlib.md5(cand["detail_url"].encode()).hexdigest(),
+                                "url_fuente_principal": source["url"],
+                                "tipo_fuente_principal": source["tipo"],
+                                "texto_fuente_principal": doc_text,
+                                "validada_por_fuente_principal": True,
+                                "numero_estado": estado_no or "",
+                                "fecha_estado_electronico": fecha_estado_electronico.strftime("%Y-%m-%d") if fecha_estado_electronico else cand["fecha_publicacion"],
+                                "match_fuerte": True,
+                                "match_type": match.match_type,
+                                "motivo_match": match.reasons,
+                                "observacion": f"Debug sync. Validada por {source['tipo']}."
+                            }
+                            saved = guardar_publicacion_validada(db, p_data)
+                            if saved:
+                                month_res["guardadas"].append({
+                                    "title": cand["title"],
+                                    "fecha": cand["fecha_publicacion"]
+                                })
+                            break
+                            
+                if not month_res["matches"]:
+                    month_res["motivo_no_resultado"] = "No se encontro ninguna coincidencia fuerte en los documentos de los candidatos."
                     
-                    if match_res.is_valid:
-                        validated_any = True
-                        matched_source = {
-                            "url": s_url,
-                            "tipo": s_tipo,
-                            "match_type": match_res.match_type,
-                            "motivo": match_res.reasons
-                        }
-                        break
+            except Exception as ex:
+                month_res["motivo_no_resultado"] = f"Excepcion en busqueda: {str(ex)}"
                 
-                comp_docs = []
-                if validated_any:
-                    log("Candidato validado con éxito. Revisando documentos complementarios...")
-                    comp_docs = await revisar_documentos_complementarios(detail_resp.text, body.radicado, [s["url"] for s in sources if "url" in s])
-                    log(f"Documentos complementarios revisados: {len(comp_docs)}")
-                else:
-                    log("Descartado: Ninguna fuente principal contiene coincidencia fuerte.")
-                
-                candidates_found.append({
-                    "card": card,
-                    "validado": validated_any,
-                    "matched_source": matched_source,
-                    "documentos_complementarios": comp_docs
-                })
-                
-        except Exception as e:
-            import traceback
-            log(f"Error inesperado en debug: {e}")
-            log(traceback.format_exc())
-            
+            resultados_por_mes[month_str] = month_res
+
     return {
-        "ok": True,
-        "trace": trace_logs,
-        "candidates": candidates_found
+        "radicado": case.radicado,
+        "actuaciones_relevantes": actuaciones_relevantes,
+        "meses_a_buscar": meses_a_buscar,
+        "resultados_por_mes": resultados_por_mes
     }
 
 # Semáforo global para evitar saturación y bloqueos de DB (Máximo 2 sincronizaciones pesadas a la vez)
