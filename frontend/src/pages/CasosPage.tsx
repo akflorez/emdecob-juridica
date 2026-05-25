@@ -154,7 +154,7 @@ export default function CasosPage() {
     if (isSyncingPublications || (bulkSyncProgress && bulkSyncProgress.running)) {
       interval = setInterval(async () => {
         try {
-          const resp = await fetch(`${API_BASE}/cases/sync-publications-status`);
+          const resp = await fetch(`${API_BASE}/bulk-sync/publications-status`);
           const data = await resp.json();
           setBulkSyncProgress(data);
           if (!data.running) {

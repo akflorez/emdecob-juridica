@@ -3851,8 +3851,8 @@ _bulk_sync_state = {
     "errors": 0,
 }
 
-@app.get("/api/cases/sync-publications-status")
-@app.get("/cases/sync-publications-status")
+@app.get("/api/bulk-sync/publications-status")
+@app.get("/bulk-sync/publications-status")
 async def get_sync_publications_status():
     """Devuelve el progreso actual de la sincronización masiva."""
     return {
