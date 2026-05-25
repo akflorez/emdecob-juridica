@@ -412,6 +412,16 @@ export function refreshAllCases() {
   return apiFetch<RefreshAllResponse>("/cases/refresh-all", { method: "POST" });
 }
 
+export type SyncAllPublicationsResponse = {
+  ok: boolean;
+  message: string;
+  total: number;
+};
+
+export function syncAllPublications() {
+  return apiFetch<SyncAllPublicationsResponse>("/cases/sync-all-publications", { method: "POST" });
+}
+
 /** ---------------------------
  * VALIDAR LOTE DE PENDIENTES
  * -------------------------- */

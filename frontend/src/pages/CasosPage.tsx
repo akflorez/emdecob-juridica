@@ -58,6 +58,7 @@ import {
   markReadAll,
   downloadMultipleEventsExcel,
   refreshAllCases,
+  syncAllPublications,
   downloadCasesExcel,
   getInvalidRadicados,
   deleteInvalidRadicado,
@@ -139,6 +140,7 @@ export default function CasosPage() {
   
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
   const [abogadosList, setAbogadosList] = useState<string[]>([]);
+  const [isSyncingPublications, setIsSyncingPublications] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
@@ -340,6 +342,22 @@ export default function CasosPage() {
       toast({ title: "Error actualizando", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleSyncAllPublicaciones = async () => {
+    if (!confirm("¿Iniciar sincronización masiva de Publicaciones Procesales para todos los casos?\n\nEste proceso se ejecuta en segundo plano y puede tardar varios minutos.")) return;
+    setIsSyncingPublications(true);
+    try {
+      const result = await syncAllPublications();
+      toast({
+        title: "Sincronización iniciada",
+        description: result.message || `Se procesarán ${result.total} casos en segundo plano.`,
+      });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "No se pudo iniciar la sincronización", variant: "destructive" });
+    } finally {
+      setIsSyncingPublications(false);
     }
   };
 
@@ -612,6 +630,16 @@ export default function CasosPage() {
             {showStats ? "Contraer Indicadores" : "Expandir Indicadores"}
           </Button>
 
+          <Button
+            onClick={handleSyncAllPublicaciones}
+            disabled={isSyncingPublications}
+            variant="outline"
+            size="sm"
+            className="border-emerald-500/50 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
+          >
+            {isSyncingPublications ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Sincronizar publicaciones
+          </Button>
           <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="default" size="sm">
             {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Actualizar todo

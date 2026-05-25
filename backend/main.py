@@ -3843,6 +3843,37 @@ async def reset_case_sync(radicado: str, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "message": "Estado de sincronización reseteado."}
 
+@app.post("/api/cases/sync-all-publications")
+@app.post("/cases/sync-all-publications")
+async def sync_all_publications(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Inicia la sincronización masiva de publicaciones procesales para todos los casos válidos.
+    El proceso se ejecuta en segundo plano con baja concurrencia para no saturar el portal.
+    """
+    cases = db.query(Case).filter(Case.is_valid == True).all()
+    total = len(cases)
+    if total == 0:
+        return {"ok": True, "message": "No hay casos válidos para sincronizar.", "total": 0}
+
+    async def run_bulk_sync():
+        db_bulk = SessionLocal()
+        try:
+            all_cases = db_bulk.query(Case).filter(Case.is_valid == True).all()
+            for c in all_cases:
+                try:
+                    await run_sync_publications_task(c.radicado, force=False)
+                except Exception as e:
+                    print(f"[bulk_sync] Error en {c.radicado}: {e}")
+        finally:
+            db_bulk.close()
+
+    background_tasks.add_task(run_bulk_sync)
+    return {
+        "ok": True,
+        "message": f"Sincronización masiva iniciada para {total} casos en segundo plano.",
+        "total": total
+    }
+
 @app.get("/api/sync/logs/{case_id}")
 async def get_sync_logs(case_id: int, db: Session = Depends(get_db)):
     """Permite ver los logs de diagnóstico desde el navegador."""
