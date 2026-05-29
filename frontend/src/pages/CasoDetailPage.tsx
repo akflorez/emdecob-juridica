@@ -23,12 +23,20 @@ import {
   getUsers,
   updateCaseLawyer,
   getDocumentosActuacion,
+  createTask,
   type User,
   type Task as TaskType
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PublicacionesPanel } from '@/components/PublicacionesPanel';
-import { CheckCircle2, ListPlus, MoreVertical, MessageSquare, Plus } from 'lucide-react';
+import { CheckCircle2, ListPlus, MoreVertical, MessageSquare, Plus, Flag, Trash2, Zap } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue 
+} from '@/components/ui/select';
 import { TaskDrawer } from '@/components/TaskDrawer';
 
 type DocsState = {
@@ -55,6 +63,17 @@ export default function CasoDetailPage() {
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [systemUsers, setSystemUsers] = useState<User[]>([]);
   const [clickupToken, setClickupToken] = useState<string | null>(null);
+
+  // Inline task creation form states
+  const [showCreateTaskForm, setShowCreateTaskForm] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<number | undefined>(undefined);
+  const [newTaskGestiones, setNewTaskGestiones] = useState<Array<{
+    title: string;
+    due_date: string;
+    priority: string;
+    assignee_id: number | undefined;
+  }>>([{ title: '', due_date: '', priority: 'normal', assignee_id: undefined }]);
   
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -360,17 +379,73 @@ export default function CasoDetailPage() {
       if (match) assigneeId = match.id;
     }
 
-    const newTaskStub = {
-      title: '',
-      description: `Gestión para Radicado: ${caseData.radicado}`,
-      status: 'to do',
-      priority: 'normal',
-      case_id: caseData.id,
-      assignee_id: assigneeId,
-      list_id: 1
-    } as any;
+    setNewTaskTitle(`Gestión para Radicado: ${caseData.radicado}`);
+    setNewTaskAssigneeId(assigneeId);
+    setNewTaskGestiones([{ title: '', due_date: '', priority: 'normal', assignee_id: assigneeId }]);
+    setShowCreateTaskForm(true);
+  };
 
-    setSelectedTask(newTaskStub);
+  const handleCreateTaskWithGestiones = async () => {
+    if (!caseData) return;
+    
+    const validGestiones = newTaskGestiones.filter(g => g.title.trim() !== '');
+    if (validGestiones.length === 0) {
+      toast({ title: 'Agrega al menos una gestión', description: 'Escribe el nombre de la actividad técnica.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      // 1. Crear tarea padre
+      const parentTask = await createTask({
+        title: newTaskTitle || `Gestión para Radicado: ${caseData.radicado}`,
+        description: `Gestión para Radicado: ${caseData.radicado}`,
+        status: 'to do',
+        priority: 'normal',
+        case_id: caseData.id,
+        assignee_id: newTaskAssigneeId,
+        list_id: 1
+      });
+
+      // 2. Crear cada gestión como subtarea
+      for (const gestion of validGestiones) {
+        await createTask({
+          title: gestion.title,
+          parent_id: parentTask.id,
+          due_date: gestion.due_date ? new Date(gestion.due_date).toISOString() : undefined,
+          priority: gestion.priority,
+          assignee_id: gestion.assignee_id,
+          case_id: caseData.id,
+          list_id: parentTask.list_id,
+          status: 'to do'
+        } as any);
+      }
+
+      // 3. Refrescar lista de tareas
+      const refreshedTasks = await getCaseTasks(caseData.id);
+      setTasks(refreshedTasks);
+
+      // 4. Limpiar formulario
+      setShowCreateTaskForm(false);
+      setNewTaskTitle('');
+      setNewTaskGestiones([{ title: '', due_date: '', priority: 'normal', assignee_id: undefined }]);
+
+      toast({ title: '✅ Tarea creada', description: `Se creó la tarea con ${validGestiones.length} gestión(es) técnica(s).` });
+    } catch (error: any) {
+      console.error('Error creating task with gestiones:', error);
+      toast({ title: 'Error al crear tarea', description: String(error.message || 'Error desconocido'), variant: 'destructive' });
+    }
+  };
+
+  const addGestionRow = () => {
+    setNewTaskGestiones(prev => [...prev, { title: '', due_date: '', priority: 'normal', assignee_id: newTaskAssigneeId }]);
+  };
+
+  const removeGestionRow = (index: number) => {
+    setNewTaskGestiones(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateGestionRow = (index: number, field: string, value: any) => {
+    setNewTaskGestiones(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g));
   };
 
   if (isLoading) {
@@ -854,11 +929,123 @@ export default function CasoDetailPage() {
               </Button>
             </CardHeader>
             <CardContent>
+              {/* Formulario inline de creación de tarea + gestiones */}
+              {showCreateTaskForm && (
+                <div className="mb-6 p-6 bg-card border-2 border-primary/30 rounded-2xl space-y-5 shadow-xl animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+                    <Zap className="h-5 w-5 text-primary" />
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Nueva Tarea de Gestión</h3>
+                  </div>
+
+                  {/* Título y responsable general */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Título de la tarea</label>
+                      <Input 
+                        value={newTaskTitle} 
+                        onChange={(e) => setNewTaskTitle(e.target.value)} 
+                        placeholder="Gestión para Radicado..." 
+                        className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold" 
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Responsable General</label>
+                      <Select value={newTaskAssigneeId?.toString() || ''} onValueChange={(v) => setNewTaskAssigneeId(v ? parseInt(v) : undefined)}>
+                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                          <SelectValue placeholder="Asignar abogado..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {systemUsers.map(u => <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Gestiones técnicas */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                        <Flag className="h-3.5 w-3.5" /> Gestiones Técnicas
+                      </label>
+                      <Button type="button" variant="ghost" size="sm" onClick={addGestionRow} className="h-7 px-3 text-[10px] font-bold uppercase text-primary hover:bg-primary/10 rounded-lg">
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Agregar otra
+                      </Button>
+                    </div>
+
+                    {newTaskGestiones.map((gestion, idx) => (
+                      <div key={idx} className="grid grid-cols-[1fr_140px_120px_180px_36px] gap-3 items-end p-3 bg-muted/30 rounded-xl border border-border/40">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Actividad Técnica</label>
+                          <Input 
+                            value={gestion.title} 
+                            onChange={(e) => updateGestionRow(idx, 'title', e.target.value)} 
+                            placeholder="Nombre de la gestión..." 
+                            className="h-9 bg-background border-border/50 rounded-lg text-sm" 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Término</label>
+                          <Input 
+                            type="date" 
+                            value={gestion.due_date} 
+                            onChange={(e) => updateGestionRow(idx, 'due_date', e.target.value)} 
+                            className="h-9 bg-background border-border/50 rounded-lg text-sm" 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Prioridad</label>
+                          <Select value={gestion.priority} onValueChange={(v) => updateGestionRow(idx, 'priority', v)}>
+                            <SelectTrigger className="h-9 bg-background border-border/50 rounded-lg text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Baja</SelectItem>
+                              <SelectItem value="normal">Normal</SelectItem>
+                              <SelectItem value="high">Alta</SelectItem>
+                              <SelectItem value="urgent">Urgente</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Abogado</label>
+                          <Select value={gestion.assignee_id?.toString() || ''} onValueChange={(v) => updateGestionRow(idx, 'assignee_id', v ? parseInt(v) : undefined)}>
+                            <SelectTrigger className="h-9 bg-background border-border/50 rounded-lg text-sm">
+                              <SelectValue placeholder="Asignar..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {systemUsers.map(u => <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          {newTaskGestiones.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeGestionRow(idx)} className="h-9 w-9 text-muted-foreground hover:text-red-500 rounded-lg">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <Button variant="ghost" onClick={() => setShowCreateTaskForm(false)} className="h-10 px-5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground">
+                      Descartar
+                    </Button>
+                    <Button onClick={handleCreateTaskWithGestiones} className="h-10 px-8 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Crear Tarea y Gestiones
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {isLoadingTasks ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : tasks.length === 0 ? (
+              ) : tasks.length === 0 && !showCreateTaskForm ? (
                 <div className="text-center py-12 border-2 border-dashed rounded-xl bg-muted/10">
                   <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
                   <p className="text-muted-foreground font-medium">No hay tareas de gestión vinculadas.</p>
