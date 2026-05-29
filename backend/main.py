@@ -3601,12 +3601,25 @@ async def do_auto_refresh_with_lock():
 @app.get("/cases/events/{id_reg_actuacion}/documents")
 async def get_event_documents(
     id_reg_actuacion: int,
-    llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 dgitos")
+    llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 digitos"),
+    db: Session = Depends(get_db)
 ):
     print(f"\n [DOCS] id_reg_actuacion={id_reg_actuacion} | llave_proceso={llave_proceso}")
 
+    # 1. Intentar obtener de la base de datos (caché) para velocidad instantánea
+    try:
+        event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
+        if event and event.documentos_cache:
+            print(f" [DOCS] Retornando desde cache para id_reg_actuacion={id_reg_actuacion}")
+            cached_items = json.loads(event.documentos_cache)
+            return {"items": cached_items, "total": len(cached_items)}
+    except Exception as e:
+        print(f" [DOCS] Error leyendo cache de BD: {e}")
+        db.rollback()
+
     items = []
 
+    # 2. Si no hay cache, hacer la consulta externa normal
     try:
         raw = await documentos_actuacion(id_reg_actuacion, llave_proceso)
         print(f" [DOCS] service/rama.documentos_actuacion()  tipo={type(raw).__name__} | valor={str(raw)[:300]}")
@@ -3626,6 +3639,17 @@ async def get_event_documents(
         except Exception as e:
             print(f" [DOCS] Error en llamada directa: {e}")
             traceback.print_exc()
+
+    # 3. Guardar en la base de datos si obtuvimos resultados
+    try:
+        event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
+        if event:
+            event.documentos_cache = json.dumps(items)
+            db.commit()
+            print(f" [DOCS] Guardado en cache exitosamente ({len(items)} items).")
+    except Exception as e:
+        db.rollback()
+        print(f" [DOCS] Error guardando cache en BD: {e}")
 
     print(f" [DOCS] Resultado final  {len(items)} documentos")
     return {"items": items, "total": len(items)}
@@ -5035,9 +5059,9 @@ async def get_tasks(
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Task).options(
-        joinedload(Task.subtasks),
-        joinedload(Task.tags),
-        joinedload(Task.attachments)
+        selectinload(Task.subtasks),
+        selectinload(Task.tags),
+        selectinload(Task.attachments)
     )
     
     # Aplicar filtros adicionales
@@ -5129,19 +5153,31 @@ async def get_task_detail(
         if task.clickup_id:
             api_token = request.headers.get("X-ClickUp-Token")
             if api_token:
+                is_fresh = False
                 try:
-                    from backend.clickup_sync import fetch_clickup, process_task
-                    t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
-                    if t_data:
-                        all_users = db.query(User).all()
-                        user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
-                        user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
-                        
-                        await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
-                        db.commit()
-                except Exception as sync_err:
-                    print(f"[SYNC ERROR] get_task_detail: {sync_err}")
-                    db.rollback()
+                    age_seconds = (now_colombia() - task.updated_at).total_seconds()
+                    if age_seconds < 120:
+                        is_fresh = True
+                        print(f" [TASK] Sirviendo tarea de ClickUp {task.clickup_id} desde BD local (fresca hace {age_seconds:.1f}s)")
+                except Exception as age_err:
+                    print(f" [TASK] Error calculando edad de la tarea: {age_err}")
+
+                if not is_fresh:
+                    try:
+                        from backend.clickup_sync import fetch_clickup, process_task
+                        print(f" [TASK] Sincronizando con ClickUp de forma sincrona: {task.clickup_id}")
+                        t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
+                        if t_data:
+                            all_users = db.query(User).all()
+                            user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
+                            user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
+                            
+                            await process_task(t_data, task.list_id, db, current_user.id, user_map, api_token, inherited_case_id=task.case_id)
+                            task.updated_at = now_colombia()
+                            db.commit()
+                    except Exception as sync_err:
+                        print(f"[SYNC ERROR] get_task_detail: {sync_err}")
+                        db.rollback()
         
         # Construcción manual segura para evitar recursividad infinita (Circular Reference)
         def fmt_dt(dt):
