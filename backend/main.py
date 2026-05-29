@@ -3621,10 +3621,12 @@ async def get_event_documents(
 
     # 2. Si no hay cache, hacer la consulta externa normal
     try:
-        raw = await documentos_actuacion(id_reg_actuacion, llave_proceso)
+        raw = await asyncio.wait_for(documentos_actuacion(id_reg_actuacion, llave_proceso), timeout=20.0)
         print(f" [DOCS] service/rama.documentos_actuacion()  tipo={type(raw).__name__} | valor={str(raw)[:300]}")
         items = extract_documentos_from_response(raw)
         print(f" [DOCS] items extrados del servicio: {len(items)}")
+    except asyncio.TimeoutError:
+        print(" [DOCS] Timeout de 20s en documentos_actuacion")
     except RamaError as e:
         print(f" [DOCS] RamaError en servicio: {e}")
     except Exception as e:
@@ -3632,13 +3634,18 @@ async def get_event_documents(
         traceback.print_exc()
 
     if not items:
-        print(f" [DOCS] Servicio retorn vaco. Intentando llamada directa a Rama Judicial...")
+        print(f" [DOCS] Servicio retorn vaco o timeout. Intentando llamada directa a Rama Judicial...")
         try:
-            items = await fetch_documentos_rama_directa(id_reg_actuacion, llave_proceso)
+            items = await asyncio.wait_for(fetch_documentos_rama_directa(id_reg_actuacion, llave_proceso), timeout=20.0)
             print(f" [DOCS] items desde llamada directa: {len(items)}")
+        except asyncio.TimeoutError:
+            print(" [DOCS] Timeout de 20s en fetch_documentos_rama_directa")
         except Exception as e:
             print(f" [DOCS] Error en llamada directa: {e}")
             traceback.print_exc()
+            
+    if not items:
+        raise HTTPException(504, "La Rama Judicial tardó demasiado en responder o no entregó documentos. Intenta de nuevo más tarde.")
 
     # 3. Guardar en la base de datos si obtuvimos resultados
     try:
