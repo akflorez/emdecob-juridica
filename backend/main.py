@@ -5239,16 +5239,34 @@ async def create_task(
     current_user: User = Depends(get_current_user)
 ):
     lid = t_data.list_id
-    if lid is None:
-        # Intentar buscar una lista por defecto o crear una
-        default_list = db.query(ProjectList).filter(ProjectList.name == "BANDEJA DE ENTRADA").first()
-        if not default_list:
-            # Buscar la primera lista disponible
-            default_list = db.query(ProjectList).first()
+    list_exists = False
+    if lid is not None:
+        list_exists = db.query(ProjectList).filter(ProjectList.id == lid).count() > 0
         
-        if default_list:
-            lid = default_list.id
-            print(f" [TASK] Asignando lista por defecto ID {lid}")
+    if not list_exists:
+        # Intentar buscar lista del abogado del caso
+        if t_data.case_id:
+            case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
+            if case_obj and case_obj.abogado:
+                # Buscar lista que coincida con el nombre del abogado
+                lawyer_list = db.query(ProjectList).filter(ProjectList.name.ilike(f"%{case_obj.abogado}%")).first()
+                if lawyer_list:
+                    lid = lawyer_list.id
+                    list_exists = True
+                    print(f" [TASK] Reasignando list_id invalido ({t_data.list_id}) a la lista del abogado: {lawyer_list.name} (ID {lid})")
+        
+        if not list_exists:
+            # Buscar "BANDEJA DE ENTRADA" o similar
+            default_list = db.query(ProjectList).filter(ProjectList.name.ilike("%bandeja%")).first()
+            if not default_list:
+                default_list = db.query(ProjectList).first()
+            
+            if default_list:
+                lid = default_list.id
+                list_exists = True
+                print(f" [TASK] Reasignando list_id invalido ({t_data.list_id}) a la lista por defecto: {default_list.name} (ID {lid})")
+            else:
+                raise HTTPException(status_code=400, detail="No existe ninguna lista de proyectos en la base de datos para asignar la tarea.")
 
     print(f"[DEBUG] Creating task: title={t_data.title}, parent_id={t_data.parent_id}, case_id={t_data.case_id}")
     try:
