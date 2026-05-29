@@ -3057,6 +3057,10 @@ async def events_logic(c: Case, db: Session):
             needs_refresh = True
         elif not c.last_check_at or (now_colombia() - c.last_check_at).total_seconds() > 43200:
             needs_refresh = True
+        else:
+            has_missing_docs_ids = any(e.con_documentos and not e.id_reg_actuacion for e in db_events)
+            if has_missing_docs_ids:
+                needs_refresh = True
             
         if needs_refresh:
             print(f"[SYNC] Disparando actualizacion para {radicado}")
