@@ -5133,13 +5133,23 @@ async def get_tasks(
         
     return query.order_by(desc(Task.created_at)).all()
 
-# Semáforo para evitar agotar el pool de conexiones de base de datos
-# limitando cuantas sincronizaciones de ClickUp ocurren al mismo tiempo
-clickup_sync_semaphore = asyncio.Semaphore(3)
+# Control de concurrencia y prevención de bucles
+clickup_sync_semaphore = None
+_in_flight_syncs = set()
 
 async def sync_task_with_clickup_background(task_id: int, api_token: str, user_id: int):
     """Sincroniza una tarea de ClickUp en segundo plano para evitar bloqueos y timeouts."""
-    async with clickup_sync_semaphore:
+    global clickup_sync_semaphore
+    if clickup_sync_semaphore is None:
+        clickup_sync_semaphore = asyncio.Semaphore(3)
+        
+    if task_id in _in_flight_syncs:
+        print(f"[BG-CLICKUP] Sync ya está en progreso para tarea ID {task_id}, omitiendo.")
+        return
+        
+    _in_flight_syncs.add(task_id)
+    try:
+        async with clickup_sync_semaphore:
         db = SessionLocal()
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
@@ -5163,6 +5173,8 @@ async def sync_task_with_clickup_background(task_id: int, api_token: str, user_i
             db.rollback()
         finally:
             db.close()
+    finally:
+        _in_flight_syncs.discard(task_id)
 
 @app.get("/api/tasks/{task_id}")
 @app.get("/tasks/{task_id}")
