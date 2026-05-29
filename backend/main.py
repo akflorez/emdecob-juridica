@@ -5133,31 +5133,36 @@ async def get_tasks(
         
     return query.order_by(desc(Task.created_at)).all()
 
+# Semáforo para evitar agotar el pool de conexiones de base de datos
+# limitando cuantas sincronizaciones de ClickUp ocurren al mismo tiempo
+clickup_sync_semaphore = asyncio.Semaphore(3)
+
 async def sync_task_with_clickup_background(task_id: int, api_token: str, user_id: int):
     """Sincroniza una tarea de ClickUp en segundo plano para evitar bloqueos y timeouts."""
-    db = SessionLocal()
-    try:
-        task = db.query(Task).filter(Task.id == task_id).first()
-        if not task or not task.clickup_id:
-            return
-            
-        from backend.clickup_sync import fetch_clickup, process_task
-        print(f"[BG-CLICKUP] Iniciando sync para tarea ID {task_id} (ClickUp {task.clickup_id})...")
-        t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
-        if t_data:
-            all_users = db.query(User).all()
-            user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
-            user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
-            
-            await process_task(t_data, task.list_id, db, user_id, user_map, api_token, inherited_case_id=task.case_id)
-            task.updated_at = now_colombia()
-            db.commit()
-            print(f"[BG-CLICKUP] Sync completado con exito para tarea ID {task_id}")
-    except Exception as e:
-        print(f"[BG-CLICKUP] Error sincronizando tarea {task_id} en segundo plano: {e}")
-        db.rollback()
-    finally:
-        db.close()
+    async with clickup_sync_semaphore:
+        db = SessionLocal()
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task or not task.clickup_id:
+                return
+                
+            from backend.clickup_sync import fetch_clickup, process_task
+            print(f"[BG-CLICKUP] Iniciando sync para tarea ID {task_id} (ClickUp {task.clickup_id})...")
+            t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
+            if t_data:
+                all_users = db.query(User).all()
+                user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
+                user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
+                
+                await process_task(t_data, task.list_id, db, user_id, user_map, api_token, inherited_case_id=task.case_id)
+                task.updated_at = now_colombia()
+                db.commit()
+                print(f"[BG-CLICKUP] Sync completado con exito para tarea ID {task_id}")
+        except Exception as e:
+            print(f"[BG-CLICKUP] Error sincronizando tarea {task_id} en segundo plano: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
 @app.get("/api/tasks/{task_id}")
 @app.get("/tasks/{task_id}")
@@ -5197,6 +5202,7 @@ async def get_task_detail(
 
                 if not is_fresh:
                     print(f" [TASK] Lanzando sincronizacion en segundo plano para ClickUp task={task.clickup_id}")
+                    # Usar asyncio.create_task normal, el semáforo se maneja dentro de la función
                     asyncio.create_task(sync_task_with_clickup_background(task.id, api_token, current_user.id))
         
         # Construcción manual segura para evitar recursividad infinita (Circular Reference)
