@@ -274,13 +274,14 @@ export default function CasoDetailPage() {
       }));
     } catch (e: any) {
       console.error('Error cargando documentos:', e);
+      const errorMessage = e?.payload?.detail || e?.message || 'Error desconocido';
       setExpandedDocs(prev => ({
         ...prev,
-        [idReg]: { items: [], rawResponse: null, error: e?.message || 'Error desconocido' },
+        [idReg]: { items: [], rawResponse: null, error: errorMessage },
       }));
       toast({
-        title: 'Error al cargar documentos',
-        description: e?.message || 'No se pudieron cargar los documentos',
+        title: 'Rama Judicial no responde',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
