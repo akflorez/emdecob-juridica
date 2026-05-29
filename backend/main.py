@@ -5150,29 +5150,29 @@ async def sync_task_with_clickup_background(task_id: int, api_token: str, user_i
     _in_flight_syncs.add(task_id)
     try:
         async with clickup_sync_semaphore:
-        db = SessionLocal()
-        try:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if not task or not task.clickup_id:
-                return
-                
-            from backend.clickup_sync import fetch_clickup, process_task
-            print(f"[BG-CLICKUP] Iniciando sync para tarea ID {task_id} (ClickUp {task.clickup_id})...")
-            t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
-            if t_data:
-                all_users = db.query(User).all()
-                user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
-                user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
-                
-                await process_task(t_data, task.list_id, db, user_id, user_map, api_token, inherited_case_id=task.case_id)
-                task.updated_at = now_colombia()
-                db.commit()
-                print(f"[BG-CLICKUP] Sync completado con exito para tarea ID {task_id}")
-        except Exception as e:
-            print(f"[BG-CLICKUP] Error sincronizando tarea {task_id} en segundo plano: {e}")
-            db.rollback()
-        finally:
-            db.close()
+            db = SessionLocal()
+            try:
+                task = db.query(Task).filter(Task.id == task_id).first()
+                if not task or not task.clickup_id:
+                    return
+                    
+                from backend.clickup_sync import fetch_clickup, process_task
+                print(f"[BG-CLICKUP] Iniciando sync para tarea ID {task_id} (ClickUp {task.clickup_id})...")
+                t_data = await fetch_clickup(f"task/{task.clickup_id}?include_subtasks=true&include_checklists=true", api_token)
+                if t_data:
+                    all_users = db.query(User).all()
+                    user_map = { (u.nombre or '').lower().strip(): u.id for u in all_users if u.nombre }
+                    user_map.update({ (u.username or '').lower().strip(): u.id for u in all_users })
+                    
+                    await process_task(t_data, task.list_id, db, user_id, user_map, api_token, inherited_case_id=task.case_id)
+                    task.updated_at = now_colombia()
+                    db.commit()
+                    print(f"[BG-CLICKUP] Sync completado con exito para tarea ID {task_id}")
+            except Exception as e:
+                print(f"[BG-CLICKUP] Error sincronizando tarea {task_id} en segundo plano: {e}")
+                db.rollback()
+            finally:
+                db.close()
     finally:
         _in_flight_syncs.discard(task_id)
 
