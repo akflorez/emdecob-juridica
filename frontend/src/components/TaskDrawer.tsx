@@ -108,7 +108,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
 
       getStatuses().then(res => setAllSystemStatuses(Array.isArray(res) ? res : [])).catch(console.error);
     }
-  }, [task, open]);
+  }, [task?.id, open]);
 
   const refreshTask = async () => {
     if (!task || !task.id) return;
