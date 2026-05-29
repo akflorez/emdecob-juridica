@@ -1092,6 +1092,10 @@ export default function CasoDetailPage() {
               setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
               setSelectedTask(updated); // refrescar drawer data en vivo
             }}
+            onTaskDelete={(taskId) => {
+              setTasks(prev => prev.filter(t => t.id !== taskId && t.parent_id !== taskId));
+              setSelectedTask(null);
+            }}
             clickupToken={clickupToken || undefined}
             allAssignees={Array.from(new Set([...tasks.map(t => t.assignee_name), ...systemUsers.map(u => u.nombre || u.username)].filter(Boolean))) as string[]}
             allStatuses={Array.from(new Set(tasks.map(t => t.status).filter(Boolean))) as string[]}

@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   updateTask, addComment, deleteComment, updateComment,
   addChecklistItem, updateChecklistItem, deleteChecklistItem,
-  getUsers, getTags, getStatuses, getTaskDetail, createTask,
+  getUsers, getTags, getStatuses, getTaskDetail, createTask, deleteTask,
   type Task as TaskType, type User, type Tag as TagType
 } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
@@ -49,12 +49,13 @@ interface TaskDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTaskUpdate: (updatedTask: TaskType) => void;
+  onTaskDelete?: (taskId: number) => void;
   clickupToken?: string;
   allAssignees?: string[];
   allStatuses?: string[];
 }
 
-export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToken, allStatuses: propStatuses = [] }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelete, clickupToken, allStatuses: propStatuses = [] }: TaskDrawerProps) {
   const { toast } = useToast();
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
@@ -127,6 +128,19 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!displayTask || !displayTask.id) return;
+    if (!confirm('¿Estás seguro de eliminar esta tarea? Se eliminarán también todas sus gestiones, comentarios y checklist.')) return;
+    try {
+      await deleteTask(displayTask.id);
+      toast({ title: 'Tarea eliminada', description: 'La tarea y sus gestiones han sido eliminadas.' });
+      if (onTaskDelete) onTaskDelete(displayTask.id);
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({ title: 'Error al eliminar', description: String(error.message || 'Error desconocido'), variant: 'destructive' });
     }
   };
 
@@ -324,6 +338,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, clickupToke
                          <Button variant="ghost" size="sm" onClick={refreshTask} disabled={isLoading} className="text-muted-foreground hover:text-foreground gap-2 font-black text-[9px] tracking-widest transition-all">
                             <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} /> REFRESCAR
                          </Button>
+                         {displayTask.id && (
+                           <Button variant="ghost" size="sm" onClick={handleDeleteTask} className="text-muted-foreground hover:text-red-500 gap-2 font-black text-[9px] tracking-widest transition-all">
+                              <Trash2 className="h-3.5 w-3.5" /> ELIMINAR
+                           </Button>
+                         )}
                          <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
                            <X className="h-6 w-6" />
                          </Button>

@@ -955,6 +955,12 @@ export function updateTask(taskId: number, data: Partial<Task>) {
   });
 }
 
+export function deleteTask(taskId: number) {
+  return apiFetch<{ ok: boolean; detail: string }>(`/projects/tasks/${taskId}`, {
+    method: "DELETE",
+  });
+}
+
 export function addComment(taskId: number, content: string) {
   return apiFetch<TaskComment>(`/projects/tasks/${taskId}/comments`, {
     method: "POST",

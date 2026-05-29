@@ -5347,6 +5347,42 @@ async def create_task(
         print(f"[CRITICAL ERROR] create_task: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
+@app.delete("/api/projects/tasks/{task_id}")
+@app.delete("/projects/tasks/{task_id}")
+@app.delete("/api/tasks/{task_id}")
+@app.delete("/tasks/{task_id}")
+async def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    
+    try:
+        # Eliminar subtareas primero
+        subtasks = db.query(Task).filter(Task.parent_id == task_id).all()
+        for st in subtasks:
+            db.query(TaskComment).filter(TaskComment.task_id == st.id).delete()
+            db.query(TaskChecklistItem).filter(TaskChecklistItem.task_id == st.id).delete()
+            db.delete(st)
+        
+        # Eliminar comentarios, checklists y attachments de la tarea padre
+        db.query(TaskComment).filter(TaskComment.task_id == task_id).delete()
+        db.query(TaskChecklistItem).filter(TaskChecklistItem.task_id == task_id).delete()
+        db.query(TaskAttachment).filter(TaskAttachment.task_id == task_id).delete()
+        
+        db.delete(task)
+        db.commit()
+        print(f"[TASK] Tarea {task_id} eliminada por usuario {current_user.username}")
+        return {"ok": True, "detail": "Tarea eliminada correctamente"}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        print(f"[CRITICAL ERROR] delete_task: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
 @app.post("/projects/tasks/{task_id}/comments")
 @app.post("/api/projects/tasks/{task_id}/comments")
 @app.post("/api/tasks/{task_id}/comments")
