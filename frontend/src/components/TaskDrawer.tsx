@@ -89,6 +89,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
 
   useEffect(() => {
     if (task && open) {
+      setFullTask(null); // limpiar datos anteriores para evitar mostrar datos de otra tarea
       setEditedTitle(task.title || '');
       setEditedDesc(task.description || '');
       setEditedDueDate(task.due_date ? format(parseISO(task.due_date.toString()), 'yyyy-MM-dd') : '');
