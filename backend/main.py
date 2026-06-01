@@ -1554,10 +1554,10 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id == current_user.id, InvalidRadicado.user_id == 2))
         q_pendientes = q_pendientes.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        # Otros usuarios (ej: FNA) ven todo menos lo de Jurico (ID 2)
-        q_validos = q_validos.filter(and_(Case.user_id != 2, Case.user_id != current_user.id if current_user.id != 1 else True))
-        q_invalidos = q_invalidos.filter(and_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id != current_user.id if current_user.id != 1 else True))
-        q_pendientes = q_pendientes.filter(and_(Case.user_id != 2, Case.user_id != current_user.id if current_user.id != 1 else True))
+        # Otros usuarios (ej: FNA) ven solo lo suyo
+        q_validos = q_validos.filter(Case.user_id == current_user.id)
+        q_invalidos = q_invalidos.filter(InvalidRadicado.user_id == current_user.id)
+        q_pendientes = q_pendientes.filter(Case.user_id == current_user.id)
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1585,9 +1585,9 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             q_no_leidos = q_no_leidos.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
             q_hoy = q_hoy.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
         else:
-            # FNA y otros excluyen a Jurico (ID 2)
-            q_no_leidos = q_no_leidos.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
-            q_hoy = q_hoy.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+            # FNA y otros ven solo lo suyo
+            q_no_leidos = q_no_leidos.filter(Case.user_id == current_user.id)
+            q_hoy = q_hoy.filter(Case.user_id == current_user.id)
 
     return {
         "total_validos": total_validos,
@@ -5613,7 +5613,7 @@ async def get_advanced_dashboard_stats(
     elif is_jurico:
         q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id == current_user.id)
         
     month_actions = q_month.count()
     
@@ -5627,7 +5627,7 @@ async def get_advanced_dashboard_stats(
     elif is_jurico:
         q_abogados = q_abogados.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_abogados = q_abogados.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+        q_abogados = q_abogados.filter(Case.user_id == current_user.id)
     
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
@@ -5647,7 +5647,7 @@ async def get_advanced_dashboard_stats(
     elif is_jurico:
         q_unread = q_unread.filter(Case.user_id == current_user.id)
     else:
-        q_unread = q_unread.filter(or_(Case.user_id != 2, Case.user_id.is_(None)))
+        q_unread = q_unread.filter(Case.user_id == current_user.id)
         
     unread_total = q_unread.count()
     
