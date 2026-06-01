@@ -684,6 +684,136 @@ async def _pending_validation_loop():
 
         await asyncio.sleep(CYCLE_WAIT)
 
+async def run_publicaciones_worker_loop():
+    from backend.models import CasePublicationSearch
+    from backend.service.publicaciones import consultar_publicaciones_rango, parse_fecha_pub, guardar_publicacion_validada, guardar_estado_busqueda
+    from sqlalchemy import text
+    import traceback
+
+    CONCURRENCY = 1
+    SLEEP_MS = 0.8
+    MAX_RETRIES = 2
+    LOCK_TIMEOUT_MINUTES = 15
+    BATCH_SIZE = 5
+
+    print("[pub-worker] Iniciando worker automático de publicaciones procesales...")
+    await asyncio.sleep(5)  # Esperar a que inicie la app
+
+    while True:
+        db = None
+        try:
+            db = SessionLocal()
+            
+            # Recuperar tareas colgadas
+            timeout_threshold = now_colombia() - timedelta(minutes=LOCK_TIMEOUT_MINUTES)
+            colgadas = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.estado == "procesando",
+                CasePublicationSearch.locked_at < timeout_threshold
+            ).all()
+            for c in colgadas:
+                c.estado = "pendiente"
+                c.estado_busqueda = "pendiente"
+                c.locked_at = None
+                c.locked_by = None
+                c.ultimo_error = "Timeout. Recuperada por el worker."
+                c.intentos += 1
+            if colgadas:
+                db.commit()
+                print(f"[pub-worker] Recuperadas {len(colgadas)} tareas colgadas.")
+
+            # Obtener pendientes (Select for update skip locked no está en SQLite, usaremos un update atómico)
+            # Primero buscamos candidatos
+            candidatos = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.estado == "pendiente",
+                or_(CasePublicationSearch.next_retry_at.is_(None), CasePublicationSearch.next_retry_at <= now_colombia())
+            ).order_by(desc(CasePublicationSearch.prioridad), CasePublicationSearch.created_at).limit(BATCH_SIZE).all()
+
+            if not candidatos:
+                await asyncio.sleep(5.0)
+                continue
+
+            for candidato in candidatos:
+                # Intento de lock optimista
+                locked_id = candidato.id
+                worker_id = f"worker_{id(asyncio.current_task())}"
+                now_ts = now_colombia()
+                
+                # Ejecutar UPDATE crudo para el lock
+                stmt = text("""
+                    UPDATE publicaciones_busquedas 
+                    SET estado='procesando', estado_busqueda='procesando', locked_at=:now, locked_by=:worker 
+                    WHERE id=:id AND estado='pendiente'
+                """)
+                res = db.execute(stmt, {"now": now_ts, "worker": worker_id, "id": locked_id})
+                db.commit()
+
+                if res.rowcount == 0:
+                    continue # Otro worker la tomó
+                
+                # Refrescar instancia
+                db.refresh(candidato)
+                print(f"[pub-worker] Procesando ID={candidato.id} Radicado={candidato.radicado} Mes={candidato.mes_busqueda}")
+                
+                try:
+                    fecha_act_str = candidato.fecha_actuacion.strftime("%Y-%m-%d")
+                    year, month = map(int, candidato.mes_busqueda.split("-"))
+                    
+                    # Llamar al scraper real
+                    pubs = await consultar_publicaciones_rango(
+                        candidato.radicado, 
+                        fecha_act_str, 
+                        year=year, 
+                        month=month
+                    )
+                    
+                    if pubs:
+                        for pub_data in pubs:
+                            pub_data["radicado"] = candidato.radicado
+                            guardar_publicacion_validada(db, pub_data)
+                            
+                        candidato.estado = "encontrada"
+                        candidato.estado_busqueda = "encontrada"
+                    else:
+                        candidato.estado = "sin_resultado"
+                        candidato.estado_busqueda = "sin_resultado"
+                        
+                    candidato.processed_at = now_colombia()
+                    candidato.ultimo_error = None
+                    db.commit()
+                    
+                except Exception as e:
+                    db.rollback()
+                    err_msg = str(e) + "\n" + traceback.format_exc()
+                    candidato.intentos += 1
+                    candidato.ultimo_error = err_msg[:500]
+                    candidato.processed_at = now_colombia()
+                    
+                    if candidato.intentos >= MAX_RETRIES and not candidato.force:
+                        candidato.estado = "error"
+                        candidato.estado_busqueda = "error"
+                    else:
+                        candidato.estado = "pendiente"
+                        candidato.estado_busqueda = "pendiente"
+                        candidato.next_retry_at = now_colombia() + timedelta(minutes=5 * candidato.intentos)
+                        
+                    candidato.locked_at = None
+                    candidato.locked_by = None
+                    db.add(candidato)
+                    db.commit()
+                    print(f"[pub-worker] Error ID={candidato.id}: {e}")
+                
+                # Sleep de protección entre requests a la Rama
+                await asyncio.sleep(SLEEP_MS)
+                
+        except Exception as e:
+            print(f"[pub-worker] Error fatal en loop: {e}")
+            await asyncio.sleep(5.0)
+        finally:
+            if db:
+                db.close()
+                
+        await asyncio.sleep(0.1)
+
 
 # =========================
 # LIFESPAN (STARTUP/SHUTDOWN)
@@ -714,6 +844,21 @@ async def lifespan(app: FastAPI):
             if 'assignee_name' not in cols:
                 conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_name VARCHAR(200)"))
                 print("Migración: Columna assignee_name añadida")
+                
+            cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
+            if 'mes_busqueda' not in cols_pub:
+                print("Migración: Añadiendo columnas de cola a publicaciones_busquedas")
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN mes_busqueda VARCHAR(20)"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN prioridad INTEGER DEFAULT 0"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN intentos INTEGER DEFAULT 0"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN ultimo_error TEXT"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN processed_at TIMESTAMP"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN locked_at TIMESTAMP"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN locked_by VARCHAR(100)"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN next_retry_at TIMESTAMP"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN force BOOLEAN DEFAULT FALSE"))
+                conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN source_trigger VARCHAR(100)"))
+            
             
             # Garantizar tablas de soporte
             conn.execute(text("""
@@ -757,6 +902,9 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_pending_validation_loop())
     print("[SYNC] Validacion continua de pendientes iniciada")
+
+    asyncio.create_task(run_publicaciones_worker_loop())
+    print("[SYNC] Worker de publicaciones automático iniciado")
 
     yield
 
@@ -3730,78 +3878,25 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
         
     pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
     
-    meses_retornados = sorted(list(set(p.fecha_publicacion.strftime('%Y-%m') for p in pubs if p.fecha_publicacion)))
-    print(f"[PUBLICACIONES][FRONTEND_RESPONSE]\ntotal_publicaciones={len(pubs)}\nmeses_retornados={meses_retornados}")
+    # Auto-encolar búsquedas si faltan (liviano, sin scraping web)
+    from backend.service.publicaciones import auto_queue_publicaciones
+    auto_queue_publicaciones(db, radicado, force=False, source_trigger="view_case")
     
-    # Búsqueda automática basada en actuaciones relevantes
-    from backend.models import CaseEvent, CasePublicationSearch
-    from backend.service.publicaciones import is_relevant_actuacion, get_search_months_for_actuacion
-    import calendar
-    from datetime import datetime, timedelta, date
+    # Consultar estado de la cola
+    from backend.models import CasePublicationSearch
+    busquedas_db = db.query(CasePublicationSearch).filter(CasePublicationSearch.radicado == radicado).all()
     
-    eventos = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
-    actuaciones_relevantes = []
-    for ev in eventos:
-        act_text = getattr(ev, "title", "") or getattr(ev, "actuacion", "") or ""
-        if is_relevant_actuacion(act_text):
-            raw_date = getattr(ev, "event_date", "") or getattr(ev, "fecha_actuacion", "")
-            if raw_date:
-                if isinstance(raw_date, (date, datetime)):
-                    dt = raw_date
-                else:
-                    try:
-                        dt = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d")
-                    except:
-                        continue
-                if isinstance(dt, datetime):
-                    dt = dt.date()
-                actuaciones_relevantes.append(dt)
-                
-    if actuaciones_relevantes:
-        meses_a_buscar = set()
-        for dt in actuaciones_relevantes:
-            for mes in get_search_months_for_actuacion(dt):
-                meses_a_buscar.add(mes)
-                
-        necesita_busqueda = False
-        for year, month in meses_a_buscar:
-            fecha_inicio = date(year, month, 1)
-            fecha_fin = date(year, month, calendar.monthrange(year, month)[1])
-            
-            # Verificar si ya existe publicación válida para este mes
-            ya_existe_valida = db.query(CasePublication).filter(
-                CasePublication.case_id == case.id,
-                CasePublication.match_fuerte == True,
-                (
-                    ((CasePublication.fecha_publicacion >= fecha_inicio) & (CasePublication.fecha_publicacion <= fecha_fin)) |
-                    ((CasePublication.fecha_estado_electronico >= fecha_inicio) & (CasePublication.fecha_estado_electronico <= fecha_fin))
-                )
-            ).count() > 0
-            
-            if ya_existe_valida:
-                continue
-                
-            # Verificar si hay una búsqueda reciente (<24h)
-            recent_search = db.query(CasePublicationSearch).filter(
-                CasePublicationSearch.radicado == case.radicado,
-                CasePublicationSearch.fecha_inicio_busqueda == fecha_inicio,
-                CasePublicationSearch.fecha_ultima_busqueda >= datetime.now() - timedelta(hours=24)
-            ).first()
-            
-            if not recent_search:
-                necesita_busqueda = True
-                break
-                
-        if necesita_busqueda:
-            is_active_search = case.sync_pub_status in ["buscando", "Iniciando búsqueda...", "Buscando publicaciones procesales...", "Iniciando...", "Iniciando búsqueda forzada..."]
-            if not is_active_search:
-                case.sync_pub_progress = 5
-                case.sync_pub_status = "Buscando publicaciones procesales..."
-                db.commit()
-                # Ejecutar tarea en segundo plano
-                asyncio.create_task(save_new_publications_task(case.id))
-                
+    # Estado consolidado para compatibilidad
+    global_status = "completado"
+    if any(b.estado in ["pendiente", "procesando"] for b in busquedas_db):
+        global_status = "procesando"
+    elif not pubs and any(b.estado == "error" for b in busquedas_db):
+        global_status = "error"
+    elif not pubs and any(b.estado == "sin_resultado" for b in busquedas_db):
+        global_status = "sin_resultado"
+        
     return {
+        "radicado": radicado,
         "items": [
             {
                 "id": p.id,
@@ -3826,8 +3921,19 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
             }
             for p in pubs
         ],
-        "sync_pub_status": case.sync_pub_status,
-        "sync_pub_progress": case.sync_pub_progress
+        "busquedas": [
+            {
+                "mes_busqueda": b.mes_busqueda,
+                "estado": b.estado,
+                "fecha_ultima_busqueda": b.fecha_ultima_busqueda.isoformat() if b.fecha_ultima_busqueda else None,
+                "error": b.ultimo_error or b.error,
+                "intentos": getattr(b, "intentos", 0)
+            }
+            for b in busquedas_db
+        ],
+        "estado_busqueda": global_status,
+        "sync_pub_status": global_status,
+        "sync_pub_progress": 100 if global_status != "procesando" else 50
     }
 
 @app.get("/api/cases/id/{case_id}/publicaciones")
@@ -3859,13 +3965,13 @@ async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundT
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case: return {"ok": False, "error": "Caso no encontrado"}
     
-    # RESET INMEDIATO PARA EVITAR FALSOS TERMINADOS EN EL FRONTEND
-    case.sync_pub_progress = 5
-    case.sync_pub_status = "Iniciando búsqueda..."
-    db.commit()
+    from backend.service.publicaciones import auto_queue_publicaciones
+    queued = auto_queue_publicaciones(db, case.radicado, force=True, source_trigger="manual_refresh")
     
-    background_tasks.add_task(run_sync_publications_task, case.radicado, True)
-    return {"ok": True, "message": "Sincronización iniciada"}
+    if queued > 0:
+        return {"ok": True, "message": f"Sincronización forzada iniciada para {queued} mes(es)."}
+    else:
+        return {"ok": True, "message": "El caso no tiene actuaciones relevantes para buscar publicaciones."}
 
 @app.post("/api/cases/{radicado}/reset-sync")
 @app.post("/cases/{radicado}/reset-sync")
@@ -4165,40 +4271,28 @@ async def debug_publications_search(body: PublicacionesDebugBody, db: Session = 
 sync_pub_semaphore = asyncio.Semaphore(2)
 
 async def run_sync_publications_task(radicado: str, force: bool = False):
-    """Wrapper para ejecutar la sincronización con su propia sesión de DB."""
-    async with sync_pub_semaphore:
-        db = SessionLocal()
-        try:
-            # Refresh del objeto en esta sesión
-            case = db.query(Case).filter(Case.radicado == radicado).first()
-            if case:
-                await save_new_publications(case, db, force=force)
-        except Exception as e:
-            print(f"[sync_task] Error crítico: {e}")
-            # Limpiar estado en caso de error fatal
-            try:
-                db.rollback()
-                case = db.query(Case).filter(Case.radicado == radicado).first()
-                if case:
-                    case.sync_pub_status = f"Error: {str(e)[:50]}"
-                    case.sync_pub_progress = 0
-                    db.commit()
-            except: pass
-        finally:
-            db.close()
+    """Wrapper para encolar la sincronización en background."""
+    db = SessionLocal()
+    try:
+        from backend.service.publicaciones import auto_queue_publicaciones
+        auto_queue_publicaciones(db, radicado, force=force, source_trigger="manual_sync")
+    except Exception as e:
+        print(f"[sync_task] Error: {e}")
+    finally:
+        db.close()
 
 async def save_new_publications_task(case_id: int):
-    """Wrapper task to run the sync logic in the background, avoiding NameError."""
-    async with sync_pub_semaphore:
-        db = SessionLocal()
-        try:
-            case = db.query(Case).filter(Case.id == case_id).first()
-            if case:
-                await save_new_publications(case, db)
-        except Exception as e:
-            print(f"[save_new_publications_task] Error: {e}")
-        finally:
-            db.close()
+    """Wrapper task to enqueue sync logic in the background."""
+    db = SessionLocal()
+    try:
+        case = db.query(Case).filter(Case.id == case_id).first()
+        if case:
+            from backend.service.publicaciones import auto_queue_publicaciones
+            auto_queue_publicaciones(db, case.radicado, force=False, source_trigger="auto_sync_case")
+    except Exception as e:
+        print(f"[save_new_publications_task] Error: {e}")
+    finally:
+        db.close()
 
 def update_sync_progress(db: Session, case_id: int, progress: int, status: str = None):
     """Actualiza el progreso y guarda un log en la DB para diagnóstico."""

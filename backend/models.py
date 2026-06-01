@@ -10,6 +10,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Table,
     BigInteger,
+    Index,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, backref
@@ -219,19 +220,37 @@ class CasePublicationSearch(Base):
     fecha_inicio_busqueda = Column(Date, nullable=False)
     fecha_fin_busqueda = Column(Date, nullable=False)
     despacho_codigo = Column(String(20), nullable=True)
-    estado = Column(String(50), default="pendiente", nullable=False) # Para compatibilidad con lista de campos
-    estado_busqueda = Column(String(50), default="pendiente", nullable=False) # Para compatibilidad con guardar_estado_busqueda
+    estado = Column(String(50), default="pendiente", nullable=False)
+    estado_busqueda = Column(String(50), default="pendiente", nullable=False)
     fecha_ultima_busqueda = Column(DateTime, nullable=True)
     intento_manual = Column(Boolean, default=False)
     error = Column(Text, nullable=True)
     debug = Column(Text, nullable=True)
     
+    # Nuevos campos para Background Worker Queue
+    mes_busqueda = Column(String(20), index=True, nullable=True)
+    prioridad = Column(Integer, default=0, index=True)
+    intentos = Column(Integer, default=0)
+    ultimo_error = Column(Text, nullable=True)
+    processed_at = Column(DateTime, nullable=True)
+    locked_at = Column(DateTime, nullable=True)
+    locked_by = Column(String(100), nullable=True)
+    next_retry_at = Column(DateTime, index=True, nullable=True)
+    force = Column(Boolean, default=False)
+    source_trigger = Column(String(100), nullable=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint('radicado', 'mes_busqueda', name='uix_pub_search_radicado_mes'),
+        Index('idx_pub_search_queue_worker', 'estado', 'prioridad', 'created_at'),
+        Index('idx_pub_search_retry', 'estado', 'next_retry_at'),
     )
 
 

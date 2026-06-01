@@ -484,7 +484,10 @@ def guardar_estado_busqueda(db, data: dict):
         ).first()
     
     estado = data.get("estado_busqueda") or data.get("estado") or "pendiente"
-    
+    mes_busqueda = data.get("mes_busqueda")
+    if not mes_busqueda and fecha_ini:
+        mes_busqueda = fecha_ini.strftime("%Y-%m")
+        
     if existing:
         existing.fecha_inicio_busqueda = fecha_ini or existing.fecha_inicio_busqueda
         existing.fecha_fin_busqueda = fecha_fin or existing.fecha_fin_busqueda
@@ -495,6 +498,15 @@ def guardar_estado_busqueda(db, data: dict):
         existing.intento_manual = data.get("intento_manual", existing.intento_manual)
         existing.error = data.get("error") or existing.error
         existing.debug = data.get("debug") or existing.debug
+        existing.force = data.get("force", existing.force)
+        
+        if estado == "pendiente":
+            existing.intentos = 0
+            existing.ultimo_error = None
+            existing.next_retry_at = None
+            existing.locked_at = None
+            existing.locked_by = None
+            
         db.flush()
         db.commit()
         return existing
@@ -510,12 +522,62 @@ def guardar_estado_busqueda(db, data: dict):
             fecha_ultima_busqueda=datetime.now(),
             intento_manual=data.get("intento_manual", False),
             error=data.get("error"),
-            debug=data.get("debug")
+            debug=data.get("debug"),
+            mes_busqueda=mes_busqueda,
+            prioridad=data.get("prioridad", 0),
+            source_trigger=data.get("source_trigger"),
+            force=data.get("force", False)
         )
         db.add(new_search)
         db.flush()
         db.commit()
         return new_search
+
+def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trigger: str = "auto_update"):
+    from backend.models import CaseEvent
+    import calendar
+    
+    events = db.query(CaseEvent).filter(CaseEvent.radicado == radicado).all()
+    relevant_events = [e for e in events if is_relevant_actuacion(e.title)]
+    
+    if not relevant_events:
+        return 0
+        
+    queued_count = 0
+    
+    for ev in relevant_events:
+        meses = get_search_months_for_actuacion(ev.event_date)
+        for year, month in meses:
+            mes_str = f"{year}-{month:02d}"
+            
+            from backend.models import CasePublicationSearch
+            existing = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.radicado == radicado,
+                CasePublicationSearch.mes_busqueda == mes_str
+            ).first()
+            
+            if not existing or force:
+                fecha_inicio_str = f"{year}-{month:02d}-01"
+                last_day = calendar.monthrange(year, month)[1]
+                fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
+                
+                despacho_codigo = extract_despacho_code(radicado)
+                
+                guardar_estado_busqueda(db, {
+                    "radicado": radicado,
+                    "fecha_actuacion": ev.event_date,
+                    "fecha_inicio_busqueda": fecha_inicio_str,
+                    "fecha_fin_busqueda": fecha_fin_str,
+                    "despacho_codigo": despacho_codigo,
+                    "estado": "pendiente",
+                    "mes_busqueda": mes_str,
+                    "prioridad": 10 if force else 0,
+                    "source_trigger": source_trigger,
+                    "force": force
+                })
+                queued_count += 1
+                
+    return queued_count
 
 def parse_result_cards(html: str) -> list:
     soup = BeautifulSoup(html, "html.parser")

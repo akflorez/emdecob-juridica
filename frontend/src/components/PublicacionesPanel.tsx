@@ -47,87 +47,84 @@ export function PublicacionesPanel({
   const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
 
-  // Polling para actualizar el progreso
+  const [busquedas, setBusquedas] = useState<any[]>([]);
+
+  // Fetch inicial para obtener las búsquedas actuales y estado global
+  useEffect(() => {
+    const fetchInitialStatus = async () => {
+      try {
+        const result = caseId 
+          ? await getCasePublicationsById(caseId)
+          : await getCasePublications(radicado);
+        
+        if (result && !Array.isArray(result)) {
+          setBusquedas(result.busquedas || []);
+          const status = result.estado_busqueda || result.sync_pub_status;
+          if (status) setSyncStatus(status);
+          if (result.items) onRefresh(result.items);
+        }
+      } catch (e) {
+        console.error("Error fetching initial status:", e);
+      }
+    };
+    if (radicado) fetchInitialStatus();
+  }, [radicado, caseId]);
+
+  // Polling cada 8 segundos si hay búsquedas activas
   useEffect(() => {
     let interval: any;
     
-    // Si hay progreso activo o acabamos de iniciar una búsqueda (isRefreshing)
-    if ((syncProgress > 0 && syncProgress < 100) || isRefreshing) {
+    if (syncStatus === 'pendiente' || syncStatus === 'procesando' || isRefreshing) {
       interval = setInterval(async () => {
         try {
-          // Añadimos timestamp para evitar caché del navegador y ver el progreso real
-          const timestamp = new Date().getTime();
+          const result = caseId 
+            ? await getCasePublicationsById(caseId)
+            : await getCasePublications(radicado);
           
-          // Optimizamos: si tenemos ID, usamos el endpoint de ID que es más rápido y solo DB.
-          // Si no, usamos by-radicado pero con skip_rama=true para no saturar el portal judicial.
-          let caseData: any = null;
-          if (caseId) {
-            caseData = await getCaseById(caseId);
-          } else {
-            const results = await getCaseByRadicado(`${radicado}?skip_rama=true&t=${timestamp}`);
-            caseData = Array.isArray(results) ? results[0] : results;
-          }
-          
-          if (caseData) {
-            // Actualización inmediata de status y progreso
-            setSyncStatus(caseData.sync_pub_status);
-            setSyncProgress(caseData.sync_pub_progress || 0);
+          if (result && !Array.isArray(result)) {
+            const items = result.items || [];
+            const status = result.estado_busqueda || result.sync_pub_status;
             
-            // Si el servidor ya terminó (100% o status nulo pero ya teníamos progreso)
-            if (caseData.sync_pub_progress === 100 || (syncProgress > 50 && !caseData.sync_pub_status)) {
-              const result = caseId 
-                ? await getCasePublicationsById(caseId)
-                : await getCasePublications(radicado);
-              
-              const items = Array.isArray(result) ? result : (result as any).items || [];
+            setBusquedas(result.busquedas || []);
+            setSyncStatus(status);
+            
+            if (status === 'completado' || status === 'error' || status === 'sin_resultado') {
               onRefresh(items);
-              
-              setSyncProgress(0);
-              setSyncStatus(null);
               setIsRefreshing(false);
               if (interval) clearInterval(interval);
             }
           }
         } catch (e) {
-          console.error("Error polling progress:", e);
+          console.error("Error polling publications progress:", e);
         }
-      }, 5000); // Polling de 5 segundos para evitar bloqueos de firewall
+      }, 8000); 
     }
 
     return () => { if (interval) clearInterval(interval); };
-  }, [syncProgress, isRefreshing, radicado, caseId, onRefresh]);
+  }, [syncStatus, isRefreshing, radicado, caseId, onRefresh]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    setSyncProgress(5); // Feedback inmediato
-    setSyncStatus("Iniciando...");
+    setSyncStatus("procesando");
     
     try {
       const result = caseId 
         ? await refreshCasePublicationsById(caseId)
         : await refreshCasePublications(radicado);
         
-      if (result.ok && result.items) {
-        // Si el backend respondió rápido con items
-        onRefresh(result.items);
-        setSyncProgress(0);
-        setSyncStatus(null);
-      } else if (result.ok) {
+      if (result.ok) {
         toast({
-          title: 'Sincronización iniciada',
-          description: result.message || 'La búsqueda de publicaciones se está ejecutando en segundo plano.',
+          title: 'Sincronización manual iniciada',
+          description: result.message || 'Se ha forzado la búsqueda.',
         });
-        // El polling se activará porque syncProgress > 0
       }
     } catch (error: any) {
-      setSyncProgress(0);
-      setSyncStatus(null);
+      setSyncStatus("error");
       toast({
-        title: 'Error al sincronizar',
-        description: error.message || 'No se pudo conectar con el portal de publicaciones.',
+        title: 'Error al solicitar sincronización',
+        description: error.message || 'No se pudo conectar con el servidor.',
         variant: 'destructive',
       });
-    } finally {
       setIsRefreshing(false);
     }
   };
@@ -164,21 +161,36 @@ export function PublicacionesPanel({
 
   return (
     <div className="space-y-4">
-      {/* BARRA DE PROGRESO SENIOR */}
-      {syncProgress > 0 && (
+      {/* SECCIÓN DE BÚSQUEDAS EN COLA */}
+      {busquedas.length > 0 && (
         <Card className="bg-muted/30 border-primary/20 animate-in fade-in slide-in-from-top-2 duration-500">
-          <CardContent className="pt-6 pb-4">
+          <CardContent className="pt-4 pb-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-primary flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                {syncStatus || 'Buscando publicaciones...'}
+              <span className="text-sm font-medium flex items-center gap-2">
+                {(syncStatus === 'pendiente' || syncStatus === 'procesando' || isRefreshing) && (
+                  <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                )}
+                Cola de Búsquedas Automáticas
               </span>
-              <span className="text-sm font-bold text-primary">{syncProgress}%</span>
             </div>
-            <Progress value={syncProgress} className="h-2" />
-            <p className="text-[10px] text-muted-foreground mt-2 italic text-center">
-              Estamos escaneando el portal judicial y validando archivos unificados según tu radicado.
-            </p>
+            
+            <div className="space-y-2 mt-3">
+              {busquedas.map((b, i) => (
+                <div key={i} className="flex justify-between items-center text-xs bg-background p-2 rounded border">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-semibold">Mes: {b.mes_busqueda}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {b.estado === 'procesando' && <span className="text-blue-500 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin"/> Procesando</span>}
+                    {b.estado === 'pendiente' && <span className="text-amber-500">En cola</span>}
+                    {b.estado === 'encontrada' && <span className="text-emerald-500">Encontrada</span>}
+                    {b.estado === 'sin_resultado' && <span className="text-muted-foreground">Sin resultado</span>}
+                    {b.estado === 'error' && <span className="text-destructive" title={b.error}>Error (Intento {b.intentos})</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -194,42 +206,19 @@ export function PublicacionesPanel({
           </p>
         </div>
         <div className="flex gap-2">
-          {(syncProgress > 0 && syncProgress < 100) && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-muted-foreground hover:text-destructive"
-              onClick={async () => {
-                try {
-                  const timestamp = new Date().getTime();
-                  const resp = await fetch(`${cleanBaseUrl}/cases/${radicado}/reset-sync?t=${timestamp}`, { method: 'POST' });
-                  if (resp.ok) {
-                    setSyncProgress(0);
-                    setSyncStatus(null);
-                    setIsRefreshing(false);
-                    toast({ title: "Sincronización reseteada", description: "El estado se ha limpiado. Puedes intentar de nuevo." });
-                  }
-                } catch (e) {
-                  console.error(e);
-                }
-              }}
-            >
-              Forzar Reset
-            </Button>
-          )}
           <Button 
             variant="outline" 
             size="sm" 
             onClick={handleRefresh} 
-            disabled={isRefreshing || (syncProgress > 0 && syncProgress < 100)}
+            disabled={isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando'}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'animate-spin' : ''}`} />
-            {isRefreshing || (syncProgress > 0 && syncProgress < 100) ? 'Buscando...' : 'Sincronizar ahora'}
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'animate-spin' : ''}`} />
+            {isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'Buscando...' : 'Sincronizar ahora'}
           </Button>
         </div>
       </div>
 
-      {publications.length === 0 && (syncProgress === 0 || syncProgress === 100) ? (
+      {publications.length === 0 && busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 flex flex-col items-center justify-center text-center">
             <div className="bg-muted p-3 rounded-full mb-4">
