@@ -534,10 +534,14 @@ def guardar_estado_busqueda(db, data: dict):
         return new_search
 
 def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trigger: str = "auto_update"):
-    from backend.models import CaseEvent
+    from backend.models import CaseEvent, Case
     import calendar
     
-    events = db.query(CaseEvent).filter(CaseEvent.radicado == radicado).all()
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case:
+        return 0
+        
+    events = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
     relevant_events = [e for e in events if is_relevant_actuacion(e.title)]
     
     if not relevant_events:
