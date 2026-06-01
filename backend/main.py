@@ -4271,15 +4271,27 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                         actuaciones_relevantes.append(dt)
 
         if not actuaciones_relevantes:
-            # Marcar no requiere búsqueda
-            guardar_estado_busqueda(db, {
-                "radicado": case.radicado,
-                "fecha_actuacion": date.today(),
-                "estado_busqueda": "no_requiere_busqueda",
-                "debug": "No se encontraron actuaciones relevantes para este radicado."
-            })
-            update_sync_progress(db, case.id, 100, "No se detectaron actuaciones relevantes.")
-            return
+            if not force:
+                # Marcar no requiere búsqueda
+                guardar_estado_busqueda(db, {
+                    "radicado": case.radicado,
+                    "fecha_actuacion": date.today(),
+                    "estado_busqueda": "no_requiere_busqueda",
+                    "debug": "No se encontraron actuaciones relevantes para este radicado."
+                })
+                update_sync_progress(db, case.id, 100, "No se detectaron actuaciones relevantes.")
+                return
+            else:
+                # Búsqueda manual forzada: buscar en el mes actual y el anterior (por si apenas lo publicaron)
+                print(f"[sync] Busqueda forzada sin actuaciones relevantes para {case.radicado}. Usando mes actual y anterior.")
+                hoy = date.today()
+                actuaciones_relevantes = [hoy]
+                
+                # Agregar el mes pasado para mayor cobertura en búsquedas forzadas
+                primer_dia = hoy.replace(day=1)
+                mes_pasado = primer_dia - timedelta(days=1)
+                actuaciones_relevantes.append(mes_pasado)
+                seen_dates = {hoy, mes_pasado}
 
         # Calcular todos los meses a buscar (evitando duplicados)
         meses_a_buscar = set()
