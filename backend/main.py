@@ -3671,7 +3671,7 @@ async def descargar_documento_endpoint(id_documento: int):
     print(f" Descargando documento ID={id_documento}  {url_rama}")
 
     try:
-        client = httpx.AsyncClient(timeout=60.0, verify=False, headers=RAMA_HEADERS)
+        client = httpx.AsyncClient(timeout=60.0, verify=False, headers=RAMA_HEADERS, follow_redirects=True)
         response = await client.send(
             client.build_request("GET", url_rama),
             stream=True
@@ -3679,7 +3679,7 @@ async def descargar_documento_endpoint(id_documento: int):
 
         print(f" Status Rama Judicial: {response.status_code}")
 
-        if response.status_code != 200:
+        if response.status_code >= 400:
             await response.aclose()
             await client.aclose()
             raise HTTPException(
