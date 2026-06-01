@@ -2366,7 +2366,7 @@ def list_cases(
         if is_jurico:
             q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
         else:
-            q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+            q_unread = q_unread.filter(Case.user_id == current_user.id)
     
     unread_count = q_unread.count()
 
@@ -5615,7 +5615,7 @@ async def get_advanced_dashboard_stats(
     else:
         q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.user_id == current_user.id)
         
-    month_actions = q_month.count()
+    month_actions = q_month.with_entities(func.count(func.distinct(CaseEvent.case_id))).scalar()
     
     is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
