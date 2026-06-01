@@ -1500,7 +1500,7 @@ def get_version():
 @app.get("/api/diagnostic/my-cases")
 @app.get("/diagnostic/my-cases")
 def diagnostic_my_cases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     q_all = db.query(Case)
     if is_jurico:
@@ -1543,7 +1543,7 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
     # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     if current_user.is_admin:
         # Admin ve TODO sin filtros
@@ -1591,7 +1591,7 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
     return {
         "total_validos": total_validos,
-        "total_pendientes": 0 if is_jurico else total_pendientes,
+        "total_pendientes": total_pendientes,
         "total_invalidos": total_invalidos,
         "total_no_leidos": q_no_leidos.count(),
         "total_actualizados_hoy": q_hoy.count(),
@@ -2286,7 +2286,7 @@ def list_cases(
     q = db.query(Case)
 
     # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     if current_user.is_admin:
         # Admin ve TODO
@@ -2295,8 +2295,8 @@ def list_cases(
         # Juridico ve sus casos (ID 2 o su propio ID)
         q = q.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        # FNA y otros ven todo menos Jurico
-        q = q.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        # FNA y otros ven solo lo suyo
+        q = q.filter(Case.user_id == current_user.id)
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -2432,7 +2432,7 @@ def download_cases_excel(
     solo_actualizados_hoy: bool = Query(default=False),
 ):
     # Multi-tenancy filter
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     q = db.query(Case).filter(Case.juzgado.isnot(None))
 
@@ -5098,7 +5098,7 @@ async def get_tasks(
         query = query.filter(Task.status.ilike(f"%{status}%"))
         
     # Multi-tenancy filter: Detección experta para colaboración y aislamiento judicial
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     # Unimos con ProjectList para saber a qué workspace pertenece la tarea
     # Usamos outerjoin para asegurar que tareas sin lista (si existieran) no desaparezcan por error
@@ -5605,7 +5605,7 @@ async def get_advanced_dashboard_stats(
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     q_month = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str)
     
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     if current_user.is_admin:
         # Admin ve TODO
@@ -5617,7 +5617,7 @@ async def get_advanced_dashboard_stats(
         
     month_actions = q_month.count()
     
-    is_jurico = "juri" in current_user.username.lower() or current_user.id == 2
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
     
     # 2. Conteo de casos por Abogado (desglose)
     q_abogados = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado.isnot(None), Case.abogado != "")
