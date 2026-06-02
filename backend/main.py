@@ -859,7 +859,20 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN force BOOLEAN DEFAULT FALSE"))
                 conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN source_trigger VARCHAR(100)"))
             
-            
+            cols_pub_case = [c['name'] for c in inspector.get_columns('case_publications')]
+            if 'estado_validacion' not in cols_pub_case:
+                print("Migración: Añadiendo columnas de validación a case_publications")
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN estado_validacion VARCHAR(50) DEFAULT 'requiere_revision'"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN match_score INTEGER DEFAULT 0"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN texto_bloque_match TEXT"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN motivo_descarte TEXT"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN fuente_principal_validada BOOLEAN DEFAULT FALSE"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN requiere_revision BOOLEAN DEFAULT TRUE"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN elementos_detectados TEXT"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN documento_nombre TEXT"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN extraction_quality VARCHAR(50)"))
+                conn.execute(text("ALTER TABLE case_publications ADD COLUMN validated_at TIMESTAMP"))
+
             # Garantizar tablas de soporte
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS task_checklist_items (
@@ -938,6 +951,12 @@ app.add_middleware(
 )
 
 app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
+
+try:
+    from backend.routers import admin
+    app.include_router(admin.router)
+except Exception as e:
+    print("No se pudo cargar el router admin:", e)
 
 # =========================
 # SCHEMAS
@@ -1110,6 +1129,10 @@ def get_current_user(
     
     return user
 
+def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_admin and current_user.company_id is not None:
+        raise HTTPException(status_code=403, detail="Acceso denegado. Requiere privilegios de SuperAdmin.")
+    return current_user
 
 def _ensure_default_user():
     db = SessionLocal()
@@ -2433,18 +2456,9 @@ def list_cases(
 ):
     q = db.query(Case)
 
-    # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
-    if current_user.is_admin:
-        # Admin ve TODO
-        pass
-    elif is_jurico:
-        # Juridico ve sus casos (ID 2 o su propio ID)
-        q = q.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-    else:
-        # FNA y otros ven pool compartido menos Jurico
-        q = q.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+    # Multi-tenancy filter: SaaS Isolation
+    if not current_user.is_admin and current_user.company_id:
+        q = q.filter(Case.company_id == current_user.company_id)
 
     # Default filtering logic:
     # If explicit filters are provided, follow them.
@@ -3165,8 +3179,16 @@ async def get_case_by_radicado_endpoint(
 
 @app.get("/api/cases/id/{case_id}/events")
 @app.get("/cases/id/{case_id}/events")
-async def get_events_by_id(case_id: int, db: Session = Depends(get_db)):
-    c = db.query(Case).filter(Case.id == case_id).first()
+async def get_events_by_id(
+    case_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    q_case = db.query(Case).filter(Case.id == case_id)
+    if not current_user.is_admin and current_user.company_id:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        
+    c = q_case.first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
     return await events_logic(c, db)
@@ -3175,14 +3197,22 @@ async def get_events_by_id(case_id: int, db: Session = Depends(get_db)):
 @app.get("/cases/by-radicado/{radicado}/events")
 @app.get("/api/cases/{radicado}/events")
 @app.get("/cases/{radicado}/events")
-async def get_events_by_radicado_unified(radicado: str, db: Session = Depends(get_db)):
+async def get_events_by_radicado_unified(
+    radicado: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     r = clean_str(radicado)
+    q_case = db.query(Case)
+    if not current_user.is_admin and current_user.company_id:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        
     # Si es un numero corto, intentarlo como ID por si acaso el frontend se equivoca
     if r.isdigit() and len(r) < 10:
-        c = db.query(Case).filter(Case.id == int(r)).first()
+        c = q_case.filter(Case.id == int(r)).first()
         if c: return await events_logic(c, db)
     
-    c = db.query(Case).filter(Case.radicado == r).order_by(Case.id.desc()).first()
+    c = q_case.filter(Case.radicado == r).order_by(Case.id.desc()).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
     return await events_logic(c, db)
@@ -3618,7 +3648,10 @@ async def import_excel(
                 if abogado and (abogado.lower() == "nan" or abogado == ""): abogado = None
 
                 # Buscar TODOS los casos con este radicado
-                existing_cases = db.query(Case).filter(Case.radicado == radicado).all()
+                q_case = db.query(Case).filter(Case.radicado == radicado)
+                if not current_user.is_admin and current_user.company_id:
+                    q_case = q_case.filter(Case.company_id == current_user.company_id)
+                existing_cases = q_case.all()
                 
                 if existing_cases:
                     for c in existing_cases:
@@ -3626,13 +3659,19 @@ async def import_excel(
                         c.abogado = abogado or c.abogado
                     updated += 1
                 else:
-                    # Si ya estaba marcado como invlido, lo removemos para que vuelva a intentar validarse
+                    # Si ya estaba marcado como inválido, lo removemos para que vuelva a intentar validarse
                     existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
                     if existing_invalid:
                         db.delete(existing_invalid)
                         db.flush()
 
-                    db.add(Case(radicado=radicado, cedula=cedula, abogado=abogado, user_id=current_user.id))
+                    db.add(Case(
+                        radicado=radicado, 
+                        cedula=cedula, 
+                        abogado=abogado, 
+                        user_id=current_user.id,
+                        company_id=current_user.company_id
+                    ))
                     created += 1
                 
                 count += 1
@@ -3871,8 +3910,17 @@ async def descargar_documento_endpoint(id_documento: int):
 # PUBLICACIONES PROCESALES
 # =========================
 @app.get("/cases/{radicado}/publicaciones")
-async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
-    case = db.query(Case).filter(Case.radicado == radicado).first()
+async def get_case_publications(
+    radicado: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    q_case = db.query(Case).filter(Case.radicado == radicado)
+    if not current_user.is_admin and current_user.company_id:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+    
+    case = q_case.first()
+    
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
         
@@ -3918,8 +3966,18 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
                 "url_cuadro": p.url_cuadro,
                 "url_providencia": p.url_providencia,
                 "observacion": p.observacion,
+                # Campos de validación estricta
+                "estado_validacion": getattr(p, "estado_validacion", "requiere_revision") or "requiere_revision",
+                "match_score": getattr(p, "match_score", 0),
+                "texto_bloque_match": getattr(p, "texto_bloque_match", ""),
+                "motivo_descarte": getattr(p, "motivo_descarte", ""),
+                "fuente_principal_validada": getattr(p, "fuente_principal_validada", False),
+                "requiere_revision": getattr(p, "requiere_revision", True),
+                "elementos_detectados": getattr(p, "elementos_detectados", ""),
+                "documento_nombre": getattr(p, "documento_nombre", ""),
+                "extraction_quality": getattr(p, "extraction_quality", "")
             }
-            for p in pubs
+            for p in pubs if getattr(p, "estado_validacion", "requiere_revision") != "descartado"
         ],
         "busquedas": [
             {
@@ -3938,13 +3996,105 @@ async def get_case_publications(radicado: str, db: Session = Depends(get_db)):
 
 @app.get("/api/cases/id/{case_id}/publicaciones")
 @app.get("/cases/id/{case_id}/publicaciones")
-async def get_case_publications_by_id(case_id: int, db: Session = Depends(get_db)):
-    case = db.query(Case).filter(Case.id == case_id).first()
+async def get_case_publications_by_id(
+    case_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    q_case = db.query(Case).filter(Case.id == case_id)
+    if not current_user.is_admin and current_user.company_id:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        
+    case = q_case.first()
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     
-    return await get_case_publications(case.radicado, db)
+    return await get_case_publications(case.radicado, db, current_user)
 
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+from backend.models import AuditLog, User
+
+class DescartarRequest(BaseModel):
+    motivo: str
+    observacion: Optional[str] = None
+
+class AprobarRequest(BaseModel):
+    observacion: Optional[str] = None
+
+@app.post("/api/publicaciones/{pub_id}/descartar")
+@app.post("/publicaciones/{pub_id}/descartar")
+async def descartar_publicacion(
+    pub_id: int, 
+    req: DescartarRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    pub = db.query(CasePublication).filter(CasePublication.id == pub_id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publicación no encontrada")
+        
+    pub.estado_validacion = "descartado"
+    pub.motivo_descarte = req.motivo
+    pub.requiere_revision = False
+    
+    pub.descartado_manual = True
+    pub.descartado_por_id = current_user.id
+    pub.discarded_at = datetime.now()
+    if req.observacion:
+        pub.observacion_revision = req.observacion
+    
+    audit = AuditLog(
+        user_id=current_user.id,
+        accion="DISCARD_PUBLICATION",
+        entidad="CasePublication",
+        entidad_id=pub.id,
+        metadata_json=f'{{"motivo": "{req.motivo}", "observacion": "{req.observacion or ""}"}}'
+    )
+    db.add(audit)
+    db.commit()
+    
+    return {"ok": True, "message": "Publicación descartada correctamente", "id": pub_id}
+
+@app.post("/api/publicaciones/{pub_id}/aprobar")
+@app.post("/publicaciones/{pub_id}/aprobar")
+async def aprobar_publicacion(
+    pub_id: int, 
+    req: AprobarRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    pub = db.query(CasePublication).filter(CasePublication.id == pub_id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publicación no encontrada")
+        
+    pub.estado_validacion = "validado"
+    pub.requiere_revision = False
+    
+    pub.match_score = 100
+    pub.match_type = "validacion_manual"
+    pub.validado_manual = True
+    pub.aprobado_por_id = current_user.id
+    pub.approved_at = datetime.now()
+    
+    if req.observacion:
+        pub.observacion_revision = req.observacion
+        pub.motivo_match = (pub.motivo_match or "") + f" [Validación Manual: {req.observacion}]"
+    else:
+        pub.motivo_match = (pub.motivo_match or "") + " [Validación Manual]"
+    
+    audit = AuditLog(
+        user_id=current_user.id,
+        accion="APPROVE_PUBLICATION",
+        entidad="CasePublication",
+        entidad_id=pub.id,
+        metadata_json=f'{{"observacion": "{req.observacion or ""}"}}'
+    )
+    db.add(audit)
+    db.commit()
+    
+    return {"ok": True, "message": "Publicación validada manualmente", "id": pub_id}
 @app.post("/api/cases/{radicado}/sync-publications")
 @app.post("/cases/{radicado}/sync-publications")
 async def sync_case_publications(radicado: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -4059,6 +4209,52 @@ async def get_sync_logs(case_id: int, db: Session = Depends(get_db)):
     logs = db.execute(text("SELECT message, created_at FROM sync_debug_logs WHERE case_id = :cid ORDER BY created_at DESC LIMIT 100"), 
                      {"cid": case_id}).fetchall()
     return [{"message": r[0], "at": r[1].isoformat()} for r in logs]
+
+class BuscarMesBody(BaseModel):
+    radicado: str
+    mes: str # Formato YYYY-MM
+    prioridad: int = 1
+    
+@app.post("/api/publicaciones/buscar-mes")
+@app.post("/publicaciones/buscar-mes")
+async def force_search_month(body: BuscarMesBody, db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.radicado == body.radicado).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    from backend.models import CasePublicationSearch
+    
+    # Buscar si ya existe la búsqueda para ese mes
+    busqueda = db.query(CasePublicationSearch).filter(
+        CasePublicationSearch.radicado == body.radicado,
+        CasePublicationSearch.mes_busqueda == body.mes
+    ).first()
+    
+    if busqueda:
+        busqueda.estado = "pendiente"
+        busqueda.intentos = 0
+        busqueda.error = None
+        busqueda.ultimo_error = None
+        busqueda.prioridad = body.prioridad
+        busqueda.locked_at = None
+        busqueda.locked_by = None
+        busqueda.source_trigger = "manual_override"
+        busqueda.force = True
+    else:
+        busqueda = CasePublicationSearch(
+            radicado=body.radicado,
+            estado="pendiente",
+            mes_busqueda=body.mes,
+            intentos=0,
+            prioridad=body.prioridad,
+            source_trigger="manual_override",
+            force=True
+        )
+        db.add(busqueda)
+        
+    db.commit()
+    
+    return {"ok": True, "message": f"Búsqueda del mes {body.mes} encolada exitosamente para el radicado {body.radicado}.", "estado": "pendiente"}
 
 class PublicacionesDebugBody(BaseModel):
     radicado: str

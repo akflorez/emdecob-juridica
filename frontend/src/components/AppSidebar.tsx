@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Search, FolderOpen, Scale, Settings, AlertTriangle, ChevronLeft, ChevronRight, LayoutDashboard, Calendar, UserCheck, Clock, Book, type LucideIcon } from "lucide-react";
+import { Upload, Search, FolderOpen, Scale, Settings, ShieldAlert, AlertTriangle, ChevronLeft, ChevronRight, LayoutDashboard, Calendar, UserCheck, Clock, Book, type LucideIcon } from "lucide-react";
 import { SidebarNavLink } from "./SidebarNavLink";
 import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +13,7 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const isAdmin = user?.is_admin === true;
+  const isSuperAdmin = user?.is_admin === true && !user?.company_id;
 
   return (
     <aside
@@ -101,6 +102,12 @@ export function AppSidebar() {
         {isAdmin && (
           <SidebarNavLink to="/configuracion" icon={Settings} collapsed={collapsed} title="Configuración">
             {!collapsed && "Configuración"}
+          </SidebarNavLink>
+        )}
+
+        {isSuperAdmin && (
+          <SidebarNavLink to="/admin" icon={ShieldAlert} collapsed={collapsed} title="Panel SuperAdmin">
+            {!collapsed && "Panel SuperAdmin"}
           </SidebarNavLink>
         )}
       </nav>

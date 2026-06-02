@@ -29,6 +29,7 @@ class Case(Base):
     __tablename__ = "cases"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     radicado = Column(String(60), index=True, nullable=False)
     id_proceso = Column(String(50), nullable=True, index=True) # ID único de Rama Judicial
 
@@ -152,11 +153,56 @@ class NotificationLog(Base):
     error_message = Column(Text, nullable=True)
 
 
+# --- RBAC y Multiempresa (SaaS) ---
+
+class Company(Base):
+    """Organizaciones/Empresas (Tenants)"""
+    __tablename__ = "companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(255), nullable=False)
+    nit = Column(String(50), nullable=True)
+    estado = Column(String(50), default="activo") # activo, inactivo
+    limite_usuarios = Column(Integer, default=5)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    users = relationship("User", back_populates="company")
+
+class Role(Base):
+    """Roles de usuarios"""
+    __tablename__ = "roles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, index=True, nullable=False) # ej: SUPERADMIN, COMPANY_ADMIN, OPERATOR
+    description = Column(String(255), nullable=True)
+
+class Permission(Base):
+    """Permisos granulares"""
+    __tablename__ = "permissions"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True, nullable=False) # ej: casos.ver, publicaciones.aprobar
+
+role_permissions = Table(
+    "role_permissions",
+    Base.metadata,
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("permission_id", Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
+)
+
+user_roles = Table(
+    "user_roles",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+)
+
 class User(Base):
     """Usuarios del sistema"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True) # Nullable para el SuperAdmin root
     username = Column(String(100), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=True) # Permitir nulo inicialmente para migracion
     hashed_password = Column(String(255), nullable=False)
@@ -164,6 +210,9 @@ class User(Base):
     telefono = Column(String(50), nullable=True)     # contacto para reportes
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    
+    company = relationship("Company", back_populates="users")
+    roles = relationship("Role", secondary=user_roles, backref="users")
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -207,6 +256,46 @@ class CasePublication(Base):
     motivo_match = Column(Text, nullable=True)
     observacion = Column(Text, nullable=True)
 
+    # Campos de Validación Estricta
+    estado_validacion = Column(String(50), default="requiere_revision", nullable=True) # validado, requiere_revision, descartado
+    match_score = Column(Integer, default=0, nullable=True)
+    texto_bloque_match = Column(Text, nullable=True)
+    motivo_descarte = Column(Text, nullable=True)
+    fuente_principal_validada = Column(Boolean, default=False, nullable=True)
+    requiere_revision = Column(Boolean, default=True, nullable=True)
+    elementos_detectados = Column(Text, nullable=True) # JSON
+    documento_nombre = Column(Text, nullable=True)
+    extraction_quality = Column(String(50), nullable=True)
+    validated_at = Column(DateTime, nullable=True)
+    
+    # Trazabilidad de validación/descarte manual
+    validado_manual = Column(Boolean, default=False, nullable=True)
+    aprobado_por_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    descartado_manual = Column(Boolean, default=False, nullable=True)
+    descartado_por_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    discarded_at = Column(DateTime, nullable=True)
+    observacion_revision = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AuditLog(Base):
+    """Registro de acciones de auditoría (para trazabilidad y compliance)"""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    
+    accion = Column(String(100), nullable=False, index=True) # ej: APPROVE_PUBLICATION
+    entidad = Column(String(100), nullable=True, index=True) # ej: CasePublication
+    entidad_id = Column(Integer, nullable=True, index=True)
+    
+    ip = Column(String(50), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True) # Detalles extra (ej: motivo_descarte)
+    
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -215,6 +304,7 @@ class CasePublicationSearch(Base):
     __tablename__ = "publicaciones_busquedas"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     radicado = Column(String(60), index=True, nullable=False)
     fecha_actuacion = Column(Date, nullable=False)
     fecha_inicio_busqueda = Column(Date, nullable=False)

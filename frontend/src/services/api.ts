@@ -742,6 +742,25 @@ export type CasePublication = {
   match_type?: string | null;
   motivo_match?: string | null;
   observacion?: string | null;
+  
+  // Validation fields
+  estado_validacion?: "validado" | "requiere_revision" | "descartado";
+  match_score?: number;
+  texto_bloque_match?: string | null;
+  motivo_descarte?: string | null;
+  fuente_principal_validada?: boolean;
+  requiere_revision?: boolean;
+  elementos_detectados?: any;
+  documento_nombre?: string | null;
+  extraction_quality?: string | null;
+  // Auditoría Manual
+  validado_manual?: boolean;
+  aprobado_por_id?: number | null;
+  approved_at?: string | null;
+  descartado_manual?: boolean;
+  descartado_por_id?: number | null;
+  discarded_at?: string | null;
+  observacion_revision?: string | null;
 };
 
 export function getCasePublications(radicado: string) {
@@ -765,6 +784,20 @@ export function refreshCasePublicationsById(id: number) {
   const r = id;
   return apiFetch<{ ok: boolean; message?: string; items?: CasePublication[] }>(`/cases/id/${r}/refresh-publicaciones`, {
     method: "POST",
+  });
+}
+
+export function descartarPublicacion(pubId: number, motivo: string, observacion?: string) {
+  return apiFetch<{ ok: boolean; message: string; id: number }>(`/publicaciones/${pubId}/descartar`, {
+    method: "POST",
+    body: JSON.stringify({ motivo, observacion }),
+  });
+}
+
+export function aceptarPublicacion(pubId: number, observacion?: string) {
+  return apiFetch<{ ok: boolean; message: string; id: number }>(`/publicaciones/${pubId}/aprobar`, {
+    method: "POST",
+    body: JSON.stringify({ observacion }),
   });
 }
 

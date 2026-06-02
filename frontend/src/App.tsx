@@ -21,6 +21,7 @@ import ProjectDashboardPage from "./pages/ProjectDashboardPage";
 import AgendaView from "./pages/AgendaView";
 import HelpPage from "./pages/HelpPage";
 import NotFound from "./pages/NotFound";
+import AdminDashboard from "./pages/AdminDashboard";
 
 import { MyTasksView } from "./components/MyTasksView";
 
@@ -64,6 +65,11 @@ const App = () => (
                 <Route path="/configuracion" element={
                   <ProtectedRoute requiredPermission="importar">
                     <ConfiguracionPage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin" element={
+                  <ProtectedRoute>
+                    <AdminDashboard />
                   </ProtectedRoute>
                 } />
               </Route>

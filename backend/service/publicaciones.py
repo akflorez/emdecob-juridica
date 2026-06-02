@@ -234,148 +234,212 @@ async def extract_text_content(url: str, client: httpx.AsyncClient, timeout: int
         return ""
 
 class MatchResult:
-    def __init__(self, is_valid: bool, match_type: Optional[str] = None, reasons: Optional[str] = None):
+    def __init__(self, is_valid: bool, match_type: Optional[str] = None, reasons: Optional[str] = None,
+                 score: int = 0, estado_validacion: str = "descartado", texto_bloque_match: str = "",
+                 elementos_detectados: dict = None):
         self.is_valid = is_valid
         self.match_type = match_type
         self.reasons = reasons
+        self.score = score
+        self.estado_validacion = estado_validacion
+        self.texto_bloque_match = texto_bloque_match
+        self.elementos_detectados = elementos_detectados or {}
 
-def find_radicado_in_context(text: str, radicado: str, demandante: str = "", demandado: str = "") -> MatchResult:
+def split_document_into_lines(text: str) -> List[str]:
+    """Divide el texto en líneas limpias, manejando saltos de línea y tabulaciones"""
+    if not text: return []
+    # Reemplazar retornos de carro por \n y dividir
+    lines = text.replace('\r', '\n').split('\n')
+    # Limpiar espacios
+    lines = [line.strip() for line in lines if line.strip()]
+    return lines
+
+def build_context_window(text: str, match_position: int, size: int = 1200) -> str:
+    """Extrae un bloque de texto alrededor de una posición, asegurando capturar contexto cercano."""
+    if not text: return ""
+    start_pos = max(0, match_position - size // 2)
+    end_pos = min(len(text), match_position + size // 2)
+    return text[start_pos:end_pos]
+
+def important_tokens(name: str) -> List[str]:
+    """Extrae tokens importantes de una parte, ignorando stop-words corporativos y genéricos."""
+    if not name: return []
+    name_clean = normalize_text(name).upper()
+    for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
+        name_clean = name_clean.replace(suffix, " ")
+    blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus", "y", "o", "de", "la", "el", "en"}
+    tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
+    return tokens
+
+def parties_match(block_text: str, party_name: str) -> bool:
+    """Valida si al menos dos tokens importantes de una parte están presentes en el bloque."""
+    if not party_name or not block_text: return False
+    tokens = important_tokens(party_name)
+    if not tokens: return False
+    
+    block_norm = normalize_text(block_text).lower()
+    
+    # Excepción: Si solo hay 1 token importante (ej. "TALERO"), exigir que aparezca
+    if len(tokens) == 1:
+        return tokens[0] in block_norm
+        
+    # Exigir al menos 2 tokens importantes
+    matches = sum(1 for t in tokens if t in block_norm)
+    return matches >= 2
+
+def classify_document_match(text: str, radicado: str, demandante: str = "", demandado: str = "", is_filtered_source: bool = False) -> MatchResult:
+    """
+    Nuevo motor de validación estricta y antifalsos positivos.
+    Evalúa coincidencias basándose en proximidad/bloques y asigna un puntaje.
+    """
     if not text:
-        return MatchResult(False, None, "Texto vacío")
+        return MatchResult(False, None, "Texto vacío", 0, "descartado", "")
         
     digits = only_digits(radicado)
     if len(digits) != 23:
-        return MatchResult(False, None, "Radicado incompleto")
-        
-    text_norm = normalize_text(text)
-    text_digits = "".join(c for c in text if c.isdigit())
-    
-    # 1. Radicado completo sin guiones
-    if digits in text_digits:
-        return MatchResult(True, "radicado_completo", f"Coincidencia con radicado completo sin guiones: {digits}")
-        
-    # 2. Radicado completo con guiones
-    rad_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}-{digits[12:16]}-{digits[16:21]}-{digits[21:]}"
-    if rad_hyphenated in text:
-        return MatchResult(True, "radicado_completo_con_guiones", f"Coincidencia con radicado con guiones: {rad_hyphenated}")
-        
-    # 3. Radicado completo con espacios
-    rad_spaces = f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]} {digits[12:16]} {digits[16:21]} {digits[21:]}"
-    if rad_spaces in text:
-        return MatchResult(True, "radicado_completo_con_espacios", f"Coincidencia con radicado con espacios: {rad_spaces}")
+        return MatchResult(False, None, "Radicado incompleto", 0, "descartado", "")
 
-    # Extraer componentes
+    # Componentes
     despacho = digits[:12]
     year = digits[12:16]
     consecutivo = digits[16:21]
     
-    # 4. Despacho + número interno (21 dígitos)
-    twenty_one_digits = despacho + year + consecutivo
-    if twenty_one_digits in text_digits:
-        return MatchResult(True, "despacho_interno_21_digitos", f"Coincidencia con despacho + número interno: {twenty_one_digits}")
-
-    # 4b. Proximidad de componentes del radicado (útil para PDFs con diseño vertical/columnas)
-    dep_code = digits[:5]
-    juz_code = digits[9:12]
-    juz_code_short = str(int(juz_code)) if juz_code.isdigit() else juz_code
-    consecutivo_variants = [consecutivo, str(int(consecutivo)) if consecutivo.isdigit() else consecutivo]
+    # Variantes de radicado
+    rad_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}-{digits[12:16]}-{digits[16:21]}-{digits[21:]}"
+    rad_spaces = f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]} {digits[12:16]} {digits[16:21]} {digits[21:]}"
     
-    for cv in consecutivo_variants:
-        for match in re.finditer(re.escape(cv), text_norm):
-            start_pos = max(0, match.start() - 500)
-            end_pos = min(len(text_norm), match.end() + 500)
-            window = text_norm[start_pos:end_pos]
-            
-            has_dep = dep_code in window
-            has_year = year in window
-            has_juz = (juz_code in window) or (juz_code_short in window)
-            
-            if has_dep and has_year and has_juz:
-                return MatchResult(
-                    True,
-                    "componentes_proximidad",
-                    f"Componentes del radicado encontrados en proximidad: dpto/mun={dep_code}, juzgado={juz_code}, año={year}, consecutivo={cv}"
-                )
-
-    # 5. Despacho con guiones + número interno con guion (o variantes) en proximidad
-    despacho_hyphenated = f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}"
-    despacho_space = f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]}"
+    # Variantes internos
     internal_num_dash = f"{year}-{consecutivo}"
     internal_num_no_dash = f"{year}{consecutivo}"
     internal_num_short_dash = f"{year}-{int(consecutivo)}" if consecutivo.isdigit() else consecutivo
     internal_num_short_no_dash = f"{year}{int(consecutivo)}" if consecutivo.isdigit() else consecutivo
     
     internal_variants = [internal_num_dash, internal_num_no_dash, internal_num_short_dash, internal_num_short_no_dash]
-    despacho_variants = [despacho_hyphenated, despacho_space, despacho]
     
+    # Buscamos coincidencias fuertes globales (que garantizan 100 o 95 pts sin importar contexto)
+    text_norm = normalize_text(text)
+    text_digits = "".join(c for c in text if c.isdigit())
+    
+    # 1. Radicado exacto (100 pts)
+    if digits in text_digits:
+        pos = text_digits.find(digits)
+        # Buscar posición original aproximada
+        pos_orig = text.find(digits[:5]) if digits[:5] in text else len(text)//2
+        bloque = build_context_window(text, pos_orig, 800)
+        estado = "validado" if bloque else "requiere_revision"
+        is_val = bool(bloque)
+        motivo = "Radicado completo sin guiones" if is_val else "Radicado encontrado en texto, pero sin bloque extraíble"
+        return MatchResult(is_val, "radicado_completo", motivo, 100, estado, bloque, {"full_radicado": True})
+        
+    if rad_hyphenated in text:
+        pos = text.find(rad_hyphenated)
+        bloque = build_context_window(text, pos, 800)
+        estado = "validado" if bloque else "requiere_revision"
+        is_val = bool(bloque)
+        motivo = "Radicado completo con guiones" if is_val else "Radicado encontrado, pero sin bloque extraíble"
+        return MatchResult(is_val, "radicado_completo_con_guiones", motivo, 100, estado, bloque, {"full_radicado": True})
+        
+    # 2. Radicado con espacios (95 pts)
+    if rad_spaces in text:
+        pos = text.find(rad_spaces)
+        bloque = build_context_window(text, pos, 800)
+        estado = "validado" if bloque else "requiere_revision"
+        is_val = bool(bloque)
+        motivo = "Radicado completo con espacios" if is_val else "Radicado encontrado, pero sin bloque extraíble"
+        return MatchResult(is_val, "radicado_completo_con_espacios", motivo, 95, estado, bloque, {"full_radicado": True})
+
+    # No hay coincidencia global fuerte, buscamos por bloques (Ventanas de contexto)
+    best_score = 0
+    best_result = MatchResult(False, None, "No se encontró coincidencia fuerte", 0, "descartado", "")
+    
+    # Recorrer todas las posibles apariciones del número interno como anclas
     for iv in internal_variants:
         for match in re.finditer(re.escape(iv), text):
-            start_pos = max(0, match.start() - 300)
-            end_pos = min(len(text), match.end() + 300)
-            window = text[start_pos:end_pos]
-            for dv in despacho_variants:
-                if dv in window:
-                    return MatchResult(True, "despacho_interno_proximidad", f"Despacho ({dv}) cerca de número interno ({iv})")
+            # Extraer bloque de contexto (aprox 1200 caracteres alrededor del hit)
+            block = build_context_window(text, match.start(), 1200)
+            block_norm = normalize_text(block).lower()
+            
+            # Detectar componentes en el bloque
+            has_despacho = (despacho in block_norm) or (f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]}" in block_norm) or (f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}" in block_norm)
+            
+            has_demandante = parties_match(block, demandante)
+            has_demandado = parties_match(block, demandado)
+            
+            score = 0
+            motivo = ""
+            estado = "descartado"
+            m_type = "ninguno"
+            
+            if has_despacho and has_demandante and has_demandado:
+                score = 92
+                estado = "validado"
+                m_type = "despacho_partes_interno"
+                motivo = f"Número interno ({iv}) junto con despacho y ambas partes"
+            elif has_despacho:
+                score = 90
+                estado = "validado"
+                m_type = "despacho_interno"
+                motivo = f"Despacho y número interno ({iv}) en el mismo bloque"
+            elif has_demandante and has_demandado:
+                score = 88
+                estado = "validado"
+                m_type = "interno_ambas_partes"
+                motivo = f"Número interno ({iv}) y ambas partes en el bloque"
+            elif (has_demandante or has_demandado) and is_filtered_source:
+                score = 78
+                estado = "requiere_revision"
+                m_type = "interno_una_parte_fuente_filtrada"
+                motivo = f"Número interno ({iv}) y una parte en el bloque (fuente oficial del despacho)"
+            elif is_filtered_source:
+                # El documento viene de la búsqueda oficial del despacho, y encontramos el número interno pero sin partes
+                score = 65
+                estado = "requiere_revision" if score >= 70 else "descartado"
+                m_type = "interno_fuente_filtrada"
+                motivo = f"Número interno ({iv}) en fuente del despacho, pero sin partes ni despacho textual"
+                
+            elementos = {
+                "internal": iv,
+                "despacho": has_despacho,
+                "demandante": has_demandante,
+                "demandado": has_demandado
+            }
+                
+            if score > best_score:
+                best_score = score
+                best_result = MatchResult(
+                    is_valid=(estado == "validado"),
+                    match_type=m_type,
+                    reasons=motivo,
+                    score=score,
+                    estado_validacion=estado,
+                    texto_bloque_match=block.strip(),
+                    elementos_detectados=elementos
+                )
 
-    # 6. Número interno + demandante + demandado en proximidad
-    def get_party_tokens(name: str) -> List[str]:
-        if not name: return []
-        name_clean = normalize_text(name).upper()
-        for suffix in ["S.A.S.", "SAS", "S.A.", "LIMITADA", "LTDA", "E.S.P.", "ESP", "COOPERATIVA", "MULTIACTIVA", "NACIONAL", "FIDUCIARIA", "BANCO"]:
-            name_clean = name_clean.replace(suffix, "")
-        blacklist = {"del", "los", "las", "con", "sin", "por", "para", "sus", "una", "uno", "mas", "que", "les", "sus", "y", "o", "de", "la", "el", "en"}
-        tokens = [t.lower() for t in name_clean.split() if len(t) >= 3 and t.lower() not in blacklist]
-        return tokens
+    # Considerar casos de extracción pobre
+    if best_score < 70 and is_filtered_source:
+        # Si extrajimos muy poco texto (ej. imagen escaneada no ocrizada) pero venía de fuente oficial
+        if len(text.strip()) < 500:
+            return MatchResult(False, "extraccion_pobre", "Extracción de texto pobre en fuente oficial. Requiere revisión visual.", 50, "requiere_revision", text.strip()[:200], {})
 
-    dante_tokens = get_party_tokens(demandante)
-    dado_tokens = get_party_tokens(demandado)
-    
-    if dante_tokens and dado_tokens:
-        for iv in internal_variants:
-            for match in re.finditer(re.escape(iv), text):
-                start_pos = max(0, match.start() - 400)
-                end_pos = min(len(text), match.end() + 400)
-                window_norm = normalize_text(text[start_pos:end_pos])
-                
-                has_dante = any(t in window_norm for t in dante_tokens)
-                has_dado = any(t in window_norm for t in dado_tokens)
-                
-                if has_dante and has_dado:
-                    return MatchResult(
-                        True, 
-                        "interno_partes_proximidad", 
-                        f"Número interno ({iv}) cerca de partes ({demandante} / {demandado})"
-                    )
+    # Regla: Si es validado pero no tiene texto de evidencia, se degrada a requiere_revision
+    if best_result.estado_validacion == "validado" and not best_result.texto_bloque_match:
+        best_result.estado_validacion = "requiere_revision"
+        best_result.is_valid = False
+        best_result.reasons += " (Relegado a revisión manual por falta de bloque de evidencia de texto)"
 
-    # 7. Número interno + al menos una parte (demandante O demandado) en proximidad
-    if dante_tokens or dado_tokens:
-        for iv in internal_variants:
-            for match in re.finditer(re.escape(iv), text):
-                start_pos = max(0, match.start() - 400)
-                end_pos = min(len(text), match.end() + 400)
-                window_norm = normalize_text(text[start_pos:end_pos])
-                
-                has_dante = any(t in window_norm for t in dante_tokens) if dante_tokens else False
-                has_dado = any(t in window_norm for t in dado_tokens) if dado_tokens else False
-                
-                if has_dante or has_dado:
-                    part_matched = demandante if has_dante else demandado
-                    return MatchResult(
-                        True,
-                        "interno_una_parte_proximidad",
-                        f"Número interno ({iv}) cerca de parte ({part_matched})"
-                    )
-                    
-    return MatchResult(False, None, "No se encontró coincidencia fuerte para el radicado o sus variantes dentro del texto.")
+    return best_result
 
 def validate_strong_match(text: str, radicado_completo: str, demandante: str = "", demandado: str = "") -> MatchResult:
-    return find_radicado_in_context(text, radicado_completo, demandante, demandado)
+    # Para retrocompatibilidad
+    return classify_document_match(text, radicado_completo, demandante, demandado, is_filtered_source=False)
 
-def validate_content(text: str, radicado_completo: str, demandante: str, demandado: str) -> bool:
-    return validate_strong_match(text, radicado_completo, demandante, demandado).is_valid
+def find_radicado_in_context(text: str, radicado: str, demandante: str = "", demandado: str = "") -> MatchResult:
+    return classify_document_match(text, radicado, demandante, demandado, is_filtered_source=False)
 
 def guardar_publicacion_validada(db, data: dict):
     from backend.models import CasePublication, Case
+    import json
     radicado = data.get("radicado")
     case_id = data.get("case_id")
     if not case_id and radicado:
@@ -416,6 +480,15 @@ def guardar_publicacion_validada(db, data: dict):
         existing.match_type = data.get("match_type") or existing.match_type
         existing.motivo_match = data.get("motivo_match") or existing.motivo_match
         existing.observacion = data.get("observacion") or existing.observacion
+        existing.estado_validacion = data.get("estado_validacion") or existing.estado_validacion
+        existing.match_score = data.get("match_score") or existing.match_score
+        existing.texto_bloque_match = data.get("texto_bloque_match") or existing.texto_bloque_match
+        existing.motivo_descarte = data.get("motivo_descarte") or existing.motivo_descarte
+        existing.fuente_principal_validada = data.get("fuente_principal_validada", existing.fuente_principal_validada)
+        existing.requiere_revision = data.get("requiere_revision", existing.requiere_revision)
+        existing.elementos_detectados = json.dumps(data.get("elementos_detectados", {})) if data.get("elementos_detectados") else existing.elementos_detectados
+        existing.documento_nombre = data.get("documento_nombre") or existing.documento_nombre
+        existing.extraction_quality = data.get("extraction_quality") or existing.extraction_quality
         db.flush()
         db.commit()
         print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=Actualizado (ya existia)")
@@ -442,7 +515,16 @@ def guardar_publicacion_validada(db, data: dict):
             match_fuerte=data.get("match_fuerte", True),
             match_type=data.get("match_type"),
             motivo_match=data.get("motivo_match"),
-            observacion=data.get("observacion")
+            observacion=data.get("observacion"),
+            estado_validacion=data.get("estado_validacion", "requiere_revision"),
+            match_score=data.get("match_score", 0),
+            texto_bloque_match=data.get("texto_bloque_match"),
+            motivo_descarte=data.get("motivo_descarte"),
+            fuente_principal_validada=data.get("fuente_principal_validada", False),
+            requiere_revision=data.get("requiere_revision", True),
+            elementos_detectados=json.dumps(data.get("elementos_detectados", {})),
+            documento_nombre=data.get("documento_nombre"),
+            extraction_quality=data.get("extraction_quality")
         )
         db.add(new_pub)
         db.flush()
@@ -526,7 +608,8 @@ def guardar_estado_busqueda(db, data: dict):
             mes_busqueda=mes_busqueda,
             prioridad=data.get("prioridad", 0),
             source_trigger=data.get("source_trigger"),
-            force=data.get("force", False)
+            force=data.get("force", False),
+            company_id=data.get("company_id")
         )
         db.add(new_search)
         db.flush()
@@ -568,6 +651,7 @@ def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trig
                 despacho_codigo = extract_despacho_code(radicado)
                 
                 guardar_estado_busqueda(db, {
+                    "company_id": case.company_id,
                     "radicado": radicado,
                     "fecha_actuacion": ev.event_date,
                     "fecha_inicio_busqueda": fecha_inicio_str,
@@ -714,73 +798,37 @@ async def open_detail(card: dict) -> str:
 def detect_main_sources(detail_html: str) -> list:
     detail_soup = BeautifulSoup(detail_html, "html.parser")
     fuentes_principales = []
+    seen_urls = set()
     
-    url_resumen = None
-    resumen_header = None
+    def add_source(url, tipo):
+        if not url.startswith("http"):
+            url = "https://publicacionesprocesales.ramajudicial.gov.co" + (url if url.startswith("/") else "/" + url)
+        if url not in seen_urls:
+            fuentes_principales.append({"url": url, "tipo": tipo})
+            seen_urls.add(url)
+            
+    # 1. Por encabezados conocidos
     for elem in detail_soup.find_all(["h4", "h5", "div", "b"]):
         elem_text = elem.get_text().lower()
-        if "resumen de la publicaci" in elem_text:
-            resumen_header = elem
-            break
-            
-    if resumen_header:
-        a_resumen = None
-        for sib in resumen_header.next_siblings:
-            if sib.name == "a":
-                a_resumen = sib
-                break
-            elif sib.name:
-                a_resumen = sib.find("a")
-                if a_resumen:
-                    break
-        if not a_resumen:
-            parent = resumen_header.parent
-            if parent:
-                a_resumen = parent.find("a")
-        
-        if a_resumen and a_resumen.get("href"):
-            url_resumen = a_resumen["href"]
-            if not url_resumen.startswith("http"):
-                url_resumen = "https://publicacionesprocesales.ramajudicial.gov.co" + (url_resumen if url_resumen.startswith("/") else "/" + url_resumen)
-            fuentes_principales.append({"url": url_resumen, "tipo": "resumen_publicacion"})
-
-    for a in detail_soup.find_all("a", href=True):
-        a_text = a.get_text().upper()
-        if any(k in a_text for k in ["CUADRO", "CONSULTAR AQUI", "CONSULTAR AQUÍ", "VER CUADRO"]):
-            url_cuadro = a["href"]
-            if not url_cuadro.startswith("http"):
-                url_cuadro = "https://publicacionesprocesales.ramajudicial.gov.co" + (url_cuadro if url_cuadro.startswith("/") else "/" + url_cuadro)
-            fuentes_principales.append({"url": url_cuadro, "tipo": "cuadro_consultar_aqui"})
-            break
-
-    url_documento_estado = None
-    docs_header = None
-    for elem in detail_soup.find_all(["h4", "h5", "div"]):
-        elem_text = elem.get_text().lower()
-        if "documentos de la publicaci" in elem_text or "listado de estado" in elem_text:
-            docs_header = elem
-            break
-    if docs_header:
-        parent = docs_header.parent
-        if parent:
+        if any(k in elem_text for k in ["resumen de la publicaci", "documentos de la publicaci", "listado de estado", "archivo principal del estado"]):
+            parent = elem.parent if elem.parent else elem
             for a in parent.find_all("a", href=True):
-                a_text = a.get_text().lower()
-                if "estado" in a_text or "documento" in a_text or "principal" in a_text:
-                    url_documento_estado = a["href"]
-                    if not url_documento_estado.startswith("http"):
-                        url_documento_estado = "https://publicacionesprocesales.ramajudicial.gov.co" + (url_documento_estado if url_documento_estado.startswith("/") else "/" + url_documento_estado)
-                    fuentes_principales.append({"url": url_documento_estado, "tipo": "documento_estado"})
-                    break
-                    
-    if not fuentes_principales:
-        for a in detail_soup.find_all("a", href=True):
-            a_text = a.get_text().lower()
-            href = a["href"]
-            if "estado" in a_text or "estado" in href.lower():
-                if not href.startswith("http"):
-                    href = "https://publicacionesprocesales.ramajudicial.gov.co" + (href if href.startswith("/") else "/" + href)
-                fuentes_principales.append({"url": href, "tipo": "listado_publicacion"})
-                break
+                add_source(a["href"], "resumen_o_documento_publicacion")
+                
+    # 2. Por texto del enlace
+    for a in detail_soup.find_all("a", href=True):
+        a_text = a.get_text().lower()
+        href = a["href"].lower()
+        
+        keywords = [
+            "estado", "estado electrónico", "estados electrónicos",
+            "consultar aquí", "consultar aqui", "cuadro", "listado",
+            "relación de procesos", "relacion de procesos", "traslado", 
+            "fijación", "fijacion"
+        ]
+        
+        if any(k in a_text for k in keywords) or any(k in href for k in ["estado", "listado", "cuadro"]):
+            add_source(a["href"], "enlace_clave")
 
     return fuentes_principales
 
@@ -1085,18 +1133,22 @@ async def consultar_publicaciones_rango(
                             doc_text = await extract_text_content(s_url, client)
                             print(f"[PUBLICACIONES][FUENTE]\nmes={year}-{month:02d}\nurl_fuente={s_url}\ntipo_fuente={s_tipo}\ncontent_type=application/octet-stream\ntexto_size={len(doc_text)}")
                             
-                            match = validate_strong_match(doc_text, radicado_completo, demandante, demandado)
-                            print(f"[PUBLICACIONES][MATCH]\nmes={year}-{month:02d}\nmatch_fuerte={'true' if match.is_valid else 'false'}\nmatch_type={match.match_type or 'None'}\nmotivo={match.reasons or 'No match'}")
+                            # Pasar is_filtered_source=True porque viene de la busqueda por despacho
+                            from backend.service.publicaciones import classify_document_match
+                            match = classify_document_match(doc_text, radicado_completo, demandante, demandado, is_filtered_source=True)
+                            print(f"[PUBLICACIONES][MATCH]\nmes={year}-{month:02d}\nscore={match.score}\nestado_validacion={match.estado_validacion}\nmatch_type={match.match_type or 'None'}\nmotivo={match.reasons or 'No match'}")
                             
-                            if match.is_valid:
+                            if match_principal is None or match.score > match_principal.score:
                                 match_principal = match
                                 fuente_validada_url = s_url
                                 fuente_validada_tipo = s_tipo
                                 texto_principal = doc_text
+                                
+                            if match.is_valid: # Early exit si encontramos uno perfecto (validado >= 85 pts)
                                 break
                                 
-                        if not match_principal:
-                            print(f"[scraper] Descartando {cand['title']}: No hay match fuerte en fuentes principales.")
+                        if not match_principal or match_principal.score < 50:
+                            print(f"[scraper] Descartando {cand['title']}: Score muy bajo o sin match ({match_principal.score if match_principal else 0} pts).")
                             return None
 
                         url_providencia = None
@@ -1137,7 +1189,14 @@ async def consultar_publicaciones_rango(
                             "match_fuerte": True,
                             "match_type": match_principal.match_type,
                             "motivo_match": match_principal.reasons,
-                            "observacion": observacion
+                            "observacion": observacion,
+                            "estado_validacion": match_principal.estado_validacion,
+                            "match_score": match_principal.score,
+                            "texto_bloque_match": match_principal.texto_bloque_match,
+                            "motivo_descarte": match_principal.reasons if not match_principal.is_valid else "",
+                            "requiere_revision": match_principal.estado_validacion == "requiere_revision",
+                            "elementos_detectados": match_principal.elementos_detectados,
+                            "extraction_quality": "pobre" if len(texto_principal) < 500 else "buena",
                         }
                     except Exception as ex:
                         print(f"[scraper] Error en candidato {cand['detail_url']}: {ex}")
