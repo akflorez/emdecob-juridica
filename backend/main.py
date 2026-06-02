@@ -2464,6 +2464,8 @@ def list_cases(
 ):
     q = db.query(Case)
 
+    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
+
     # Multi-tenancy filter: SaaS Isolation
     if not current_user.is_admin and current_user.company_id:
         q = q.filter(Case.company_id == current_user.company_id)
