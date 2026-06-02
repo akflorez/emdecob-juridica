@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,10 +30,25 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/consultar';
+
+  const handleForgotPassword = () => {
+    toast({
+      title: "Recuperación de contraseña",
+      description: "Por favor comuníquese con el administrador del sistema para recuperar su contraseña.",
+    });
+  };
+
+  const handleRequestAccess = () => {
+    toast({
+      title: "Solicitud de acceso",
+      description: "Por favor comuníquese con el equipo de soporte para solicitar una cuenta.",
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,7 +174,7 @@ export default function LoginPage() {
                   <input type="checkbox" id="rem" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer" />
                   <label htmlFor="rem" className="text-xs text-slate-500 font-medium cursor-pointer group-hover:text-emerald-600 transition-colors">Recordarme</label>
                 </div>
-                <button type="button" className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
+                <button type="button" onClick={handleForgotPassword} className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
               </div>
 
               {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
@@ -172,7 +188,7 @@ export default function LoginPage() {
                  <div className="relative flex justify-center text-xs"><span className="bg-white px-8 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
               </div>
 
-              <Button variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
+              <Button type="button" onClick={handleRequestAccess} variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
             </form>
           </div>
 
