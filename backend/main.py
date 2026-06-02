@@ -1082,6 +1082,12 @@ HARDCODED_USERS = {
         "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
+    "superadmin": {
+        "password": "admin123$",
+        "id": 35,
+        "nombre": "Super Administrador",
+        "is_admin": True,
+    },
 }
 
 
@@ -1779,8 +1785,10 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 def login(data: LoginRequest):
     """Autentica un usuario y retorna un token de sesi?n."""
 
+    username = data.username.strip()
+    
     # 1. Intentar identificaci?n por Hardcoded Users primero para rapidez y resiliencia
-    hc = HARDCODED_USERS.get(data.username)
+    hc = HARDCODED_USERS.get(username)
     
     # 2. Intentar contra la base de datos
     db = None
@@ -1788,7 +1796,7 @@ def login(data: LoginRequest):
     try:
         db = SessionLocal()
         user_db = db.query(User).filter(
-            User.username == data.username,
+            User.username == username,
             User.is_active == True
         ).first()
         
@@ -1827,9 +1835,9 @@ def login(data: LoginRequest):
             "token_type": "bearer",
             "user": {
                 "id": user_id,
-                "username": data.username,
+                "username": username,
                 "is_admin": hc.get("is_admin", False),
-                "nombre": hc.get("nombre", data.username)
+                "nombre": hc.get("nombre", username)
             }
         }
 
