@@ -1112,28 +1112,34 @@ def get_current_user(
     db: Session = Depends(get_db),
     token: Optional[str] = Query(None)
 ) -> User:
-    actual_token = None
-    if credentials:
-        actual_token = credentials.credentials
-    elif token:
-        actual_token = token
-    
-    if not actual_token:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    
-    user_id = verify_access_token(actual_token)
-    if not user_id:
-        print("[AUTH-DEBUG] El token no pudo ser verificado")
-        raise HTTPException(status_code=401, detail="Token invalido o expirado")
+    try:
+        actual_token = None
+        if credentials:
+            actual_token = credentials.credentials
+        elif token:
+            actual_token = token
+        
+        if not actual_token:
+            raise HTTPException(status_code=401, detail="No autenticado")
+        
+        user_id = verify_access_token(actual_token)
+        if not user_id:
+            print("[AUTH-DEBUG] El token no pudo ser verificado")
+            raise HTTPException(status_code=401, detail="Token invalido o expirado")
 
-    print(f"[AUTH-DEBUG] Token valido. UserID: {user_id}")
+        print(f"[AUTH-DEBUG] Token valido. UserID: {user_id}")
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-    if not user:
-        print(f"[AUTH-DEBUG] Usuario ID {user_id} no encontrado en BD")
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    
-    return user
+        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        if not user:
+            print(f"[AUTH-DEBUG] Usuario ID {user_id} no encontrado en BD")
+            raise HTTPException(status_code=401, detail="Usuario no encontrado")
+        
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=400, detail=f"AUTH ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
 def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin and current_user.company_id is not None:
