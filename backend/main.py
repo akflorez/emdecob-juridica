@@ -34,15 +34,17 @@ except ImportError:
 
 # MIGRACIONES AUTOMATICAS RAPIDAS
 from sqlalchemy import text
+
+def try_execute(conn, sql):
+    try:
+        conn.execute(text(sql))
+    except Exception as e:
+        print(f"Migración fallida ({sql}): {e}")
+
 try:
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)"))
-        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)"))
-        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
-        conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
-        
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         # Migraciones SaaS
-        conn.execute(text("""
+        try_execute(conn, """
             CREATE TABLE IF NOT EXISTS companies (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(255) NOT NULL,
@@ -52,40 +54,52 @@ try:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """))
+        """)
         
-        # Insertar empresa default si no existe (usamos un pequeño hack con SQLAlchemy text)
-        conn.execute(text("""
+        try_execute(conn, """
             INSERT INTO companies (id, nombre) 
             SELECT 1, 'Empresa Default' 
             WHERE NOT EXISTS (SELECT 1 FROM companies WHERE id = 1)
-        """))
+        """)
 
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER"))
-        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS company_id INTEGER"))
-        conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS company_id INTEGER"))
-        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+        # Tareas
+        try_execute(conn, "ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)")
+        try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)")
+        try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT")
+        
+        # General
+        try_execute(conn, "ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS company_id INTEGER")
+        try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS company_id INTEGER")
+        
+        # Opcional, si audit_logs no existe, fallará silenciosamente sin afectar al resto
+        try_execute(conn, "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS company_id INTEGER")
         
         # Migraciones para Documentos Judiciales
-        conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
-        conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
-        conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT"))
-        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)"))
-        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0"))
+        try_execute(conn, "ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT")
+        try_execute(conn, "ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT")
+        try_execute(conn, "ALTER TABLE case_events ADD COLUMN IF NOT EXISTS documentos_cache TEXT")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_status VARCHAR(100)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS sync_pub_progress INTEGER DEFAULT 0")
         
-        # TABLA DE LOGS PARA DEBUG (VITAL PARA EL 5%)
-        conn.execute(text("""
+        # Migraciones para Publicaciones
+        try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS mes_busqueda VARCHAR(20)")
+        try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS prioridad INTEGER DEFAULT 0")
+        
+        # TABLA DE LOGS PARA DEBUG
+        try_execute(conn, """
             CREATE TABLE IF NOT EXISTS sync_debug_logs (
                 id SERIAL PRIMARY KEY,
                 case_id INTEGER,
                 message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """))
+        """)
         
         # INDICE PARA VELOCIDAD
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)"))
+        try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)")
+        try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)")
         
         print("[DB] Migraciones rapidas completadas")
 except Exception as e:
