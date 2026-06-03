@@ -2462,130 +2462,129 @@ def list_cases(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=2000),
 ):
-    q = db.query(Case)
+    try:
+        q = db.query(Case)
 
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
+        is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
 
-    # Multi-tenancy filter: SaaS Isolation
-    if not current_user.is_admin and current_user.company_id:
-        q = q.filter(Case.company_id == current_user.company_id)
+        # Multi-tenancy filter: SaaS Isolation
+        if not current_user.is_admin and current_user.company_id:
+            q = q.filter(Case.company_id == current_user.company_id)
 
-    # Default filtering logic:
-    # If explicit filters are provided, follow them.
-    # Otherwise, if it's a standard user with NO valid cases but has pending cases, 
-    # we default to showing pending cases instead of an empty valid list.
-    
-    if solo_pendientes:
-        q = q.filter(Case.juzgado.is_(None))
-    elif solo_validos:
-        q = q.filter(Case.juzgado.isnot(None))
+        if solo_pendientes:
+            q = q.filter(Case.juzgado.is_(None))
+        elif solo_validos:
+            q = q.filter(Case.juzgado.isnot(None))
 
-    if solo_no_leidos:
-        hoy = today_colombia()
-        ayer = hoy - timedelta(days=1)
-        q = q.filter(
+        if solo_no_leidos:
+            hoy = today_colombia()
+            ayer = hoy - timedelta(days=1)
+            q = q.filter(
+                Case.current_hash.isnot(None),
+                or_(
+                    and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+                    and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
+                )
+            )
+
+        if solo_actualizados_hoy:
+            q = q.filter(Case.ultima_actuacion == today_colombia())
+
+        if search:
+            s = f"%{search.strip()}%"
+            q = q.filter(
+                or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s), Case.alias.like(s))
+            )
+
+        if juzgado:
+            q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
+
+        if cedula:
+            q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
+
+        if abogado:
+            q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
+
+        if con_documentos is not None:
+            q = q.filter(Case.has_documents == con_documentos)
+
+        if mes_actuacion:
+            try:
+                year, month = mes_actuacion.split("-")
+                from sqlalchemy import extract
+                q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
+            except:
+                pass
+
+        total = q.count()
+
+        hoy_count = today_colombia()
+        ayer_count = hoy_count - timedelta(days=1)
+
+        q_unread = db.query(Case).filter(
+            Case.juzgado.isnot(None),
             Case.current_hash.isnot(None),
             or_(
                 and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
-                and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
+                and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count),
             )
         )
 
-    if solo_actualizados_hoy:
-        q = q.filter(Case.ultima_actuacion == today_colombia())
+        if not current_user.is_admin:
+            if is_jurico:
+                q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
+            else:
+                q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        
+        unread_count = q_unread.count()
 
-    if search:
-        s = f"%{search.strip()}%"
-        q = q.filter(
-            or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s), Case.alias.like(s))
+        unread_order = sql_case(
+            (and_(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash), 0),
+            (and_(Case.current_hash.isnot(None), Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count), 0),
+            else_=1
         )
 
-    if juzgado:
-        q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
-
-    if cedula:
-        q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
-
-    if abogado:
-        q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
-
-    if con_documentos is not None:
-        q = q.filter(Case.has_documents == con_documentos)
-
-    if mes_actuacion:
-        try:
-            year, month = mes_actuacion.split("-")
-            from sqlalchemy import extract
-            q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
-        except:
-            pass
-
-    total = q.count()
-
-    hoy_count = today_colombia()
-    ayer_count = hoy_count - timedelta(days=1)
-
-    q_unread = db.query(Case).filter(
-        Case.juzgado.isnot(None),
-        Case.current_hash.isnot(None),
-        or_(
-            and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
-            and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count),
+        items = (
+            q.order_by(
+                unread_order,
+                desc(Case.ultima_actuacion),
+                desc(Case.updated_at)
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
         )
-    )
 
-    if not current_user.is_admin:
-        if is_jurico:
-            q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-        else:
-            q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
-    
-    unread_count = q_unread.count()
+        def to_out(c: Case):
+            return {
+                "id": c.id,
+                "radicado": c.radicado,
+                "demandante": c.demandante,
+                "demandado": c.demandado,
+                "juzgado": c.juzgado,
+                "alias": c.alias,
+                "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
+                "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
+                "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                "unread": is_unread_case(c),
+                "has_documents": c.has_documents,
+                "cedula": c.cedula,
+                "abogado": c.abogado,
+                "has_tasks": len(c.tasks) > 0,
+            }
 
-    unread_order = sql_case(
-        (and_(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash), 0),
-        (and_(Case.current_hash.isnot(None), Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_count), 0),
-        else_=1
-    )
-
-    items = (
-        q.order_by(
-            unread_order,
-            desc(Case.ultima_actuacion),
-            desc(Case.updated_at)
-        )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-
-    def to_out(c: Case):
         return {
-            "id": c.id,
-            "radicado": c.radicado,
-            "demandante": c.demandante,
-            "demandado": c.demandado,
-            "juzgado": c.juzgado,
-            "alias": c.alias,
-            "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
-            "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
-            "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-            "unread": is_unread_case(c),
-            "has_documents": c.has_documents,
-            "cedula": c.cedula,
-            "abogado": c.abogado,
-            "has_tasks": len(c.tasks) > 0,
+            "items": [to_out(x) for x in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "unread_count": unread_count,
         }
-
-    return {
-        "items": [to_out(x) for x in items],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "unread_count": unread_count,
-    }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=400, detail=f"DEBUG ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
 
 # =========================
