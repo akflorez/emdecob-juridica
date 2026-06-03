@@ -42,6 +42,25 @@ try:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
         
         # Migraciones SaaS
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS companies (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL,
+                nit VARCHAR(50),
+                estado VARCHAR(50) DEFAULT 'activo',
+                limite_usuarios INTEGER DEFAULT 5,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        
+        # Insertar empresa default si no existe (usamos un pequeño hack con SQLAlchemy text)
+        conn.execute(text("""
+            INSERT INTO companies (id, nombre) 
+            SELECT 1, 'Empresa Default' 
+            WHERE NOT EXISTS (SELECT 1 FROM companies WHERE id = 1)
+        """))
+
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER"))
         conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS company_id INTEGER"))
         conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS company_id INTEGER"))
