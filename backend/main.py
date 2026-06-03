@@ -1764,22 +1764,14 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_invalidos = db.query(InvalidRadicado)
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
-    # Multi-tenancy filter: Detección flexible para Jurico
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
-    if current_user.is_admin:
-        # Admin ve TODO sin filtros
+    if current_user.is_admin and not current_user.company_id:
+        # SuperAdmin ve TODO sin filtros
         pass
-    elif is_jurico:
-        # Juridico ve sus casos asignados (ID 2 o su propio ID)
-        q_validos = q_validos.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-        q_invalidos = q_invalidos.filter(or_(InvalidRadicado.user_id == current_user.id, InvalidRadicado.user_id == 2))
-        q_pendientes = q_pendientes.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        # Otros usuarios ven pool compartido menos Jurico
-        q_validos = q_validos.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
-        q_invalidos = q_invalidos.filter(and_(InvalidRadicado.user_id != 2, InvalidRadicado.user_id.isnot(None) if current_user.id != 3 else True))
-        q_pendientes = q_pendientes.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        # Usuarios ven los casos de su empresa
+        q_validos = q_validos.filter(Case.company_id == current_user.company_id)
+        q_invalidos = q_invalidos.filter(InvalidRadicado.company_id == current_user.company_id) if hasattr(InvalidRadicado, 'company_id') else q_invalidos
+        q_pendientes = q_pendientes.filter(Case.company_id == current_user.company_id)
 
     total_validos = q_validos.count()
     total_invalidos = q_invalidos.count()
@@ -1802,14 +1794,9 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         Case.ultima_actuacion == hoy,
     )
 
-    if not current_user.is_admin:
-        if is_jurico:
-            q_no_leidos = q_no_leidos.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-            q_hoy = q_hoy.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-        else:
-            # FNA y otros ven pool compartido
-            q_no_leidos = q_no_leidos.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
-            q_hoy = q_hoy.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+    if not (current_user.is_admin and not current_user.company_id):
+        q_no_leidos = q_no_leidos.filter(Case.company_id == current_user.company_id)
+        q_hoy = q_hoy.filter(Case.company_id == current_user.company_id)
 
     return {
         "total_validos": total_validos,
@@ -1818,8 +1805,43 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         "total_no_leidos": q_no_leidos.count(),
         "total_actualizados_hoy": q_hoy.count(),
         "debug_uid": current_user.id,
-        "debug_juri": is_jurico
     }
+
+@app.get("/api/test-rama-connection")
+async def api_test_rama_connection():
+    import httpx, time
+    url = "https://consultaprocesos.ramajudicial.gov.co:448/api/v2/Proceso/Actuaciones/11001400306720250052600"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://consultaprocesos.ramajudicial.gov.co",
+        "Referer": "https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicado"
+    }
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15.0) as client:
+            resp = await client.get(url, headers=headers)
+        elapsed = time.time() - start
+        return {
+            "environment": "Server",
+            "url": url,
+            "status_code": resp.status_code,
+            "response_time_ms": round(elapsed * 1000, 2),
+            "response_headers": dict(resp.headers),
+            "response_preview": resp.text[:200] + "..." if len(resp.text) > 200 else resp.text,
+            "error": None
+        }
+    except Exception as e:
+        elapsed = time.time() - start
+        return {
+            "environment": "Server",
+            "url": url,
+            "status_code": None,
+            "response_time_ms": round(elapsed * 1000, 2),
+            "response_headers": None,
+            "response_preview": None,
+            "error": str(e)
+        }
 
 
 # =========================
@@ -2510,10 +2532,10 @@ def list_cases(
     try:
         q = db.query(Case)
 
-        is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-
         # Multi-tenancy filter: SaaS Isolation
-        if not current_user.is_admin and current_user.company_id:
+        if current_user.is_admin and not current_user.company_id:
+            pass # SuperAdmin ve todo
+        else:
             q = q.filter(Case.company_id == current_user.company_id)
 
         if solo_pendientes:
@@ -2575,11 +2597,10 @@ def list_cases(
             )
         )
 
-        if not current_user.is_admin:
-            if is_jurico:
-                q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-            else:
-                q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        if current_user.is_admin and not current_user.company_id:
+            pass
+        else:
+            q_unread = q_unread.filter(Case.company_id == current_user.company_id)
         
         unread_count = q_unread.count()
 
@@ -5441,19 +5462,16 @@ async def get_tasks(
     if status:
         query = query.filter(Task.status.ilike(f"%{status}%"))
         
-    # Multi-tenancy filter: Detección experta para colaboración y aislamiento judicial
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
     # Unimos con ProjectList para saber a qué workspace pertenece la tarea
     # Usamos outerjoin para asegurar que tareas sin lista (si existieran) no desaparezcan por error
     query = query.outerjoin(ProjectList, Task.list_id == ProjectList.id)
     query = query.outerjoin(Case, Task.case_id == Case.id)
     
-    if current_user.is_admin:
-        # Admin ve todo sin restricciones
+    if current_user.is_admin and not current_user.company_id:
+        # SuperAdmin ve todo sin restricciones
         pass
     else:
-        # 1. Filtro por Membresía de Workspace (Core de Colaboración)
+        # Filtro por Membresía de Workspace (Core de Colaboración)
         # El usuario debe ser dueño del workspace o miembro explícito
         user_workspaces_subquery = db.query(Workspace.id).outerjoin(WorkspaceMember).filter(
             or_(
@@ -5462,30 +5480,17 @@ async def get_tasks(
             )
         ).scalar_subquery()
         
-        if is_jurico:
-            # Juridico ve tareas de sus casos O tareas de sus workspaces O tareas creadas por él
-            query = query.filter(
-                or_(
-                    # Caso propio o de la cuenta maestra juridica
-                    and_(Task.case_id.isnot(None), or_(Case.user_id == current_user.id, Case.user_id == 2)),
-                    # Tarea sin caso pero en un workspace al que pertenece
-                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
-                    # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
-                    Task.assignee_id == current_user.id
-                )
+        # Filtro SaaS: Ve tareas asociadas a casos de su empresa, O en sus workspaces, O asignadas a él
+        query = query.filter(
+            or_(
+                # Caso propio de su empresa
+                and_(Task.case_id.isnot(None), Case.company_id == current_user.company_id),
+                # Tarea sin caso pero en un workspace al que pertenece
+                and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
+                # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
+                Task.assignee_id == current_user.id
             )
-        else:
-            # Otros usuarios (FNA, etc.)
-            query = query.filter(
-                or_(
-                    # Sus casos (no juridicos)
-                    and_(Task.case_id.isnot(None), Case.user_id != 2, Case.user_id == current_user.id),
-                    # Tareas sin caso en sus workspaces
-                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
-                    # Lo que tiene asignado
-                    Task.assignee_id == current_user.id
-                )
-            )
+        )
         
     return query.order_by(desc(Task.created_at)).all()
 
@@ -5949,29 +5954,19 @@ async def get_advanced_dashboard_stats(
     first_of_month_str = hoy.replace(day=1).strftime("%Y-%m-%d")
     q_month = db.query(CaseEvent).filter(CaseEvent.event_date >= first_of_month_str)
     
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
-    if current_user.is_admin:
-        # Admin ve TODO
+    if current_user.is_admin and not current_user.company_id:
         pass
-    elif is_jurico:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        q_month = q_month.join(Case, CaseEvent.case_id == Case.id).filter(Case.company_id == current_user.company_id)
         
     month_actions = q_month.with_entities(func.count(func.distinct(CaseEvent.case_id))).scalar()
     
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
     # 2. Conteo de casos por Abogado (desglose)
     q_abogados = db.query(Case.abogado, func.count(Case.id)).filter(Case.abogado.isnot(None), Case.abogado != "")
-    if current_user.is_admin:
-        # Admin ve TODO
+    if current_user.is_admin and not current_user.company_id:
         pass
-    elif is_jurico:
-        q_abogados = q_abogados.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_abogados = q_abogados.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        q_abogados = q_abogados.filter(Case.company_id == current_user.company_id)
     
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
@@ -5985,13 +5980,10 @@ async def get_advanced_dashboard_stats(
             and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer),
         )
     )
-    if current_user.is_admin:
-        # Admin ve TODO
+    if current_user.is_admin and not current_user.company_id:
         pass
-    elif is_jurico:
-        q_unread = q_unread.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
     else:
-        q_unread = q_unread.filter(and_(Case.user_id != 2, Case.user_id.isnot(None) if current_user.id != 3 else True))
+        q_unread = q_unread.filter(Case.company_id == current_user.company_id)
         
     unread_total = q_unread.count()
     
