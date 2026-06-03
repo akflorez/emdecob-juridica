@@ -41,6 +41,12 @@ try:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)"))
         conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT"))
         
+        # Migraciones SaaS
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+        conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+        conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+        
         # Migraciones para Documentos Judiciales
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS id_reg_actuacion BIGINT"))
         conn.execute(text("ALTER TABLE case_events ADD COLUMN IF NOT EXISTS cons_actuacion BIGINT"))
