@@ -7150,93 +7150,114 @@ class UserCreateRequest(BaseModel):
 
 @app.get("/admin/companies")
 async def get_admin_companies(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-    comps = db.query(Company).order_by(Company.id.desc()).all()
-    return [
-        {
-            "id": c.id,
-            "nombre": c.nombre,
-            "nit": c.nit,
-            "estado": c.estado or "activo",
-            "limite_usuarios": c.limite_usuarios,
-            "payment_status": getattr(c, 'payment_status', 'al_dia') or 'al_dia',
-            "suspension_reason": getattr(c, 'suspension_reason', None),
-            "suspended_at": str(c.suspended_at) if getattr(c, 'suspended_at', None) else None,
-            "suspended_by": getattr(c, 'suspended_by', None),
-            "reactivated_at": str(c.reactivated_at) if getattr(c, 'reactivated_at', None) else None,
-            "last_payment_date": str(c.last_payment_date) if getattr(c, 'last_payment_date', None) else None,
-            "next_payment_due": str(c.next_payment_due) if getattr(c, 'next_payment_due', None) else None,
-            "billing_notes": getattr(c, 'billing_notes', None),
-            "created_at": str(c.created_at) if getattr(c, 'created_at', None) else None,
-        }
-        for c in comps
-    ]
+    try:
+        comps = db.query(Company).order_by(Company.id.desc()).all()
+        return [
+            {
+                "id": c.id,
+                "nombre": c.nombre,
+                "nit": c.nit,
+                "estado": c.estado or "activo",
+                "limite_usuarios": c.limite_usuarios,
+                "payment_status": getattr(c, 'payment_status', 'al_dia') or 'al_dia',
+                "suspension_reason": getattr(c, 'suspension_reason', None),
+                "suspended_at": str(c.suspended_at) if getattr(c, 'suspended_at', None) else None,
+                "suspended_by": getattr(c, 'suspended_by', None),
+                "reactivated_at": str(c.reactivated_at) if getattr(c, 'reactivated_at', None) else None,
+                "last_payment_date": str(c.last_payment_date) if getattr(c, 'last_payment_date', None) else None,
+                "next_payment_due": str(c.next_payment_due) if getattr(c, 'next_payment_due', None) else None,
+                "billing_notes": getattr(c, 'billing_notes', None),
+                "created_at": str(c.created_at) if getattr(c, 'created_at', None) else None,
+            }
+            for c in comps
+        ]
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in GET /admin/companies: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.post("/admin/companies")
 async def create_admin_company(
+    request: Request,
     data: CompanyCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
-    comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo')
-    db.add(comp)
-    db.commit()
-    db.refresh(comp)
-    return {
-        "id": comp.id,
-        "nombre": comp.nombre,
-        "nit": comp.nit,
-        "estado": comp.estado or "activo",
-        "limite_usuarios": comp.limite_usuarios,
-        "payment_status": getattr(comp, 'payment_status', 'al_dia') or 'al_dia',
-        "suspension_reason": None,
-        "suspended_at": None,
-        "suspended_by": None,
-        "reactivated_at": None,
-        "last_payment_date": None,
-        "next_payment_due": None,
-        "billing_notes": None,
-        "created_at": str(comp.created_at) if getattr(comp, 'created_at', None) else None,
-    }
+    try:
+        comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo')
+        db.add(comp)
+        db.commit()
+        db.refresh(comp)
+        return {
+            "id": comp.id,
+            "nombre": comp.nombre,
+            "nit": comp.nit,
+            "estado": comp.estado or "activo",
+            "limite_usuarios": comp.limite_usuarios,
+            "payment_status": getattr(comp, 'payment_status', 'al_dia') or 'al_dia',
+            "suspension_reason": None,
+            "suspended_at": None,
+            "suspended_by": None,
+            "reactivated_at": None,
+            "last_payment_date": None,
+            "next_payment_due": None,
+            "billing_notes": None,
+            "created_at": str(comp.created_at) if getattr(comp, 'created_at', None) else None,
+        }
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in POST /admin/companies: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.get("/admin/users")
 async def get_admin_users(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
-    users = db.query(User).order_by(User.id.desc()).all()
-    return [{"id": u.id, "username": u.username, "nombre": u.nombre, "company_id": u.company_id, "is_admin": u.is_admin} for u in users]
+    try:
+        users = db.query(User).order_by(User.id.desc()).all()
+        return [{"id": u.id, "username": u.username, "nombre": u.nombre, "company_id": u.company_id, "is_admin": u.is_admin} for u in users]
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in GET /admin/users: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.post("/admin/users")
 async def create_admin_user(
+    request: Request,
     data: UserCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
-    new_user = User(
-        username=data.username,
-        hashed_password=pwd_context.hash(data.password),
-        nombre=data.nombre,
-        company_id=data.company_id,
-        email=data.email,
-        is_admin=data.is_admin
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return {"id": new_user.id, "username": new_user.username, "nombre": new_user.nombre, "company_id": new_user.company_id, "is_admin": new_user.is_admin}
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        
+        new_user = User(
+            username=data.username,
+            hashed_password=pwd_context.hash(data.password),
+            nombre=data.nombre,
+            company_id=data.company_id,
+            email=data.email,
+            is_admin=data.is_admin
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return {"id": new_user.id, "username": new_user.username, "nombre": new_user.nombre, "company_id": new_user.company_id, "is_admin": new_user.is_admin}
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in POST /admin/users: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 class CompanySuspendRequest(BaseModel):
     reason: str
@@ -7318,97 +7339,114 @@ async def mark_overdue_company(
 
 @app.get("/admin/billing/tiers")
 async def get_billing_tiers(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-    tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
-    
-    # Seed inicial si no hay rangos
-    if not tiers:
-        seed = [
-            BillingTier(min_cases=0, max_cases=500, price=3000.0),
-            BillingTier(min_cases=501, max_cases=1000, price=2500.0),
-            BillingTier(min_cases=1001, max_cases=None, price=2000.0),
-        ]
-        for s in seed:
-            db.add(s)
-        db.commit()
+    try:
         tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
-    
-    return {"ok": True, "tiers": [
-        {"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price}
-        for t in tiers
-    ]}
+        
+        # Seed inicial si no hay rangos
+        if not tiers:
+            seed = [
+                BillingTier(min_cases=0, max_cases=500, price=3000.0),
+                BillingTier(min_cases=501, max_cases=1000, price=2500.0),
+                BillingTier(min_cases=1001, max_cases=None, price=2000.0),
+            ]
+            for s in seed:
+                db.add(s)
+            db.commit()
+            tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+        
+        return {"ok": True, "tiers": [
+            {"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price}
+            for t in tiers
+        ]}
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in GET /admin/billing/tiers: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.post("/admin/billing/tiers")
 async def update_billing_tiers(
+    request: Request,
     data: BillingTierUpdateList,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-    # Delete all and recreate
-    db.query(BillingTier).delete()
-    
-    for tier in data.tiers:
-        db.add(BillingTier(
-            min_cases=tier.min_cases,
-            max_cases=tier.max_cases,
-            price=tier.price
-        ))
-    db.commit()
-    
-    return {"ok": True, "message": "Rangos de facturación actualizados."}
+    try:
+        # Delete all and recreate
+        db.query(BillingTier).delete()
+        
+        for tier in data.tiers:
+            db.add(BillingTier(
+                min_cases=tier.min_cases,
+                max_cases=tier.max_cases,
+                price=tier.price
+            ))
+        db.commit()
+        
+        return {"ok": True, "message": "Rangos de facturación actualizados."}
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in POST /admin/billing/tiers: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.get("/admin/billing/simulator")
 async def get_billing_simulator(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
+    try:
+        companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
+        tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
         
-    companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
-    tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
-    
-    results = []
-    total_active_cases = 0
-    estimated_total = 0
-    for comp in companies:
-        users_count = db.query(User).filter(User.company_id == comp.id).count()
-        # Se cuenta is_active=True (usamos los campos genericos si is_active falla usamos todos)
-        active_cases = db.query(Case).filter(Case.company_id == comp.id).count() 
-        
-        applicable_tier = None
-        base_price = 0
-        
-        for tier in tiers:
-            if active_cases >= tier.min_cases and (tier.max_cases is None or active_cases <= tier.max_cases):
-                applicable_tier = f"{tier.min_cases} - {tier.max_cases if tier.max_cases else 'Adelante'}"
-                base_price = tier.price
-                break
-                
-        results.append({
-            "company_id": comp.id,
-            "company_name": comp.nombre,
-            "users_count": users_count,
-            "active_cases": active_cases,
-            "applicable_tier": applicable_tier or "Sin rango",
-            "total_cost": base_price
-        })
-        total_active_cases += active_cases
-        estimated_total += base_price
-        
-    return {
-        "ok": True,
-        "simulator": results, 
-        "companies": results,
-        "tiers": [{"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price} for t in tiers],
-        "summary": {
-            "total_companies": len(companies),
-            "total_active_cases": total_active_cases,
-            "estimated_total": estimated_total
+        results = []
+        total_active_cases = 0
+        estimated_total = 0
+        for comp in companies:
+            users_count = db.query(User).filter(User.company_id == comp.id).count()
+            active_cases = db.query(Case).filter(Case.company_id == comp.id).count() 
+            
+            applicable_tier = None
+            base_price = 0
+            
+            for tier in tiers:
+                if active_cases >= tier.min_cases and (tier.max_cases is None or active_cases <= tier.max_cases):
+                    applicable_tier = f"{tier.min_cases} - {tier.max_cases if tier.max_cases else 'Adelante'}"
+                    base_price = tier.price
+                    break
+                    
+            results.append({
+                "company_id": comp.id,
+                "company_name": comp.nombre,
+                "users_count": users_count,
+                "active_cases": active_cases,
+                "applicable_tier": applicable_tier or "Sin rango",
+                "total_cost": base_price
+            })
+            total_active_cases += active_cases
+            estimated_total += base_price
+            
+        return {
+            "ok": True,
+            "simulator": results, 
+            "companies": results,
+            "tiers": [{"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price} for t in tiers],
+            "summary": {
+                "total_companies": len(companies),
+                "total_active_cases": total_active_cases,
+                "estimated_total": estimated_total
+            }
         }
-    }
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in GET /admin/billing/simulator: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
 
 @app.get("/v1/system/health")
 async def system_health_diagnostic(
