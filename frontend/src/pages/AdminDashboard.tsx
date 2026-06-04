@@ -10,9 +10,9 @@ import { Plus, Users, Building2, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult } from '@/services/api';
-import { DollarSign, Save, RefreshCw } from 'lucide-react';
-
-export default function AdminDashboard() {
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DollarSign, Save, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';export default function AdminDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -26,6 +26,10 @@ export default function AdminDashboard() {
   // Modals
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [suspendCompanyId, setSuspendCompanyId] = useState<number | null>(null);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [suspendNotes, setSuspendNotes] = useState("");
 
   // Forms
   const [newCompany, setNewCompany] = useState({ nombre: '', nit: '', limite_usuarios: 5 });
@@ -108,6 +112,47 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSuspendCompany = async () => {
+    if (!suspendCompanyId || !suspendReason) {
+      toast({ title: "Error", description: "El motivo es obligatorio", variant: "destructive" });
+      return;
+    }
+    try {
+      await apiFetch(`/admin/companies/${suspendCompanyId}/suspend`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: suspendReason, notes: suspendNotes })
+      });
+      toast({ title: "Empresa Suspendida", description: "La empresa ha sido suspendida exitosamente." });
+      setSuspendModalOpen(false);
+      fetchData();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudo suspender la empresa", variant: "destructive" });
+    }
+  };
+
+  const handleReactivateCompany = async (companyId: number) => {
+    try {
+      await apiFetch(`/admin/companies/${companyId}/reactivate`, {
+        method: 'POST',
+        body: JSON.stringify({ notes: 'Reactivado desde panel Admin' })
+      });
+      toast({ title: "Empresa Reactivada", description: "La empresa ha sido reactivada." });
+      fetchData();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudo reactivar la empresa", variant: "destructive" });
+    }
+  };
+
+  const handleMarkOverdue = async (companyId: number) => {
+    try {
+      await apiFetch(`/admin/companies/${companyId}/mark-overdue`, { method: 'POST' });
+      toast({ title: "Marcada en Mora", description: "El estado de pago ha cambiado a en mora." });
+      fetchData();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudo cambiar el estado", variant: "destructive" });
+    }
+  };
+
   const addTier = () => {
     const lastTier = tiers[tiers.length - 1];
     const newMin = lastTier ? (lastTier.max_cases ? lastTier.max_cases + 1 : lastTier.min_cases + 100) : 0;
@@ -181,6 +226,8 @@ export default function AdminDashboard() {
                       <TableHead>NIT</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Límite Usr.</TableHead>
+                      <TableHead>Est. Pago</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -190,15 +237,52 @@ export default function AdminDashboard() {
                         <TableCell className="font-semibold">{c.nombre}</TableCell>
                         <TableCell>{c.nit || '—'}</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.estado === 'activo' ? 'bg-emerald-100 text-emerald-800' : 'bg-destructive/10 text-destructive'}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.estado === 'activo' ? 'bg-emerald-100 text-emerald-800' : c.estado === 'suspendida_pago' ? 'bg-red-100 text-red-800' : c.estado === 'en_mora' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
                             {c.estado.toUpperCase()}
                           </span>
                         </TableCell>
                         <TableCell>{c.limite_usuarios}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.payment_status === 'al_dia' ? 'bg-emerald-100 text-emerald-800' : c.payment_status === 'en_mora' ? 'bg-yellow-100 text-yellow-800' : c.payment_status === 'suspendido' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {c.payment_status?.toUpperCase() || 'AL_DIA'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {c.estado !== 'suspendida_pago' && (
+                                <>
+                                  <DropdownMenuItem onClick={() => {
+                                    setSuspendCompanyId(c.id);
+                                    setSuspendReason("");
+                                    setSuspendNotes("");
+                                    setSuspendModalOpen(true);
+                                  }}>
+                                    Suspender por falta de pago
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleMarkOverdue(c.id)}>
+                                    Marcar en mora
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {c.estado === 'suspendida_pago' && (
+                                <DropdownMenuItem onClick={() => handleReactivateCompany(c.id)}>
+                                  Reactivar
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {companies.length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center">No hay empresas registradas</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center">No hay empresas registradas</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -399,6 +483,41 @@ export default function AdminDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateUser} disabled={!newUser.username || !newUser.password || !newUser.company_id}>Crear Usuario</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Suspender Empresa */}
+      <Dialog open={suspendModalOpen} onOpenChange={setSuspendModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Suspender Empresa</DialogTitle>
+            <DialogDescription>
+              Esta acción bloqueará el acceso de todos los usuarios de esta empresa, pero no eliminará sus datos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Motivo de suspensión <span className="text-destructive">*</span></Label>
+              <Input 
+                value={suspendReason} 
+                onChange={e => setSuspendReason(e.target.value)} 
+                placeholder="Ej. Falta de pago" 
+              />
+            </div>
+            <div>
+              <Label>Observación interna</Label>
+              <Textarea 
+                value={suspendNotes} 
+                onChange={e => setSuspendNotes(e.target.value)} 
+                placeholder="Detalles adicionales para uso interno..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSuspendModalOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleSuspendCompany} disabled={!suspendReason}>Confirmar Suspensión</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -185,8 +185,18 @@ class Company(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(255), nullable=False)
     nit = Column(String(50), nullable=True)
-    estado = Column(String(50), default="activo") # activo, inactivo
+    estado = Column(String(50), default="activo") # activa, suspendida_pago, inactiva, demo, vencida
     limite_usuarios = Column(Integer, default=5)
+    
+    suspension_reason = Column(Text, nullable=True)
+    suspended_at = Column(DateTime, nullable=True)
+    suspended_by = Column(Integer, nullable=True)
+    reactivated_at = Column(DateTime, nullable=True)
+    reactivated_by = Column(Integer, nullable=True)
+    payment_status = Column(String(50), default="al_dia") # al_dia, en_mora, suspendido, exonerado, demo
+    last_payment_date = Column(DateTime, nullable=True)
+    next_payment_due = Column(Date, nullable=True)
+    billing_notes = Column(Text, nullable=True)
     
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
