@@ -2469,6 +2469,79 @@ async def run_migration_task():
 
 
 # =========================
+# DIAGNOSTICO DE EMERGENCIA (Sin auth - solo para debug)
+# =========================
+@app.get("/api/debug/superadmin")
+def debug_superadmin(db: Session = Depends(get_db)):
+    """Diagnóstico de emergencia: muestra estado real de superadmin y columnas de companies en DB"""
+    try:
+        result = {}
+        
+        # 1. Verificar columnas reales en companies
+        try:
+            cols_raw = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'companies' ORDER BY column_name")).fetchall()
+            result["companies_columns"] = [r[0] for r in cols_raw]
+        except Exception as e:
+            result["companies_columns_error"] = str(e)
+        
+        # 2. Ver todos los usuarios admin
+        try:
+            admins = db.execute(text("SELECT id, username, is_admin, company_id, is_active FROM users WHERE is_admin = TRUE")).fetchall()
+            result["admin_users"] = [{"id": r[0], "username": r[1], "is_admin": r[2], "company_id": r[3], "is_active": r[4]} for r in admins]
+        except Exception as e:
+            result["admin_users_error"] = str(e)
+        
+        # 3. Ver todas las empresas (raw)
+        try:
+            comps = db.execute(text("SELECT id, nombre, estado FROM companies ORDER BY id")).fetchall()
+            result["companies"] = [{"id": r[0], "nombre": r[1], "estado": r[2]} for r in comps]
+        except Exception as e:
+            result["companies_error"] = str(e)
+        
+        # 4. Contar usuarios
+        try:
+            total = db.execute(text("SELECT COUNT(*) FROM users")).scalar()
+            result["total_users"] = total
+        except Exception as e:
+            result["total_users_error"] = str(e)
+            
+        # 5. FIX INMEDIATO: Forzar company_id=NULL para todos los is_admin=TRUE
+        try:
+            db.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = TRUE"))
+            db.commit()
+            result["fix_applied"] = "company_id=NULL set for all is_admin=TRUE users"
+        except Exception as e:
+            db.rollback()
+            result["fix_error"] = str(e)
+        
+        # 6. Agregar columnas faltantes en companies
+        missing_fixed = []
+        cols_to_add = [
+            ("suspension_reason", "TEXT"),
+            ("suspended_at", "TIMESTAMP"),
+            ("suspended_by", "INTEGER"),
+            ("reactivated_at", "TIMESTAMP"),
+            ("reactivated_by", "INTEGER"),
+            ("payment_status", "VARCHAR(50) DEFAULT 'al_dia'"),
+            ("last_payment_date", "TIMESTAMP"),
+            ("next_payment_due", "DATE"),
+            ("billing_notes", "TEXT"),
+        ]
+        for col_name, col_type in cols_to_add:
+            try:
+                db.execute(text(f"ALTER TABLE companies ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+                db.commit()
+                missing_fixed.append(col_name)
+            except Exception as e:
+                db.rollback()
+                missing_fixed.append(f"ERROR {col_name}: {e}")
+        result["columns_added"] = missing_fixed
+        
+        return result
+    except Exception as e:
+        return {"fatal_error": str(e)}
+
+# =========================
 # MONITOR DE ESTADO (Expert)
 # =========================
 @app.get("/api/status")
