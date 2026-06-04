@@ -899,6 +899,45 @@ async def lifespan(app: FastAPI):
             if 'assignee_name' not in cols:
                 conn.execute(text("ALTER TABLE tasks ADD COLUMN assignee_name VARCHAR(200)"))
                 print("Migración: Columna assignee_name añadida")
+            conn.commit()
+            
+            # --- AUTO-MIGRACIÓN SaaS POSTGRESQL ---
+            tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
+            for t in tables_to_add:
+                try:
+                    conn.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{t}_company_id ON {t}(company_id)"))
+                    conn.commit()
+                except Exception as ex:
+                    conn.rollback() # Limpiar transaction state si falla (ej. en local/sqlite)
+                    pass
+            
+            # Crear empresa CODE si no existe dinámicamente sin ID fijo
+            conn.execute(text("INSERT INTO companies (nombre, estado) SELECT 'CODE', 'activo' WHERE NOT EXISTS (SELECT 1 FROM companies WHERE upper(nombre) = 'CODE' OR upper(nombre) = 'EMDECOB')"))
+            conn.commit()
+            
+            # Obtener CODE_ID real
+            res = conn.execute(text("SELECT id FROM companies WHERE upper(nombre) = 'CODE' OR upper(nombre) = 'EMDECOB' ORDER BY id LIMIT 1")).fetchone()
+            code_id = res[0] if res else 1
+            
+            # Asegurar Superadmin
+            conn.execute(text(f"UPDATE users SET company_id = {code_id} WHERE company_id IS NULL AND username != 'superadmin'"))
+            conn.execute(text("UPDATE users SET company_id = NULL WHERE username = 'superadmin'"))
+            
+            # Limpiar dato de prueba
+            conn.execute(text("DELETE FROM case_events WHERE title LIKE '%Auto de prueba%'"))
+            
+            # Migrar todo a CODE_ID
+            tables_to_update = ["cases", "case_events", "case_publications", "publicaciones_busquedas", "tasks", "search_jobs", "workspaces", "invalid_radicados", "audit_logs"]
+            for t in tables_to_update:
+                try:
+                    conn.execute(text(f"UPDATE {t} SET company_id = {code_id} WHERE company_id IS NULL"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    pass
+            
+            print(f"[MIGRACION] Auto-SaaS completado para CODE_ID = {code_id}")
                 
             cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
             if 'mes_busqueda' not in cols_pub:
