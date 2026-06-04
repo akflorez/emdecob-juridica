@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Verificar que el token sigue siendo válido
-    fetch(`${API_BASE}/auth/me`, {
+    fetch(`${API_BASE}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -25,8 +25,16 @@ import { registerCompany, forgotPassword } from '@/services/api';
 /* Use a new filename to absolutely bypass any cache */
 const LOGIN_BG = "/login-vfinal.png";
 
-export default function LoginPage() {
-  const [view, setView] = useState<'login' | 'register' | 'forgot_password'>('login');
+interface LoginPageProps {
+  initialView?: 'login' | 'register' | 'forgot_password';
+}
+
+export default function LoginPage({ initialView = 'login' }: LoginPageProps) {
+  const [view, setView] = useState<'login' | 'register' | 'forgot_password'>(initialView);
+
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
   
   // Login State
   const [username, setUsername] = useState('juricob');

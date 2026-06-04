@@ -25,11 +25,13 @@ import {
   getDocumentosActuacion,
   createTask,
   type User,
-  type Task as TaskType
+  type Task as TaskType,
+  apiFetch
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PublicacionesPanel } from '@/components/PublicacionesPanel';
-import { CheckCircle2, ListPlus, MoreVertical, MessageSquare, Plus, Flag, Trash2, Zap } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { CheckCircle2, ListPlus, MoreVertical, MessageSquare, Plus, Flag, Trash2, Zap, Database } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -49,8 +51,14 @@ export default function CasoDetailPage() {
   const { radicado, id } = useParams<{ radicado: string, id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
+  
+  const isSuperAdmin = user?.is_superadmin || (user?.is_admin && !user?.company_id) || user?.role === 'SUPERADMIN';
   
   const [caseData, setCaseData] = useState<any>(null);
+  const [multisourceChecks, setMultisourceChecks] = useState<any[]>([]);
+  const [isLoadingMultisource, setIsLoadingMultisource] = useState(false);
+  const [isCheckingMultisource, setIsCheckingMultisource] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [eventsWarning, setEventsWarning] = useState<string | null>(null);
   const [publications, setPublications] = useState<CasePublication[]>([]);
@@ -173,6 +181,9 @@ export default function CasoDetailPage() {
         if (!result) return;
         
         setCaseData(result);
+        if (result.id) {
+          fetchMultisourceChecks(result.id);
+        }
         
         // Cargar tareas relacionadas
         setIsLoadingTasks(true);
@@ -204,6 +215,68 @@ export default function CasoDetailPage() {
     fetchData();
     getUsers().then(setSystemUsers).catch(console.error);
   }, [radicado, id, toast]);
+
+  const fetchMultisourceChecks = async (caseId: number) => {
+    setIsLoadingMultisource(true);
+    try {
+      const res = await apiFetch<any[]>(`/api/cases/${caseId}/multisource-checks`);
+      setMultisourceChecks(res || []);
+    } catch (e) {
+      console.error("Error fetching multisource checks:", e);
+    } finally {
+      setIsLoadingMultisource(false);
+    }
+  };
+
+  const handleTriggerMultisourceCheck = async () => {
+    if (!caseData?.id) return;
+    setIsCheckingMultisource(true);
+    try {
+      await apiFetch(`/api/cases/${caseData.id}/multisource-check`, {
+        method: 'POST'
+      });
+      toast({
+        title: "Búsqueda encolada",
+        description: "Se ha iniciado la consulta en otras fuentes. Los resultados se actualizarán en segundo plano."
+      });
+      
+      // Auto-refresh the log list after 5 seconds to show progress
+      setTimeout(() => {
+        if (caseData?.id) {
+          fetchMultisourceChecks(caseData.id);
+        }
+      }, 5000);
+    } catch (e: any) {
+      toast({
+        title: "Error al iniciar búsqueda",
+        description: e.message || "No se pudo iniciar la consulta multifuente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsCheckingMultisource(false);
+    }
+  };
+
+  const getSourceStatus = (sourceName: string) => {
+    // Find the most recent check log for this source
+    const check = multisourceChecks.find((l: any) => l.source === sourceName);
+    if (!check) return { status: 'no_consultado', label: 'No consultado', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+    
+    const st = check.status;
+    if (st === 'skipped') return { status: 'no_consultado', label: 'No consultado', color: 'bg-slate-100 text-slate-700 border-slate-200', details: check };
+    if (st === 'success') {
+      const hasRecords = check.records_found > 0;
+      return { 
+        status: 'success', 
+        label: hasRecords ? 'Encontrado' : 'Sin resultado', 
+        color: hasRecords ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200',
+        details: check
+      };
+    }
+    if (st === 'error') return { status: 'error', label: 'Error', color: 'bg-rose-50 text-rose-700 border-rose-200', details: check };
+    if (st === 'unsupported') return { status: 'unsupported', label: 'Requiere validación manual', color: 'bg-amber-50 text-amber-700 border-amber-200', details: check };
+    return { status: 'pending', label: 'Consultando', color: 'bg-yellow-50 text-yellow-700 border-yellow-200', details: check };
+  };
 
   const handleUpdateLawyer = async (newLawyer: string) => {
     if (!caseData?.id) return;
@@ -347,6 +420,11 @@ export default function CasoDetailPage() {
         } else {
           throw new Error("No se encontró el caso");
         }
+      }
+      
+      const currentCaseId = id || caseData?.id;
+      if (currentCaseId) {
+        fetchMultisourceChecks(Number(currentCaseId));
       }
       
       toast({ title: 'Actualizado', description: 'Información del caso actualizada' });
@@ -690,7 +768,7 @@ export default function CasoDetailPage() {
 
       {/* Contenido con Tabs */}
       <Tabs defaultValue="actuaciones" className="w-full">
-        <TabsList className="grid w-full max-w-[600px] grid-cols-3 mb-4">
+        <TabsList className="grid w-full max-w-[800px] grid-cols-4 mb-4">
           <TabsTrigger value="actuaciones" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Actuaciones
@@ -702,6 +780,10 @@ export default function CasoDetailPage() {
           <TabsTrigger value="tareas" className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" />
             Tareas de Gestión
+          </TabsTrigger>
+          <TabsTrigger value="multifuente" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Fuentes Consultadas
           </TabsTrigger>
         </TabsList>
 
@@ -1112,6 +1194,271 @@ export default function CasoDetailPage() {
             allAssignees={Array.from(new Set([...tasks.map(t => t.assignee_name), ...systemUsers.map(u => u.nombre || u.username)].filter(Boolean))) as string[]}
             allStatuses={Array.from(new Set(tasks.map(t => t.status).filter(Boolean))) as string[]}
           />
+        </TabsContent>
+
+        <TabsContent value="multifuente">
+          <Card className="border-primary/20 shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between pb-3 flex-wrap gap-4">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Database className="h-5 w-5 text-primary animate-pulse" />
+                  Fuentes Consultadas
+                </CardTitle>
+                <CardDescription>
+                  Búsqueda y diagnóstico de radicados en portales judiciales alternos (Fase 1)
+                </CardDescription>
+              </div>
+              <Button
+                onClick={handleTriggerMultisourceCheck}
+                disabled={isCheckingMultisource || isLoadingMultisource}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-500/20 transition-all duration-200"
+              >
+                {isCheckingMultisource ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Consultando Fuentes...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Buscar en otras fuentes
+                  </>
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              
+              {/* Resumen explicativo Fase 1 */}
+              <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex gap-3 text-sm text-primary/80">
+                <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Módulo de Diagnóstico Multifuente (Fase 1)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Esta fase valida la existencia del radicado en portales externos en modo consulta segura. 
+                    No modifica, reemplaza ni elimina actuaciones, publicaciones o datos del caso actual.
+                  </p>
+                </div>
+              </div>
+
+              {/* Grid de Fuentes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  {
+                    key: 'PUBLICACIONES_PROCESALES',
+                    name: 'Publicaciones Procesales',
+                    desc: 'Estados electrónicos, traslados y edictos oficiales de despachos judiciales en Colombia.',
+                    url: 'https://publicacionesprocesales.ramajudicial.gov.co/'
+                  },
+                  {
+                    key: 'SIUGJ',
+                    name: 'SIUGJ (Rama Judicial)',
+                    desc: 'Sistema de Información Unificado de Gestión Judicial para juzgados electrónicos incorporados.',
+                    url: 'https://siugj.ramajudicial.gov.co/'
+                  },
+                  {
+                    key: 'TYBA',
+                    name: 'TYBA / Justicia XXI Web',
+                    desc: 'Consulta nacional de procesos unificados e historial de actuaciones de la Rama Judicial.',
+                    url: 'https://procesojudicial.ramajudicial.gov.co/Justicia21/'
+                  },
+                  {
+                    key: 'SAMAI',
+                    name: 'SAMAI (Consejo de Estado)',
+                    desc: 'Portal de consulta de procesos y jurisprudencia del Consejo de Estado y tribunales administrativos.',
+                    url: 'https://samai.consejodeestado.gov.co/'
+                  }
+                ].map((src) => {
+                  const badge = getSourceStatus(src.key);
+                  const lastCheck = badge.details?.checked_at ? new Date(badge.details.checked_at).toLocaleString('es-CO') : null;
+                  
+                  return (
+                    <div 
+                      key={src.key}
+                      className="group relative flex flex-col justify-between p-4 rounded-xl border border-border bg-card hover:bg-muted/10 hover:border-primary/20 transition-all duration-200 shadow-sm animate-in fade-in-50 duration-200"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h4 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                            {src.name}
+                          </h4>
+                          <span className={`text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full border ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-4">
+                          {src.desc}
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2 pt-2 border-t border-border/50 text-[11px]">
+                        <div className="flex justify-between items-center text-muted-foreground">
+                          <span>Portal oficial:</span>
+                          <a 
+                            href={src.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1 font-semibold"
+                          >
+                            Visitar Sitio
+                            <ChevronRight className="h-3 w-3" />
+                          </a>
+                        </div>
+                        {lastCheck && (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Último chequeo:</span>
+                            <span className="font-mono text-[10px] text-foreground">{lastCheck}</span>
+                          </div>
+                        )}
+                        {badge.details && badge.details.records_found !== undefined && badge.details.status === 'success' && (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Registros hallados:</span>
+                            <span className="font-semibold text-emerald-600">{badge.details.records_found}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Detalle Técnico de Consultas para SuperAdmin / logs generales */}
+              <div className="space-y-4 pt-4 border-t border-border">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Historial de Verificaciones
+                </h3>
+
+                {isLoadingMultisource ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : multisourceChecks.length === 0 ? (
+                  <div className="text-center py-8 bg-muted/20 border border-dashed rounded-xl">
+                    <Database className="h-8 w-8 mx-auto text-muted-foreground opacity-30 mb-2" />
+                    <p className="text-xs text-muted-foreground">No se han registrado búsquedas multifuente para este caso.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-auto max-h-[300px] border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-[180px]">Fuente</TableHead>
+                          <TableHead className="w-[100px]">Estado</TableHead>
+                          <TableHead className="w-[160px]">Fecha</TableHead>
+                          {isSuperAdmin && (
+                            <>
+                              <TableHead className="w-[80px]">Duración</TableHead>
+                              <TableHead className="w-[80px]">Registros</TableHead>
+                              <TableHead>URL / Mensaje</TableHead>
+                            </>
+                          )}
+                          {!isSuperAdmin && <TableHead>Resultado / Nota</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {multisourceChecks.map((log: any, i: number) => {
+                          const logBadge = getSourceStatus(log.source);
+                          const formattedDate = log.checked_at 
+                            ? new Date(log.checked_at).toLocaleString('es-CO') 
+                            : '—';
+                          
+                          return (
+                            <TableRow key={log.id || i} className="hover:bg-muted/20">
+                              <TableCell className="font-semibold text-xs text-foreground">
+                                {log.source === 'PUBLICACIONES_PROCESALES' ? 'Publicaciones Procesales' : log.source}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full border ${logBadge.color}`}>
+                                  {logBadge.label}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground font-mono">
+                                {formattedDate}
+                              </TableCell>
+                              
+                              {/* SUPERADMIN DETAILED COLUMNS */}
+                              {isSuperAdmin && (
+                                <>
+                                  <TableCell className="text-xs font-mono">
+                                    {log.duration_ms !== undefined ? `${log.duration_ms}ms` : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-center font-bold">
+                                    {log.records_found !== undefined ? log.records_found : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    <div className="max-w-[400px] space-y-1">
+                                      {log.url && (
+                                        <p className="truncate text-[10px] text-primary/70 font-mono" title={log.url}>
+                                          <strong>URL:</strong> {log.url}
+                                        </p>
+                                      )}
+                                      {log.error_message && (
+                                        <p className="text-red-500 font-mono text-[10px] bg-red-500/5 p-1 rounded border border-red-500/10 whitespace-pre-wrap">
+                                          <strong>Error:</strong> {log.error_message}
+                                        </p>
+                                      )}
+                                      {log.raw_summary && (
+                                        <details className="mt-1">
+                                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[10px] select-none font-bold">
+                                            Ver Raw Summary (JSON)
+                                          </summary>
+                                          <pre className="text-[9px] font-mono bg-muted p-2 rounded mt-1 overflow-x-auto max-h-[150px] border border-border">
+                                            {typeof log.raw_summary === 'string' 
+                                              ? JSON.stringify(JSON.parse(log.raw_summary), null, 2) 
+                                              : JSON.stringify(log.raw_summary, null, 2)}
+                                          </pre>
+                                        </details>
+                                      )}
+                                      {!log.error_message && !log.raw_summary && (
+                                        <span className="text-muted-foreground text-[11px]">Diagnóstico OK (Dry-run)</span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </>
+                              )}
+
+                              {/* REGULAR CLIENT COLUMNS */}
+                              {!isSuperAdmin && (
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {log.status === 'unsupported' && (
+                                    <span className="text-amber-600 font-medium">
+                                      Esta fuente requiere ingreso manual con captcha o autenticación externa.
+                                    </span>
+                                  )}
+                                  {log.status === 'error' && (
+                                    <span className="text-rose-500">
+                                      El portal del despacho judicial presentó una falla temporal. Por favor intente más tarde.
+                                    </span>
+                                  )}
+                                  {log.status === 'success' && (
+                                    <span>
+                                      {log.records_found > 0 
+                                        ? `Se hallaron ${log.records_found} registros en esta fuente.` 
+                                        : 'No se encontraron registros activos para este radicado.'}
+                                    </span>
+                                  )}
+                                  {log.status === 'skipped' && (
+                                    <span className="text-muted-foreground">
+                                      No ejecutado. El servicio de consulta multifuente automático está deshabilitado.
+                                    </span>
+                                  )}
+                                  {log.status === 'pending' && (
+                                    <span className="text-yellow-600 animate-pulse font-medium">
+                                      Procesando consulta...
+                                    </span>
+                                  )}
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

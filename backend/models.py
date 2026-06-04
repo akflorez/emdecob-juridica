@@ -245,6 +245,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_superadmin = Column(Boolean, default=False)
     role = Column(String(100), default="USER")
+    cases_view_scope = Column(String(50), default="OWN")
     
     company = relationship("Company", back_populates="users")
     roles = relationship("Role", secondary=user_roles, backref="users")
@@ -620,3 +621,23 @@ class IntegrationConfig(Base):
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class CaseSourceCheck(Base):
+    """Historial y logs de consultas de radicados en micrositios oficiales"""
+    __tablename__ = "case_source_checks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=True, index=True)
+    radicado = Column(String(100), nullable=False, index=True)
+    source = Column(String(100), nullable=False, index=True)
+    source_url = Column(String(500), nullable=True)
+    status = Column(String(50), nullable=False, default="pending", index=True) # pending, success, no_result, error, skipped, unsupported
+    checked_at = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    records_found = Column(Integer, default=0)
+    raw_summary = Column(Text, nullable=True) # JSON raw response summary
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

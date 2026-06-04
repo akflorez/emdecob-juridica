@@ -1833,7 +1833,7 @@ def get_current_user(
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
         
         # Validar suspensión de la empresa (Excepto Superadmin)
-        if user.company_id is not None and user.company:
+        if not is_global_superadmin(user) and user.company_id is not None and user.company:
             if user.company.estado in ["suspendida_pago", "inactiva", "vencida"]:
                 raise HTTPException(status_code=403, detail="Tu empresa se encuentra suspendida. Por favor contacta al administrador.")
 
@@ -1884,6 +1884,19 @@ def require_superadmin(
 
 def is_superadmin(user: User) -> bool:
     return is_global_superadmin(user)
+
+
+def require_admin_or_superadmin(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+) -> User:
+    if is_global_superadmin(current_user) or (current_user.is_admin and current_user.company_id is not None):
+        return current_user
+        
+    raise HTTPException(
+        status_code=403,
+        detail="No tienes permisos para acceder a este recurso"
+    )
 
 
 def _ensure_default_user():
@@ -2973,21 +2986,41 @@ def change_password(
     return {"ok": True, "message": "Contraseña actualizada correctamente"}
 
 
+@app.get("/api/auth/me")
 @app.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
     is_sa = is_global_superadmin(current_user)
-    role_str = "SUPERADMIN" if is_sa else (getattr(current_user, 'role', None) or ("ADMIN" if current_user.is_admin else "USER"))
     
     if is_sa:
+        role_str = "SUPERADMIN"
+        scope = "GLOBAL"
         permissions = [
             "admin.access",
             "companies.view",
+            "companies.create",
+            "companies.update",
+            "companies.suspend",
+            "companies.reactivate",
             "users.view",
+            "users.create",
+            "users.update",
             "billing.view",
+            "billing.simulate",
             "billing.configure",
-            "billing.simulate"
+            "billing.export"
+        ]
+    elif current_user.is_admin and current_user.company_id is not None:
+        role_str = "COMPANY_ADMIN"
+        scope = getattr(current_user, 'cases_view_scope', 'COMPANY') or 'COMPANY'
+        permissions = [
+            "companies.view",
+            "users.view",
+            "users.create",
+            "users.update"
         ]
     else:
+        role_str = getattr(current_user, 'role', 'USER') or 'USER'
+        scope = getattr(current_user, 'cases_view_scope', 'OWN') or 'OWN'
         permissions = []
 
     return {
@@ -2999,6 +3032,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "is_admin": current_user.is_admin,
         "is_superadmin": is_sa,
         "role": role_str,
+        "cases_view_scope": scope,
         "permissions": permissions,
         "is_active": current_user.is_active
     }
@@ -3062,17 +3096,37 @@ def update_user(user_id: int, data: UserUpdateRequest, current_user: User = Depe
 
 
 @app.delete("/auth/users/{user_id}")
-def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_user(user_id: int, request: Request = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not current_user.is_admin:
-        raise HTTPException(403, "Solo administradores pueden eliminar usuarios")
+        raise HTTPException(403, "Solo administradores pueden desactivar usuarios")
     if current_user.id == user_id:
-        raise HTTPException(400, "No puedes eliminarte a ti mismo")
+        raise HTTPException(400, "No puedes desactivarte a ti mismo")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Usuario no encontrado")
-    db.delete(user)
+        
+    # Last active SuperAdmin protection guard
+    u_is_sa = is_global_superadmin(user)
+    if u_is_sa and user.is_active:
+        sa_count = db.query(User).filter((User.role == "SUPERADMIN") | (User.is_superadmin == True), User.is_active == True).count()
+        if sa_count <= 1:
+            raise HTTPException(400, "No puedes desactivar al último SuperAdmin activo del sistema.")
+
+    user.is_active = False
     db.commit()
-    return {"ok": True}
+    
+    # Log Audit
+    log_audit_action(
+        db=db,
+        user_id=current_user.id,
+        company_id=user.company_id,
+        accion="DEACTIVATE_USER",
+        entidad="User",
+        entidad_id=user.id,
+        request=request,
+        metadata_val={"username": user.username, "is_active": False}
+    )
+    return {"ok": True, "message": "Usuario desactivado correctamente"}
 
 
 # =========================
@@ -4004,6 +4058,118 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
 @app.get("/cases/id/{case_id}")
 async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db)):
     return await get_case_by_id(case_id, db)
+
+@app.get("/api/cases/{case_id}/multisource-checks")
+@app.get("/cases/{case_id}/multisource-checks")
+async def get_case_multisource_checks(
+    case_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.models import CaseSourceCheck
+    # Verify case exists
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    # Enforce company isolation
+    is_sa = is_global_superadmin(current_user)
+    if not is_sa and c.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a los datos de esta empresa.")
+        
+    # Fetch logs from case_source_checks
+    logs = db.query(CaseSourceCheck).filter(CaseSourceCheck.case_id == case_id).order_by(CaseSourceCheck.id.desc()).all()
+    
+    # Format according to user role (SuperAdmin sees full debug, regular users see summary)
+    res_list = []
+    for l in logs:
+        item = {
+            "source": l.source,
+            "status": l.status,
+            "checked_at": l.checked_at.isoformat() if l.checked_at else None,
+            "records_found": l.records_found
+        }
+        if is_sa:
+            # Superadmin gets full details
+            item.update({
+                "id": l.id,
+                "url": l.source_url,
+                "duration_ms": l.duration_ms,
+                "error_message": l.error_message,
+                "raw_summary": l.raw_summary
+            })
+        else:
+            # Filtered info for regular clients
+            if l.status == "error":
+                item["error_message"] = "Ocurrió un error temporal al consultar esta fuente."
+            elif l.status == "unsupported":
+                item["error_message"] = "Fuente requiere validación manual, captcha o autenticación."
+        res_list.append(item)
+        
+    return res_list
+
+@app.post("/api/cases/{case_id}/multisource-check")
+@app.post("/cases/{case_id}/multisource-check")
+async def trigger_case_multisource_check(
+    case_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.models import CaseSourceCheck
+    from backend.services.judicial_sources.source_router import run_multisource_check
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    # Enforce company isolation
+    is_sa = is_global_superadmin(current_user)
+    if not is_sa and c.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a los datos de esta empresa.")
+        
+    # Enqueue as background task
+    async def run_check_task():
+        task_db = SessionLocal()
+        try:
+            effective_sources = ["PUBLICACIONES_PROCESALES", "TYBA", "SIUGJ", "SAMAI"]
+            from backend.services.judicial_sources.config import MULTISOURCE_ENABLED as is_enabled, MULTISOURCE_DRY_RUN as is_dry_run
+            
+            if not is_enabled:
+                # Log as skipped
+                for src in effective_sources:
+                    db_log = CaseSourceCheck(
+                        company_id=c.company_id,
+                        case_id=c.id,
+                        radicado=c.radicado,
+                        source=src,
+                        source_url="",
+                        status="skipped",
+                        checked_at=datetime.utcnow(),
+                        duration_ms=0,
+                        error_message="Funcionalidad multifuente desactivada globalmente (MULTISOURCE_ENABLED = false).",
+                        records_found=0,
+                        created_at=datetime.utcnow()
+                    )
+                    task_db.add(db_log)
+                task_db.commit()
+            else:
+                # Run the actual stubs/connectors
+                await run_multisource_check(
+                    radicado=c.radicado,
+                    company_id=c.company_id,
+                    case_id=c.id,
+                    sources=effective_sources,
+                    dry_run=is_dry_run, # respects MULTISOURCE_DRY_RUN
+                    db=task_db
+                )
+        except Exception as e:
+            print(f"[BACKGROUND-TASK-ERROR] multisource check failed: {e}")
+        finally:
+            task_db.close()
+            
+    background_tasks.add_task(run_check_task)
+    return {"ok": True, "message": "Consulta multifuente encolada en segundo plano."}
+
 
 @app.get("/api/cases/by-radicado/{radicado}")
 @app.get("/cases/by-radicado/{radicado}")
@@ -7135,6 +7301,51 @@ async def regenerate_cally_key(
 # MODULO SUPERADMIN: EMPRESAS Y USUARIOS
 # =========================
 
+def log_audit_action(
+    db: Session,
+    user_id: Optional[int],
+    company_id: Optional[int],
+    accion: str,
+    entidad: Optional[str] = None,
+    entidad_id: Optional[int] = None,
+    request: Optional[Request] = None,
+    metadata_val: Optional[dict] = None
+):
+    try:
+        import json
+        ip = None
+        user_agent = None
+        if request:
+            try:
+                if hasattr(request, "client") and request.client:
+                    ip = request.client.host
+            except Exception:
+                pass
+            try:
+                if hasattr(request, "headers") and request.headers:
+                    user_agent = request.headers.get("user-agent")
+            except Exception:
+                pass
+        
+        meta_str = None
+        if metadata_val:
+            meta_str = json.dumps(metadata_val)
+            
+        log = AuditLog(
+            user_id=user_id,
+            company_id=company_id,
+            accion=accion,
+            entidad=entidad,
+            entidad_id=entidad_id,
+            ip=ip,
+            user_agent=user_agent,
+            metadata_json=meta_str
+        )
+        db.add(log)
+        db.commit()
+    except Exception as e:
+        print(f"Error logging audit action: {e}")
+
 class CompanyCreateRequest(BaseModel):
     nombre: str
     nit: Optional[str] = None
@@ -7147,7 +7358,47 @@ class UserCreateRequest(BaseModel):
     company_id: Optional[int] = None
     email: Optional[str] = None
     is_admin: bool = False
+    role: Optional[str] = "USER"
+    cases_view_scope: Optional[str] = "OWN"
 
+class UserAdminUpdateRequest(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    nombre: Optional[str] = None
+    company_id: Optional[int] = None
+    email: Optional[str] = None
+    is_admin: Optional[bool] = None
+    role: Optional[str] = None
+    cases_view_scope: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class JudicialSourcesDebugRequest(BaseModel):
+    radicado: str
+    sources: Optional[list] = None
+    dry_run: bool = True
+
+@app.post("/api/admin/judicial-sources/debug")
+async def debug_judicial_sources(
+    data: JudicialSourcesDebugRequest,
+    current_user: User = Depends(require_superadmin),
+    db: Session = Depends(get_db)
+):
+    from backend.services.judicial_sources.source_router import run_multisource_check
+    # Safe debug dry-run for SuperAdmins
+    results = await run_multisource_check(
+        radicado=data.radicado,
+        company_id=current_user.company_id or 1,
+        case_id=None,
+        sources=data.sources,
+        dry_run=data.dry_run,
+        db=db
+    )
+    return {
+        "radicado": data.radicado,
+        "sources_checked": results
+    }
+
+@app.get("/api/admin/companies")
 @app.get("/admin/companies")
 async def get_admin_companies(
     request: Request,
@@ -7163,6 +7414,9 @@ async def get_admin_companies(
                 "nit": c.nit,
                 "estado": c.estado or "activo",
                 "limite_usuarios": c.limite_usuarios,
+                "user_limit": c.limite_usuarios,
+                "active_users_count": db.query(User).filter(User.company_id == c.id, User.is_active == True).count(),
+                "active_cases_count": db.query(Case).filter(Case.company_id == c.id, Case.is_active == True).count(),
                 "cases_count": db.query(Case).filter(Case.company_id == c.id).count(),
                 "payment_status": getattr(c, 'payment_status', 'al_dia') or 'al_dia',
                 "suspension_reason": getattr(c, 'suspension_reason', None),
@@ -7182,6 +7436,7 @@ async def get_admin_companies(
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
+@app.post("/api/admin/companies")
 @app.post("/admin/companies")
 async def create_admin_company(
     request: Request,
@@ -7190,16 +7445,32 @@ async def create_admin_company(
     current_user: User = Depends(require_superadmin)
 ):
     try:
-        comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo')
+        comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo', payment_status='al_dia')
         db.add(comp)
         db.commit()
         db.refresh(comp)
+        
+        # Log Audit
+        log_audit_action(
+            db=db,
+            user_id=current_user.id,
+            company_id=comp.id,
+            accion="CREATE_COMPANY",
+            entidad="Company",
+            entidad_id=comp.id,
+            request=request,
+            metadata_val={"nombre": comp.nombre, "nit": comp.nit}
+        )
+        
         return {
             "id": comp.id,
             "nombre": comp.nombre,
             "nit": comp.nit,
             "estado": comp.estado or "activo",
             "limite_usuarios": comp.limite_usuarios,
+            "user_limit": comp.limite_usuarios,
+            "active_users_count": 0,
+            "active_cases_count": 0,
             "payment_status": getattr(comp, 'payment_status', 'al_dia') or 'al_dia',
             "suspension_reason": None,
             "suspended_at": None,
@@ -7216,107 +7487,345 @@ async def create_admin_company(
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
+@app.get("/api/admin/users")
 @app.get("/admin/users")
 async def get_admin_users(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_superadmin)
+    current_user: User = Depends(require_admin_or_superadmin)
 ):
     try:
-        users = db.query(User).order_by(User.id.desc()).all()
-        return [{"id": u.id, "username": u.username, "nombre": u.nombre, "company_id": u.company_id, "is_admin": u.is_admin} for u in users]
+        is_sa = is_global_superadmin(current_user)
+        query = db.query(User)
+        if not is_sa:
+            query = query.filter(User.company_id == current_user.company_id)
+        users = query.order_by(User.id.desc()).all()
+        
+        results = []
+        for u in users:
+            comp_name = "Global"
+            if u.company_id:
+                comp = db.query(Company).filter(Company.id == u.company_id).first()
+                if comp:
+                    comp_name = comp.nombre
+                    
+            u_is_sa = is_global_superadmin(u)
+            u_role = "SUPERADMIN" if u_is_sa else (u.role or ("COMPANY_ADMIN" if u.is_admin else "USER"))
+            
+            results.append({
+                "id": u.id,
+                "username": u.username,
+                "nombre": u.nombre,
+                "email": u.email,
+                "empresa": comp_name,
+                "company_id": u.company_id,
+                "role": u_role,
+                "is_admin": u.is_admin,
+                "is_superadmin": u_is_sa,
+                "is_active": u.is_active,
+                "last_login": None,
+                "created_at": str(u.created_at) if u.created_at else None,
+                "cases_view_scope": u.cases_view_scope or ("GLOBAL" if u_is_sa else ("COMPANY" if u.is_admin else "OWN"))
+            })
+        return results
     except Exception as e:
         import traceback
         err_msg = f"ERROR in GET /admin/users: {str(e)} | TRACE: {traceback.format_exc()}"
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
+@app.post("/api/admin/users")
 @app.post("/admin/users")
 async def create_admin_user(
     request: Request,
     data: UserCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_superadmin)
+    current_user: User = Depends(require_admin_or_superadmin)
 ):
     try:
         from passlib.context import CryptContext
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         
-        is_sa = data.is_admin and data.company_id is None
-        role_str = "SUPERADMIN" if is_sa else "USER"
+        is_sa = is_global_superadmin(current_user)
         
+        # Enforce Company Admin limitations
+        if not is_sa:
+            if data.company_id != current_user.company_id:
+                raise HTTPException(status_code=400, detail="No puedes asignar un usuario a otra empresa.")
+            if data.role != "USER" and data.role != "STANDARD":
+                raise HTTPException(status_code=400, detail="Solo puedes crear usuarios con el rol estándar (USER).")
+            if data.cases_view_scope == "GLOBAL":
+                raise HTTPException(status_code=400, detail="No puedes asignar alcance GLOBAL a usuarios de tu empresa.")
+                
+        # Validate unique username
+        existing_username = db.query(User).filter(User.username == data.username).first()
+        if existing_username:
+            raise HTTPException(status_code=400, detail=f"El usuario '{data.username}' ya existe.")
+            
+        if data.email:
+            existing_email = db.query(User).filter(User.email == data.email).first()
+            if existing_email:
+                raise HTTPException(status_code=400, detail=f"El correo '{data.email}' ya está registrado.")
+                
+        role_upper = (data.role or "USER").upper()
+        if role_upper == "STANDARD":
+            role_upper = "USER"
+            
+        u_scope = (data.cases_view_scope or "OWN").upper()
+        
+        # Enforce Scope & Role validation rules
+        if u_scope == "GLOBAL" and role_upper != "SUPERADMIN":
+            raise HTTPException(status_code=400, detail="Solo los SuperAdmins pueden tener alcance GLOBAL.")
+        if u_scope == "COMPANY" and role_upper not in ["SUPERADMIN", "COMPANY_ADMIN"]:
+            raise HTTPException(status_code=400, detail="Solo SuperAdmins y Company Admins pueden tener alcance COMPANY.")
+        if role_upper == "USER" and u_scope != "OWN":
+            raise HTTPException(status_code=400, detail="Los usuarios estándar solo pueden tener alcance OWN.")
+            
+        u_is_sa = False
+        u_is_admin = False
+        u_company_id = data.company_id
+        
+        if is_sa and role_upper == "SUPERADMIN":
+            u_is_sa = True
+            u_is_admin = True
+            u_company_id = None
+            u_scope = "GLOBAL"
+        elif role_upper == "COMPANY_ADMIN" or data.is_admin:
+            u_is_sa = False
+            u_is_admin = True
+            role_upper = "COMPANY_ADMIN"
+        else:
+            u_is_sa = False
+            u_is_admin = False
+            role_upper = "USER"
+            
+        if role_upper != "SUPERADMIN" and u_company_id is None:
+            raise HTTPException(status_code=400, detail="Debes asignar una empresa para roles no globales.")
+            
         new_user = User(
             username=data.username,
             hashed_password=pwd_context.hash(data.password),
             nombre=data.nombre,
-            company_id=data.company_id,
+            company_id=u_company_id,
             email=data.email,
-            is_admin=data.is_admin,
-            is_superadmin=is_sa,
-            role=role_str
+            is_admin=u_is_admin,
+            is_superadmin=u_is_sa,
+            role=role_upper,
+            cases_view_scope=u_scope,
+            is_active=True
         )
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
-        return {"id": new_user.id, "username": new_user.username, "nombre": new_user.nombre, "company_id": new_user.company_id, "is_admin": new_user.is_admin}
+        
+        # Log Audit
+        log_audit_action(
+            db=db,
+            user_id=current_user.id,
+            company_id=new_user.company_id,
+            accion="CREATE_USER",
+            entidad="User",
+            entidad_id=new_user.id,
+            request=request,
+            metadata_val={"username": new_user.username, "role": new_user.role, "company_id": new_user.company_id}
+        )
+        
+        return {
+            "id": new_user.id,
+            "username": new_user.username,
+            "nombre": new_user.nombre,
+            "company_id": new_user.company_id,
+            "is_admin": new_user.is_admin,
+            "is_superadmin": new_user.is_superadmin,
+            "role": new_user.role,
+            "cases_view_scope": new_user.cases_view_scope,
+            "is_active": new_user.is_active
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         err_msg = f"ERROR in POST /admin/users: {str(e)} | TRACE: {traceback.format_exc()}"
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
-
-class UserAdminUpdateRequest(BaseModel):
-    role: Optional[str] = None
-    company_id: Optional[int] = None
-
-
+@app.put("/api/admin/users/{user_id}")
 @app.put("/admin/users/{user_id}")
 async def admin_update_user(
     user_id: int,
     data: UserAdminUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_superadmin)
+    current_user: User = Depends(require_admin_or_superadmin)
 ):
     try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            
+        is_sa = is_global_superadmin(current_user)
         
-        if current_user.id == user_id:
-            raise HTTPException(status_code=400, detail="No puedes modificar tu propio usuario")
+        # Enforce Company Admin limitations
+        if not is_sa:
+            if user.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes permisos para modificar este usuario.")
+            if data.company_id is not None and data.company_id != current_user.company_id:
+                raise HTTPException(status_code=400, detail="No puedes cambiar la empresa de este usuario.")
+            if data.role is not None and data.role != "USER" and data.role != "STANDARD":
+                raise HTTPException(status_code=400, detail="Solo puedes asignar el rol estándar (USER).")
+            if data.cases_view_scope == "GLOBAL":
+                raise HTTPException(status_code=400, detail="No puedes asignar alcance GLOBAL a usuarios de tu empresa.")
+                
+        # Self-modification safety guards
+        if current_user.id == user.id:
+            if data.is_active is False:
+                raise HTTPException(status_code=400, detail="No puedes desactivar tu propio usuario.")
+            if data.role is not None and data.role.upper() != "SUPERADMIN" and is_sa:
+                raise HTTPException(status_code=400, detail="No puedes quitarte el rol de SUPERADMIN a ti mismo.")
+                
+        # Last active SuperAdmin protection guard
+        u_is_sa = is_global_superadmin(user)
+        if u_is_sa and user.is_active:
+            will_deactivate = data.is_active is False
+            will_change_role = (data.role is not None and data.role.upper() != "SUPERADMIN")
+            if will_deactivate or will_change_role:
+                sa_count = db.query(User).filter((User.role == "SUPERADMIN") | (User.is_superadmin == True), User.is_active == True).count()
+                if sa_count <= 1:
+                    raise HTTPException(status_code=400, detail="No puedes desactivar ni cambiar el rol del último SuperAdmin activo del sistema.")
+                    
+        # Apply changes
+        changes = {}
+        
+        if data.username is not None and data.username != user.username:
+            existing = db.query(User).filter(User.username == data.username).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"El usuario '{data.username}' ya existe.")
+            changes["username"] = data.username
+            user.username = data.username
+            
+        if data.nombre is not None:
+            changes["nombre"] = data.nombre
+            user.nombre = data.nombre
+            
+        if data.email is not None and data.email != user.email:
+            existing = db.query(User).filter(User.email == data.email).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"El correo '{data.email}' ya está registrado.")
+            changes["email"] = data.email
+            user.email = data.email
+            
+        if data.password:
+            changes["password"] = "[MODIFICADA]"
+            user.hashed_password = pwd_context.hash(data.password)
+            
+        if data.is_active is not None:
+            changes["is_active"] = data.is_active
+            user.is_active = data.is_active
+            
+        if data.cases_view_scope is not None:
+            role_to_check = (data.role or user.role).upper()
+            if data.cases_view_scope == "GLOBAL" and role_to_check != "SUPERADMIN":
+                raise HTTPException(status_code=400, detail="Solo los SuperAdmins pueden tener alcance GLOBAL.")
+            changes["cases_view_scope"] = data.cases_view_scope
+            user.cases_view_scope = data.cases_view_scope
             
         if data.role is not None:
             role_upper = data.role.upper()
+            if role_upper == "STANDARD":
+                role_upper = "USER"
+            
+            changes["role"] = role_upper
             if role_upper == "SUPERADMIN":
                 user.is_superadmin = True
                 user.is_admin = True
-                user.company_id = None
                 user.role = "SUPERADMIN"
-            elif role_upper == "STANDARD":
+                user.company_id = None
+                user.cases_view_scope = "GLOBAL"
+            elif role_upper == "COMPANY_ADMIN":
+                user.is_superadmin = False
+                user.is_admin = True
+                user.role = "COMPANY_ADMIN"
+                if user.cases_view_scope == "GLOBAL":
+                    user.cases_view_scope = "COMPANY"
+            else:
                 user.is_superadmin = False
                 user.is_admin = False
                 user.role = "USER"
-            else:
-                raise HTTPException(status_code=400, detail="Rol inválido. Debe ser SUPERADMIN o STANDARD")
-                
-        if data.company_id is not None:
-            # -1 represents 'Global' (None in DB)
+                if user.cases_view_scope == "GLOBAL":
+                    user.cases_view_scope = "OWN"
+                    
+        # Apply company change if provided (and current_user is SuperAdmin)
+        if data.company_id is not None and is_sa:
             if data.company_id == -1:
                 user.company_id = None
+                changes["company_id"] = None
             else:
                 comp = db.query(Company).filter(Company.id == data.company_id).first()
                 if not comp:
-                    raise HTTPException(status_code=400, detail="La compañía no existe")
+                    raise HTTPException(status_code=400, detail="La empresa no existe.")
                 user.company_id = data.company_id
-                # Users assigned to a company cannot be global superadmins
+                changes["company_id"] = data.company_id
                 user.is_superadmin = False
                 if user.role == "SUPERADMIN":
                     user.role = "USER"
                     user.is_admin = False
-            
+                    user.cases_view_scope = "OWN"
+                    
+        # Enforce Scope & Role validation rules
+        final_role = (user.role or "USER").upper()
+        final_scope = (user.cases_view_scope or "OWN").upper()
+        if final_role == "STANDARD":
+            final_role = "USER"
+        if final_scope == "GLOBAL" and final_role != "SUPERADMIN":
+            raise HTTPException(status_code=400, detail="Solo los SuperAdmins pueden tener alcance GLOBAL.")
+        if final_scope == "COMPANY" and final_role not in ["SUPERADMIN", "COMPANY_ADMIN"]:
+            raise HTTPException(status_code=400, detail="Solo SuperAdmins y Company Admins pueden tener alcance COMPANY.")
+        if final_role == "USER" and final_scope != "OWN":
+            raise HTTPException(status_code=400, detail="Los usuarios estándar solo pueden tener alcance OWN.")
+
         db.commit()
-        return {"ok": True, "user_id": user.id, "role": user.role, "company_id": user.company_id}
+        db.refresh(user)
+        
+        # Log Audit
+        if changes:
+            actions_to_log = []
+            if "is_active" in changes:
+                actions_to_log.append("ACTIVATE_USER" if changes["is_active"] else "DEACTIVATE_USER")
+            if "role" in changes:
+                actions_to_log.append("CHANGE_ROLE")
+            if "cases_view_scope" in changes:
+                actions_to_log.append("CHANGE_CASES_VIEW_SCOPE")
+            if "password" in changes:
+                actions_to_log.append("CHANGE_PASSWORD_FROM_ADMIN")
+            
+            if not actions_to_log:
+                actions_to_log.append("UPDATE_USER")
+                
+            for act in actions_to_log:
+                log_audit_action(
+                    db=db,
+                    user_id=current_user.id,
+                    company_id=user.company_id,
+                    accion=act,
+                    entidad="User",
+                    entidad_id=user.id,
+                    request=request,
+                    metadata_val=changes
+                )
+            
+        return {
+            "ok": True,
+            "user_id": user.id,
+            "username": user.username,
+            "nombre": user.nombre,
+            "role": user.role,
+            "company_id": user.company_id,
+            "cases_view_scope": user.cases_view_scope,
+            "is_active": user.is_active
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -7326,6 +7835,112 @@ async def admin_update_user(
         raise HTTPException(status_code=400, detail=err_msg)
 
 
+class CompanyUpdateRequest(BaseModel):
+    nombre: Optional[str] = None
+    nit: Optional[str] = None
+    limite_usuarios: Optional[int] = None
+    estado: Optional[str] = None
+    payment_status: Optional[str] = None
+    next_payment_due: Optional[str] = None
+    billing_notes: Optional[str] = None
+
+@app.put("/api/admin/companies/{company_id}")
+@app.put("/admin/companies/{company_id}")
+async def update_company(
+    company_id: int,
+    data: CompanyUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    try:
+        comp = db.query(Company).filter(Company.id == company_id).first()
+        if not comp:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada")
+            
+        changes = {}
+        if data.nombre is not None:
+            comp.nombre = data.nombre
+            changes["nombre"] = data.nombre
+        if data.nit is not None:
+            comp.nit = data.nit
+            changes["nit"] = data.nit
+        if data.limite_usuarios is not None:
+            comp.limite_usuarios = data.limite_usuarios
+            changes["limite_usuarios"] = data.limite_usuarios
+        if data.estado is not None:
+            comp.estado = data.estado
+            changes["estado"] = data.estado
+        if data.payment_status is not None:
+            comp.payment_status = data.payment_status
+            changes["payment_status"] = data.payment_status
+        if data.billing_notes is not None:
+            comp.billing_notes = data.billing_notes
+            changes["billing_notes"] = data.billing_notes
+        if data.next_payment_due is not None:
+            if data.next_payment_due == "":
+                comp.next_payment_due = None
+                changes["next_payment_due"] = None
+            else:
+                from datetime import datetime
+                try:
+                    comp.next_payment_due = datetime.strptime(data.next_payment_due, "%Y-%m-%d").date()
+                    changes["next_payment_due"] = data.next_payment_due
+                except:
+                    raise HTTPException(status_code=400, detail="Formato de fecha inválido. Debe ser YYYY-MM-DD")
+                    
+        db.commit()
+        db.refresh(comp)
+        
+        # Log Audit
+        if changes:
+            actions_to_log = []
+            if "estado" in changes:
+                state_val = changes["estado"]
+                actions_to_log.append("CHANGE_COMPANY_STATUS")
+                if state_val == "inactiva":
+                    actions_to_log.append("INACTIVATE_COMPANY")
+                elif state_val == "activo":
+                    actions_to_log.append("REACTIVATE_COMPANY")
+            if "payment_status" in changes:
+                pay_val = changes["payment_status"]
+                if pay_val == "en_mora":
+                    actions_to_log.append("MARK_OVERDUE_COMPANY")
+            
+            if not actions_to_log:
+                actions_to_log.append("UPDATE_COMPANY")
+                
+            for act in actions_to_log:
+                log_audit_action(
+                    db=db,
+                    user_id=current_user.id,
+                    company_id=comp.id,
+                    accion=act,
+                    entidad="Company",
+                    entidad_id=comp.id,
+                    request=request,
+                    metadata_val=changes
+                )
+            
+        return {
+            "id": comp.id,
+            "nombre": comp.nombre,
+            "nit": comp.nit,
+            "estado": comp.estado,
+            "limite_usuarios": comp.limite_usuarios,
+            "user_limit": comp.limite_usuarios,
+            "payment_status": comp.payment_status,
+            "next_payment_due": str(comp.next_payment_due) if comp.next_payment_due else None,
+            "billing_notes": comp.billing_notes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in PUT /admin/companies/{company_id}: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
+
 class CompanySuspendRequest(BaseModel):
     reason: str
     notes: Optional[str] = None
@@ -7333,15 +7948,15 @@ class CompanySuspendRequest(BaseModel):
 class CompanyReactivateRequest(BaseModel):
     notes: Optional[str] = None
 
+@app.post("/api/admin/companies/{company_id}/suspend")
 @app.post("/admin/companies/{company_id}/suspend")
 async def suspend_company(
     company_id: int,
     data: CompanySuspendRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
@@ -7356,17 +7971,30 @@ async def suspend_company(
         
     db.commit()
     db.refresh(comp)
+    
+    # Log Audit
+    log_audit_action(
+        db=db,
+        user_id=current_user.id,
+        company_id=comp.id,
+        accion="SUSPEND_COMPANY",
+        entidad="Company",
+        entidad_id=comp.id,
+        request=request,
+        metadata_val={"reason": data.reason, "notes": data.notes}
+    )
+    
     return {"ok": True, "message": "Empresa suspendida exitosamente."}
 
+@app.post("/api/admin/companies/{company_id}/reactivate")
 @app.post("/admin/companies/{company_id}/reactivate")
 async def reactivate_company(
     company_id: int,
     data: CompanyReactivateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
@@ -7381,16 +8009,29 @@ async def reactivate_company(
         
     db.commit()
     db.refresh(comp)
+    
+    # Log Audit
+    log_audit_action(
+        db=db,
+        user_id=current_user.id,
+        company_id=comp.id,
+        accion="REACTIVATE_COMPANY",
+        entidad="Company",
+        entidad_id=comp.id,
+        request=request,
+        metadata_val={"notes": data.notes}
+    )
+    
     return {"ok": True, "message": "Empresa reactivada exitosamente."}
 
+@app.post("/api/admin/companies/{company_id}/mark-overdue")
 @app.post("/admin/companies/{company_id}/mark-overdue")
 async def mark_overdue_company(
     company_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_superadmin)
 ):
-    
-
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
@@ -7398,12 +8039,25 @@ async def mark_overdue_company(
     comp.payment_status = "en_mora"
     db.commit()
     db.refresh(comp)
+    
+    # Log Audit
+    log_audit_action(
+        db=db,
+        user_id=current_user.id,
+        company_id=comp.id,
+        accion="MARK_OVERDUE_COMPANY",
+        entidad="Company",
+        entidad_id=comp.id,
+        request=request
+    )
+    
     return {"ok": True, "message": "Empresa marcada en mora."}
 
 # =========================
 # MODULO SUPERADMIN: SIMULADOR DE FACTURACION
 # =========================
 
+@app.get("/api/admin/billing/tiers")
 @app.get("/admin/billing/tiers")
 async def get_billing_tiers(
     request: Request,
@@ -7435,6 +8089,7 @@ async def get_billing_tiers(
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
+@app.post("/api/admin/billing/tiers")
 @app.post("/admin/billing/tiers")
 async def update_billing_tiers(
     request: Request,
@@ -7461,6 +8116,7 @@ async def update_billing_tiers(
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
 
+@app.get("/api/admin/billing/simulator")
 @app.get("/admin/billing/simulator")
 async def get_billing_simulator(
     request: Request,
@@ -7468,15 +8124,25 @@ async def get_billing_simulator(
     current_user: User = Depends(require_superadmin)
 ):
     try:
-        companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
+        companies = db.query(Company).all()  # Allow simulation for all companies or active ones, wait, we can show all companies in simulation
         tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
-        
+        if not tiers:
+            seed = [
+                BillingTier(min_cases=0, max_cases=500, price=3000.0),
+                BillingTier(min_cases=501, max_cases=1000, price=2500.0),
+                BillingTier(min_cases=1001, max_cases=None, price=2000.0),
+            ]
+            for s in seed:
+                db.add(s)
+            db.commit()
+            tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+            
         results = []
         total_active_cases = 0
         estimated_total = 0
         for comp in companies:
             users_count = db.query(User).filter(User.company_id == comp.id).count()
-            active_cases = db.query(Case).filter(Case.company_id == comp.id).count() 
+            active_cases = db.query(Case).filter(Case.company_id == comp.id, Case.is_active == True).count() 
             
             applicable_tier = None
             base_price = 0

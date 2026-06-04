@@ -634,18 +634,18 @@ export type BillingSimulatorResult = {
 };
 
 export function getBillingTiers() {
-  return apiFetch<{ ok: boolean; tiers: BillingTier[] }>("/admin/billing/tiers");
+  return apiFetch<{ ok: boolean; tiers: BillingTier[] }>("/api/admin/billing/tiers");
 }
 
 export function updateBillingTiers(tiers: BillingTier[]) {
-  return apiFetch<{ ok: boolean; message: string }>("/admin/billing/tiers", {
+  return apiFetch<{ ok: boolean; message: string }>("/api/admin/billing/tiers", {
     method: "POST",
     body: JSON.stringify({ tiers }),
   });
 }
 
 export function getBillingSimulator() {
-  return apiFetch<{ ok: boolean; simulator: BillingSimulatorResult[] }>("/admin/billing/simulator");
+  return apiFetch<{ ok: boolean; simulator: BillingSimulatorResult[] }>("/api/admin/billing/simulator");
 }
 
 /** ---------------------------

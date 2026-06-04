@@ -23,6 +23,7 @@ import AgendaView from "./pages/AgendaView";
 import HelpPage from "./pages/HelpPage";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
+import LandingPage from "./pages/LandingPage";
 
 import { MyTasksView } from "./components/MyTasksView";
 
@@ -38,9 +39,12 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               {/* Rutas públicas */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage initialView="login" />} />
+              <Route path="/register-company" element={<LoginPage initialView="register" />} />
+              <Route path="/register" element={<Navigate to="/register-company" replace />} />
+              <Route path="/forgot-password" element={<LoginPage initialView="forgot_password" />} />
+              <Route path="/reset-password" element={<Navigate to="/forgot-password" replace />} />
               <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
               
               {/* Rutas protegidas */}
@@ -49,7 +53,6 @@ const App = () => (
                   <AppLayout />
                 </ProtectedRoute>
               }>
-                <Route path="/" element={<Navigate to="/consultar" replace />} />
                 <Route path="/importar" element={<ImportarPage />} />
                 
                 {/* Nuevas rutas de Experiencia de Usuario */}
