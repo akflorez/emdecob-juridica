@@ -7163,6 +7163,7 @@ async def get_admin_companies(
                 "nit": c.nit,
                 "estado": c.estado or "activo",
                 "limite_usuarios": c.limite_usuarios,
+                "cases_count": db.query(Case).filter(Case.company_id == c.id).count(),
                 "payment_status": getattr(c, 'payment_status', 'al_dia') or 'al_dia',
                 "suspension_reason": getattr(c, 'suspension_reason', None),
                 "suspended_at": str(c.suspended_at) if getattr(c, 'suspended_at', None) else None,

@@ -226,6 +226,7 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
                       <TableHead>NIT</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Límite Usr.</TableHead>
+                      <TableHead className="text-center">Casos Validados</TableHead>
                       <TableHead>Est. Pago</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -242,6 +243,7 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
                           </span>
                         </TableCell>
                         <TableCell>{c.limite_usuarios}</TableCell>
+                        <TableCell className="font-bold text-center text-emerald-600">{c.cases_count ?? 0}</TableCell>
                         <TableCell>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.payment_status === 'al_dia' ? 'bg-emerald-100 text-emerald-800' : c.payment_status === 'en_mora' ? 'bg-yellow-100 text-yellow-800' : c.payment_status === 'suspendido' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
                             {c.payment_status?.toUpperCase() || 'AL_DIA'}
