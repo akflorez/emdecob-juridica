@@ -243,6 +243,8 @@ class User(Base):
     telefono = Column(String(50), nullable=True)     # contacto para reportes
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    is_superadmin = Column(Boolean, default=False)
+    role = Column(String(100), default="USER")
     
     company = relationship("Company", back_populates="users")
     roles = relationship("Role", secondary=user_roles, backref="users")

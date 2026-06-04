@@ -1847,26 +1847,44 @@ def get_current_user(
 def is_global_superadmin(user: User) -> bool:
     if getattr(user, "is_superadmin", False) is True:
         return True
-    
-    if getattr(user, "is_admin", False) is True and user.company_id is None:
-        return True
-        
+
     if getattr(user, "role", None) == "SUPERADMIN":
         return True
-        
+
+    if getattr(user, "is_admin", False) is True and user.company_id is None:
+        return True
+
     return False
 
-def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
+
+def require_superadmin(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+) -> User:
     if is_global_superadmin(current_user):
         return current_user
-        
+
+    # Log temporal when admin endpoint returns 403
+    print({
+        "endpoint": request.url.path,
+        "user_id": getattr(current_user, "id", None),
+        "email": getattr(current_user, "email", None),
+        "company_id": getattr(current_user, "company_id", None),
+        "is_admin": getattr(current_user, "is_admin", None),
+        "is_superadmin": getattr(current_user, "is_superadmin", None),
+        "role": getattr(current_user, "role", None),
+        "reason": "admin_permission_denied"
+    })
+
     raise HTTPException(
         status_code=403,
         detail="Solo Superadmin puede acceder a este recurso"
     )
 
+
 def is_superadmin(user: User) -> bool:
     return is_global_superadmin(user)
+
 
 def _ensure_default_user():
     db = SessionLocal()
@@ -2957,22 +2975,34 @@ def change_password(
 
 @app.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
+    is_sa = is_global_superadmin(current_user)
+    role_str = "SUPERADMIN" if is_sa else (getattr(current_user, 'role', None) or ("ADMIN" if current_user.is_admin else "USER"))
+    
+    if is_sa:
+        permissions = [
+            "admin.access",
+            "companies.view",
+            "users.view",
+            "billing.view",
+            "billing.configure",
+            "billing.simulate"
+        ]
+    else:
+        permissions = []
+
     return {
         "id": current_user.id,
         "username": current_user.username,
         "nombre": current_user.nombre,
         "email": getattr(current_user, 'email', None),
-        "is_admin": current_user.is_admin,
-        "is_superadmin": is_global_superadmin(current_user),
-        "is_active": current_user.is_active,
         "company_id": current_user.company_id,
-        "roles": ["SUPERADMIN"] if is_global_superadmin(current_user) else ["USER"],
-        "permissions": [
-            "admin.access", "companies.view", "companies.create", "companies.update",
-            "companies.suspend", "companies.reactivate", "users.view", "users.create",
-            "billing.view", "billing.simulate", "billing.configure", "billing.export"
-        ] if is_global_superadmin(current_user) else [],
+        "is_admin": current_user.is_admin,
+        "is_superadmin": is_sa,
+        "role": role_str,
+        "permissions": permissions,
+        "is_active": current_user.is_active
     }
+
 
 
 @app.get("/auth/users")
@@ -7121,10 +7151,8 @@ class UserCreateRequest(BaseModel):
 @app.get("/admin/companies")
 async def get_admin_companies(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     comps = db.query(Company).order_by(Company.id.desc()).all()
     return [
@@ -7151,11 +7179,10 @@ async def get_admin_companies(
 async def create_admin_company(
     data: CompanyCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
+
     comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo')
     db.add(comp)
     db.commit()
@@ -7180,11 +7207,10 @@ async def create_admin_company(
 @app.get("/admin/users")
 async def get_admin_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
+
     users = db.query(User).order_by(User.id.desc()).all()
     return [{"id": u.id, "username": u.username, "nombre": u.nombre, "company_id": u.company_id, "is_admin": u.is_admin} for u in users]
 
@@ -7192,11 +7218,10 @@ async def get_admin_users(
 async def create_admin_user(
     data: UserCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
+
     from passlib.context import CryptContext
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
@@ -7225,11 +7250,10 @@ async def suspend_company(
     company_id: int,
     data: CompanySuspendRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
     
+
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
@@ -7251,11 +7275,10 @@ async def reactivate_company(
     company_id: int,
     data: CompanyReactivateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
     
+
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
@@ -7276,11 +7299,10 @@ async def reactivate_company(
 async def mark_overdue_company(
     company_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
     
+
     comp = db.query(Company).filter(Company.id == company_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")

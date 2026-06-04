@@ -4,8 +4,11 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from backend.db import get_db
-from backend.main import get_current_user, require_superadmin, _hash_password
 from backend.models import User, Company
+
+# Lazy loader for superadmin dependency to prevent circular imports
+def get_superadmin(current_user = Depends(lambda: __import__('backend.main', fromlist=['require_superadmin']).require_superadmin)):
+    return current_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -46,12 +49,12 @@ class UserOutAdmin(BaseModel):
 
 
 @router.get("/companies", response_model=List[CompanyOut])
-def list_companies(db: Session = Depends(get_db), _: User = Depends(require_superadmin)):
+def list_companies(db: Session = Depends(get_db), _: User = Depends(get_superadmin)):
     return db.query(Company).order_by(Company.id).all()
 
 
 @router.post("/companies", response_model=CompanyOut)
-def create_company(data: CompanyCreate, db: Session = Depends(get_db), _: User = Depends(require_superadmin)):
+def create_company(data: CompanyCreate, db: Session = Depends(get_db), _: User = Depends(get_superadmin)):
     new_company = Company(
         nombre=data.nombre,
         nit=data.nit,
@@ -64,7 +67,7 @@ def create_company(data: CompanyCreate, db: Session = Depends(get_db), _: User =
 
 
 @router.get("/users", response_model=List[UserOutAdmin])
-def list_users_admin(company_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(require_superadmin)):
+def list_users_admin(company_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(get_superadmin)):
     query = db.query(User)
     if company_id:
         query = query.filter(User.company_id == company_id)
@@ -72,7 +75,7 @@ def list_users_admin(company_id: Optional[int] = None, db: Session = Depends(get
 
 
 @router.post("/users", response_model=UserOutAdmin)
-def create_user_admin(data: UserCreateAdmin, db: Session = Depends(get_db), _: User = Depends(require_superadmin)):
+def create_user_admin(data: UserCreateAdmin, db: Session = Depends(get_db), _: User = Depends(get_superadmin)):
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
         raise HTTPException(400, "El username ya existe")
@@ -81,6 +84,7 @@ def create_user_admin(data: UserCreateAdmin, db: Session = Depends(get_db), _: U
     if not company:
         raise HTTPException(400, "La compañía no existe")
 
+    from backend.main import _hash_password
     new_user = User(
         username=data.username,
         hashed_password=_hash_password(data.password),
