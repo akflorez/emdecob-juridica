@@ -1637,6 +1637,14 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 # =========================
 # HOME
 # =========================
+@app.get("/api/fix-saas-data")
+def fix_saas_data(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    db.execute(text("UPDATE users SET company_id = 1 WHERE company_id IS NULL AND username != 'superadmin'"))
+    db.execute(text("UPDATE cases SET company_id = 1 WHERE company_id IS NULL"))
+    db.commit()
+    return {"ok": True, "message": "Datos arreglados: Todos los casos ahora pertenecen a Emdecob (Empresa 1)"}
+
 @app.get("/api/migrate")
 @app.get("/migrate")
 async def trigger_real_migration():
