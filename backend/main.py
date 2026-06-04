@@ -1663,8 +1663,10 @@ def fix_saas_data(db: Session = Depends(get_db)):
         tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
         for t in tables_to_add:
             try:
-                db.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
-                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{t}_company_id ON {t}(company_id)"))
+                # begin_nested crea un SAVEPOINT en PostgreSQL para no abortar la transacción principal
+                with db.begin_nested():
+                    db.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+                    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{t}_company_id ON {t}(company_id)"))
             except Exception:
                 pass
                 
@@ -1696,8 +1698,11 @@ def fix_saas_data(db: Session = Depends(get_db)):
         # 4. Asignar CODE a todos los registros huérfanos
         tables_to_update = ["cases", "case_events", "case_publications", "publicaciones_busquedas", "tasks", "search_jobs", "workspaces", "invalid_radicados", "audit_logs"]
         for t in tables_to_update:
-            try: db.execute(text(f"UPDATE {t} SET company_id = {code_id} WHERE company_id IS NULL"))
-            except Exception: pass
+            try:
+                with db.begin_nested():
+                    db.execute(text(f"UPDATE {t} SET company_id = {code_id} WHERE company_id IS NULL"))
+            except Exception:
+                pass
             
         db.commit()
         return {"ok": True, "message": f"Migración completa. Empresa CODE ID: {code_id}"}
