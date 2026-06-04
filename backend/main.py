@@ -7013,7 +7013,25 @@ async def get_admin_companies(
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     comps = db.query(Company).order_by(Company.id.desc()).all()
-    return comps
+    return [
+        {
+            "id": c.id,
+            "nombre": c.nombre,
+            "nit": c.nit,
+            "estado": c.estado or "activo",
+            "limite_usuarios": c.limite_usuarios,
+            "payment_status": getattr(c, 'payment_status', 'al_dia') or 'al_dia',
+            "suspension_reason": getattr(c, 'suspension_reason', None),
+            "suspended_at": str(c.suspended_at) if getattr(c, 'suspended_at', None) else None,
+            "suspended_by": getattr(c, 'suspended_by', None),
+            "reactivated_at": str(c.reactivated_at) if getattr(c, 'reactivated_at', None) else None,
+            "last_payment_date": str(c.last_payment_date) if getattr(c, 'last_payment_date', None) else None,
+            "next_payment_due": str(c.next_payment_due) if getattr(c, 'next_payment_due', None) else None,
+            "billing_notes": getattr(c, 'billing_notes', None),
+            "created_at": str(c.created_at) if getattr(c, 'created_at', None) else None,
+        }
+        for c in comps
+    ]
 
 @app.post("/api/admin/companies")
 async def create_admin_company(
@@ -7028,7 +7046,22 @@ async def create_admin_company(
     db.add(comp)
     db.commit()
     db.refresh(comp)
-    return comp
+    return {
+        "id": comp.id,
+        "nombre": comp.nombre,
+        "nit": comp.nit,
+        "estado": comp.estado or "activo",
+        "limite_usuarios": comp.limite_usuarios,
+        "payment_status": getattr(comp, 'payment_status', 'al_dia') or 'al_dia',
+        "suspension_reason": None,
+        "suspended_at": None,
+        "suspended_by": None,
+        "reactivated_at": None,
+        "last_payment_date": None,
+        "next_payment_due": None,
+        "billing_notes": None,
+        "created_at": str(comp.created_at) if getattr(comp, 'created_at', None) else None,
+    }
 
 @app.get("/api/admin/users")
 async def get_admin_users(
@@ -7191,7 +7224,7 @@ async def get_billing_simulator(
     if current_user.company_id is not None:
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
         
-    companies = db.query(Company).filter(Company.estado == True).all()
+    companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
     tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
     
     results = []
