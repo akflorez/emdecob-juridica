@@ -75,12 +75,18 @@ async def _get(path: str, params: dict | None = None, retries: int = MAX_RETRIES
                 await asyncio.sleep(random.uniform(0.1, 0.4))
 
             try:
-                async with httpx.AsyncClient(
-                    headers=HEADERS,
-                    timeout=15,
-                    follow_redirects=True,
-                    http2=False
-                ) as client:
+                # Soporte para proxy corporativo/privado
+                proxy_url = os.getenv("RAMA_PROXY_URL")
+                client_kwargs = {
+                    "headers": HEADERS,
+                    "timeout": 15,
+                    "follow_redirects": True,
+                    "http2": False
+                }
+                if proxy_url:
+                    client_kwargs["proxy"] = proxy_url
+
+                async with httpx.AsyncClient(**client_kwargs) as client:
                     r = await client.get(url, params=params)
 
                 # Éxito

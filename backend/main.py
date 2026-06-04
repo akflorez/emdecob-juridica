@@ -111,6 +111,22 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_data_scope(current_user):
+    if current_user.username == 'superadmin':
+        return {"scope": "all"}
+    if current_user.company_id:
+        return {"scope": "company", "company_id": current_user.company_id}
+    from fastapi import HTTPException
+    raise HTTPException(status_code=403, detail="Usuario sin empresa asignada")
+
+def apply_company_filter(query, model, current_user):
+    if current_user.username == 'superadmin':
+        return query
+    if hasattr(model, "company_id"):
+        return query.filter(model.company_id == current_user.company_id)
+    from fastapi import HTTPException
+    raise HTTPException(status_code=500, detail=f"El modelo {model.__name__} requiere filtro por empresa pero no tiene company_id")
 from pydantic import BaseModel
 from io import BytesIO
 import pandas as pd
@@ -1641,28 +1657,50 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 def fix_saas_data(db: Session = Depends(get_db)):
     from sqlalchemy import text
     try:
+        # Backup (conceptual via logs/print o guardado si fuera script, en endpoint lo omitimos o advertimos)
+        
+        # Agregar columnas y crear índices
         tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
         for t in tables_to_add:
             try:
-                db.execute(text(f"ALTER TABLE {t} ADD COLUMN company_id INTEGER"))
-                db.execute(text(f"CREATE INDEX ix_{t}_company_id ON {t} (company_id)"))
+                db.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
+                db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{t}_company_id ON {t}(company_id)"))
             except Exception:
-                pass # Ya existe
+                pass
                 
-        # Asegurar empresa CODE
-        db.execute(text("UPDATE companies SET nombre = 'CODE' WHERE id = 1"))
+        db.commit() # Consolidar esquema antes de tocar datos
         
-        # Migrar datos (Superadmin intacto)
-        db.execute(text("UPDATE users SET company_id = 1 WHERE company_id IS NULL AND is_admin = false"))
-        db.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = true"))
+        # 1. Obtener o crear CODE
+        code_company = db.query(Company).filter(func.upper(Company.nombre) == 'CODE').first()
+        if not code_company:
+            # Buscar Emdecob para renombrarlo
+            code_company = db.query(Company).filter(func.upper(Company.nombre) == 'EMDECOB').first()
+            if code_company:
+                code_company.nombre = 'CODE'
+            else:
+                code_company = Company(nombre='CODE', estado='activo')
+                db.add(code_company)
+            db.commit()
+            db.refresh(code_company)
+            
+        code_id = code_company.id
         
+        # 2. Migrar usuarios (Superadmin queda global, el resto a CODE)
+        db.execute(text(f"UPDATE users SET company_id = {code_id} WHERE company_id IS NULL AND username != 'superadmin'"))
+        db.execute(text("UPDATE users SET company_id = NULL WHERE username = 'superadmin'"))
+        
+        # 3. Eliminar dato artificial "Auto de prueba (AI)"
+        db.execute(text("DELETE FROM case_events WHERE title = 'Auto de prueba (AI)'"))
+        db.execute(text("DELETE FROM case_events WHERE title LIKE '%Auto de prueba%'"))
+        
+        # 4. Asignar CODE a todos los registros huérfanos
         tables_to_update = ["cases", "case_events", "case_publications", "publicaciones_busquedas", "tasks", "search_jobs", "workspaces", "invalid_radicados", "audit_logs"]
         for t in tables_to_update:
-            try: db.execute(text(f"UPDATE {t} SET company_id = 1 WHERE company_id IS NULL"))
+            try: db.execute(text(f"UPDATE {t} SET company_id = {code_id} WHERE company_id IS NULL"))
             except Exception: pass
             
         db.commit()
-        return {"ok": True, "message": "Datos arreglados: Todas las tablas actualizadas a la empresa CODE"}
+        return {"ok": True, "message": f"Migración completa. Empresa CODE ID: {code_id}"}
     except Exception as e:
         db.rollback()
         return {"ok": False, "error": str(e)}

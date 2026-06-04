@@ -791,7 +791,11 @@ async def open_detail(card: dict) -> str:
     url = card.get("detail_url")
     if not url:
         return ""
-    async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
+    proxy_url = os.getenv("RAMA_PROXY_URL")
+    kwargs = {"headers": HEADERS, "timeout": 60, "follow_redirects": True, "verify": False}
+    if proxy_url: kwargs["proxy"] = proxy_url
+    
+    async with httpx.AsyncClient(**kwargs) as client:
         resp = await client.get(url)
         return resp.text if resp.status_code == 200 else ""
 
@@ -833,7 +837,11 @@ def detect_main_sources(detail_html: str) -> list:
     return fuentes_principales
 
 async def download_or_read_document(url: str) -> str:
-    async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
+    proxy_url = os.getenv("RAMA_PROXY_URL")
+    kwargs = {"headers": HEADERS, "timeout": 60, "follow_redirects": True, "verify": False}
+    if proxy_url: kwargs["proxy"] = proxy_url
+    
+    async with httpx.AsyncClient(**kwargs) as client:
         return await extract_text_content(url, client)
 
 def extract_pdf_text(file: bytes) -> str:
@@ -878,7 +886,11 @@ async def revisar_documentos_complementarios(detalle_html: str, radicado: str, s
     detail_soup = BeautifulSoup(detalle_html, "html.parser")
     documentos_complementarios = []
     
-    async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
+    proxy_url = os.getenv("RAMA_PROXY_URL")
+    kwargs = {"headers": HEADERS, "timeout": 60, "follow_redirects": True, "verify": False}
+    if proxy_url: kwargs["proxy"] = proxy_url
+    
+    async with httpx.AsyncClient(**kwargs) as client:
         for a in detail_soup.find_all("a", href=True):
             href = a["href"]
             if not href.startswith("http"):
@@ -1064,7 +1076,11 @@ async def consultar_publicaciones_rango(
     print(f"[scraper] Busqueda dirigida para radicado {radicado_completo} | Despacho: {id_despacho} | Rango: {fecha_inicio_str} a {fecha_fin_str}")
     print(f"[PUBLICACIONES][BUSCANDO_MES]\nmes={year}-{month:02d}\nfechaInicio={fecha_inicio_str}\nfechaFin={fecha_fin_str}\ndespacho={id_despacho}\nurl={search_url}")
 
-    async with httpx.AsyncClient(headers=HEADERS, timeout=60, follow_redirects=True, verify=False) as client:
+    proxy_url = os.getenv("RAMA_PROXY_URL")
+    kwargs = {"headers": HEADERS, "timeout": 60, "follow_redirects": True, "verify": False}
+    if proxy_url: kwargs["proxy"] = proxy_url
+    
+    async with httpx.AsyncClient(**kwargs) as client:
         try:
             resp = await client.get(search_url)
             if resp.status_code != 200:
