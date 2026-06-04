@@ -23,6 +23,12 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
   const [loading, setLoading] = useState(true);
   const [savingTiers, setSavingTiers] = useState(false);
 
+  const getCompanyName = (companyId: number | null) => {
+    if (!companyId) return 'Global';
+    const comp = companies.find(c => c.id === companyId);
+    return comp ? comp.nombre : `Empresa #${companyId}`;
+  };
+
   // Modals
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -78,11 +84,16 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
 
   const handleCreateUser = async () => {
     try {
+      const isGlobal = newUser.company_id === 'global' || newUser.company_id === '';
       const res = await apiFetch<any>('/admin/users', {
         method: 'POST',
         body: JSON.stringify({
-          ...newUser,
-          company_id: parseInt(newUser.company_id)
+          username: newUser.username,
+          password: newUser.password,
+          nombre: newUser.nombre,
+          company_id: isGlobal ? null : parseInt(newUser.company_id),
+          is_admin: isGlobal || newUser.is_admin,
+          email: newUser.email || undefined
         })
       });
       setUsers([...users, res]);
@@ -91,6 +102,30 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
       toast({ title: "Usuario creado", description: "El usuario se creó correctamente." });
     } catch (e: any) {
       toast({ title: "Error", description: e.message || "No se pudo crear el usuario", variant: "destructive" });
+    }
+  };
+
+  const handleUpdateUser = async (userId: number, data: { role?: string; company_id?: number }) => {
+    try {
+      const res = await apiFetch<any>(`/admin/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      
+      // Update local state
+      setUsers(users.map(u => {
+        if (u.id === userId) {
+          return {
+            ...u,
+            is_admin: res.role === 'SUPERADMIN',
+            company_id: res.company_id
+          };
+        }
+        return u;
+      }));
+      toast({ title: "Usuario actualizado", description: "El usuario se actualizó correctamente." });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudo actualizar el usuario", variant: "destructive" });
     }
   };
 
@@ -312,8 +347,9 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
                       <TableHead>ID</TableHead>
                       <TableHead>Username</TableHead>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>Empresa ID</TableHead>
+                      <TableHead>Empresa</TableHead>
                       <TableHead>Rol</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -322,13 +358,46 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
                         <TableCell>{u.id}</TableCell>
                         <TableCell>{u.username}</TableCell>
                         <TableCell>{u.nombre}</TableCell>
-                        <TableCell>{u.company_id || 'Global'}</TableCell>
+                        <TableCell className="font-semibold text-slate-700">{getCompanyName(u.company_id)}</TableCell>
                         <TableCell>
                           {u.is_admin && !u.company_id ? (
                             <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full text-xs font-semibold">SuperAdmin</span>
                           ) : (
                             <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full text-xs">Standard</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {u.is_admin && !u.company_id ? (
+                                <DropdownMenuItem onClick={() => handleUpdateUser(u.id, { role: 'STANDARD' })}>
+                                  Convertir en Usuario Estándar
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => handleUpdateUser(u.id, { role: 'SUPERADMIN' })}>
+                                  Convertir en SuperAdmin
+                                </DropdownMenuItem>
+                              )}
+                              {u.company_id && (
+                                <DropdownMenuItem onClick={() => handleUpdateUser(u.id, { company_id: -1 })}>
+                                  Asignar a Global
+                                </DropdownMenuItem>
+                              )}
+                              {companies.map(c => (
+                                c.id !== u.company_id && (
+                                  <DropdownMenuItem key={c.id} onClick={() => handleUpdateUser(u.id, { company_id: c.id })}>
+                                    Asignar a {c.nombre}
+                                  </DropdownMenuItem>
+                                )
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -478,8 +547,18 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
               <Input value={newUser.nombre} onChange={e => setNewUser({...newUser, nombre: e.target.value})} />
             </div>
             <div>
-              <Label>Empresa ID</Label>
-              <Input type="number" placeholder="ID de la empresa (Ej: 1)" value={newUser.company_id} onChange={e => setNewUser({...newUser, company_id: e.target.value})} />
+              <Label>Empresa</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-slate-800"
+                value={newUser.company_id}
+                onChange={e => setNewUser({...newUser, company_id: e.target.value})}
+              >
+                <option value="" className="text-slate-400">Seleccionar Empresa...</option>
+                <option value="global" className="font-semibold">Acceso Global (SuperAdmin)</option>
+                {companies.map(c => (
+                  <option key={c.id} value={c.id.toString()}>{c.nombre}</option>
+                ))}
+              </select>
             </div>
           </div>
           <DialogFooter>

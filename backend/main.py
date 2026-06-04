@@ -7242,13 +7242,18 @@ async def create_admin_user(
         from passlib.context import CryptContext
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         
+        is_sa = data.is_admin and data.company_id is None
+        role_str = "SUPERADMIN" if is_sa else "USER"
+        
         new_user = User(
             username=data.username,
             hashed_password=pwd_context.hash(data.password),
             nombre=data.nombre,
             company_id=data.company_id,
             email=data.email,
-            is_admin=data.is_admin
+            is_admin=data.is_admin,
+            is_superadmin=is_sa,
+            role=role_str
         )
         db.add(new_user)
         db.commit()
@@ -7259,6 +7264,67 @@ async def create_admin_user(
         err_msg = f"ERROR in POST /admin/users: {str(e)} | TRACE: {traceback.format_exc()}"
         print(err_msg)
         raise HTTPException(status_code=400, detail=err_msg)
+
+
+class UserAdminUpdateRequest(BaseModel):
+    role: Optional[str] = None
+    company_id: Optional[int] = None
+
+
+@app.put("/admin/users/{user_id}")
+async def admin_update_user(
+    user_id: int,
+    data: UserAdminUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin)
+):
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        if current_user.id == user_id:
+            raise HTTPException(status_code=400, detail="No puedes modificar tu propio usuario")
+            
+        if data.role is not None:
+            role_upper = data.role.upper()
+            if role_upper == "SUPERADMIN":
+                user.is_superadmin = True
+                user.is_admin = True
+                user.company_id = None
+                user.role = "SUPERADMIN"
+            elif role_upper == "STANDARD":
+                user.is_superadmin = False
+                user.is_admin = False
+                user.role = "USER"
+            else:
+                raise HTTPException(status_code=400, detail="Rol inválido. Debe ser SUPERADMIN o STANDARD")
+                
+        if data.company_id is not None:
+            # -1 represents 'Global' (None in DB)
+            if data.company_id == -1:
+                user.company_id = None
+            else:
+                comp = db.query(Company).filter(Company.id == data.company_id).first()
+                if not comp:
+                    raise HTTPException(status_code=400, detail="La compañía no existe")
+                user.company_id = data.company_id
+                # Users assigned to a company cannot be global superadmins
+                user.is_superadmin = False
+                if user.role == "SUPERADMIN":
+                    user.role = "USER"
+                    user.is_admin = False
+            
+        db.commit()
+        return {"ok": True, "user_id": user.id, "role": user.role, "company_id": user.company_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        err_msg = f"ERROR in PUT /admin/users/{user_id}: {str(e)} | TRACE: {traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
+
 
 class CompanySuspendRequest(BaseModel):
     reason: str
