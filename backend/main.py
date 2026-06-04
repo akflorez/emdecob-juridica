@@ -1640,10 +1640,32 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 @app.get("/api/fix-saas-data")
 def fix_saas_data(db: Session = Depends(get_db)):
     from sqlalchemy import text
-    db.execute(text("UPDATE users SET company_id = 1 WHERE company_id IS NULL AND username != 'superadmin'"))
-    db.execute(text("UPDATE cases SET company_id = 1 WHERE company_id IS NULL"))
-    db.commit()
-    return {"ok": True, "message": "Datos arreglados: Todos los casos ahora pertenecen a Emdecob (Empresa 1)"}
+    try:
+        tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
+        for t in tables_to_add:
+            try:
+                db.execute(text(f"ALTER TABLE {t} ADD COLUMN company_id INTEGER"))
+                db.execute(text(f"CREATE INDEX ix_{t}_company_id ON {t} (company_id)"))
+            except Exception:
+                pass # Ya existe
+                
+        # Asegurar empresa CODE
+        db.execute(text("UPDATE companies SET nombre = 'CODE' WHERE id = 1"))
+        
+        # Migrar datos (Superadmin intacto)
+        db.execute(text("UPDATE users SET company_id = 1 WHERE company_id IS NULL AND is_admin = false"))
+        db.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = true"))
+        
+        tables_to_update = ["cases", "case_events", "case_publications", "publicaciones_busquedas", "tasks", "search_jobs", "workspaces", "invalid_radicados", "audit_logs"]
+        for t in tables_to_update:
+            try: db.execute(text(f"UPDATE {t} SET company_id = 1 WHERE company_id IS NULL"))
+            except Exception: pass
+            
+        db.commit()
+        return {"ok": True, "message": "Datos arreglados: Todas las tablas actualizadas a la empresa CODE"}
+    except Exception as e:
+        db.rollback()
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/migrate")
 @app.get("/migrate")

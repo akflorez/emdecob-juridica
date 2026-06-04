@@ -71,6 +71,7 @@ class CaseEvent(Base):
     __tablename__ = "case_events"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
 
     event_date = Column(String(60), nullable=True)
@@ -100,7 +101,8 @@ class InvalidRadicado(Base):
     __tablename__ = "invalid_radicados"
 
     id = Column(Integer, primary_key=True, index=True)
-    radicado = Column(String(60), unique=True, index=True, nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
+    radicado = Column(String(23), unique=True, index=True, nullable=False)
     motivo = Column(String(255), default="No encontrado en Rama Judicial")
     intentos = Column(Integer, default=1)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -231,6 +233,7 @@ class CasePublication(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
 
     fecha_publicacion = Column(Date, nullable=True)
@@ -349,6 +352,7 @@ class SearchJob(Base):
     __tablename__ = "search_jobs"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     job_type = Column(String(50), nullable=False) # 'name', 'radicado'
     status = Column(String(50), default="pending") # 'pending', 'processing', 'completed', 'failed'
     
@@ -378,6 +382,7 @@ class Workspace(Base):
     __tablename__ = "workspaces"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     visibility = Column(String(50), default="TEAM_COLLABORATION")
@@ -471,6 +476,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
     
@@ -556,7 +562,9 @@ class IntegrationConfig(Base):
     __tablename__ = "integration_config"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     service_name = Column(String(100), unique=True, index=True, nullable=False)
+    clickup_id = Column(String(100), unique=True, index=True, nullable=True)
     api_key = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     settings = Column(Text, nullable=True) # JSON flexible
