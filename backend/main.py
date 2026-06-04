@@ -1844,19 +1844,29 @@ def get_current_user(
         import traceback
         raise HTTPException(status_code=400, detail=f"AUTH ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
+def is_global_superadmin(user: User) -> bool:
+    if getattr(user, "is_superadmin", False) is True:
+        return True
+    
+    if getattr(user, "is_admin", False) is True and user.company_id is None:
+        return True
+        
+    if getattr(user, "role", None) == "SUPERADMIN":
+        return True
+        
+    return False
+
 def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
-    # Superadmin = is_admin=True (company_id puede ser NULL o no)
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Acceso denegado. Requiere privilegios de SuperAdmin.")
-    return current_user
+    if is_global_superadmin(current_user):
+        return current_user
+        
+    raise HTTPException(
+        status_code=403,
+        detail="Solo Superadmin puede acceder a este recurso"
+    )
 
 def is_superadmin(user: User) -> bool:
-    """Helper: True si el usuario es superadmin global.
-    REGLA: is_admin=True es suficiente para ser Superadmin.
-    El company_id puede ser NULL o no, dependiendo de como fue creado el usuario.
-    NO usamos company_id como criterio porque las migraciones pueden haberlo alterado.
-    """
-    return bool(user.is_admin)
+    return is_global_superadmin(user)
 
 def _ensure_default_user():
     db = SessionLocal()
@@ -2953,15 +2963,15 @@ def get_me(current_user: User = Depends(get_current_user)):
         "nombre": current_user.nombre,
         "email": getattr(current_user, 'email', None),
         "is_admin": current_user.is_admin,
-        "is_superadmin": current_user.is_admin,  # Superadmin = is_admin
+        "is_superadmin": is_global_superadmin(current_user),
         "is_active": current_user.is_active,
         "company_id": current_user.company_id,
-        "roles": ["SUPERADMIN"] if current_user.is_admin else ["USER"],
+        "roles": ["SUPERADMIN"] if is_global_superadmin(current_user) else ["USER"],
         "permissions": [
             "admin.access", "companies.view", "companies.create", "companies.update",
             "companies.suspend", "companies.reactivate", "users.view", "users.create",
             "billing.view", "billing.simulate", "billing.configure", "billing.export"
-        ] if current_user.is_admin else [],
+        ] if is_global_superadmin(current_user) else [],
     }
 
 
@@ -7287,10 +7297,8 @@ async def mark_overdue_company(
 @app.get("/admin/billing/tiers")
 async def get_billing_tiers(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
     
@@ -7315,10 +7323,8 @@ async def get_billing_tiers(
 async def update_billing_tiers(
     data: BillingTierUpdateList,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     # Delete all and recreate
     db.query(BillingTier).delete()
@@ -7336,15 +7342,15 @@ async def update_billing_tiers(
 @app.get("/admin/billing/simulator")
 async def get_billing_simulator(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_superadmin)
 ):
-    if not is_superadmin(current_user):
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
         
     companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
     tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
     
     results = []
+    total_active_cases = 0
+    estimated_total = 0
     for comp in companies:
         users_count = db.query(User).filter(User.company_id == comp.id).count()
         # Se cuenta is_active=True (usamos los campos genericos si is_active falla usamos todos)
@@ -7367,8 +7373,20 @@ async def get_billing_simulator(
             "applicable_tier": applicable_tier or "Sin rango",
             "total_cost": base_price
         })
+        total_active_cases += active_cases
+        estimated_total += base_price
         
-    return {"ok": True, "simulator": results}
+    return {
+        "ok": True,
+        "simulator": results, 
+        "companies": results,
+        "tiers": [{"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price} for t in tiers],
+        "summary": {
+            "total_companies": len(companies),
+            "total_active_cases": total_active_cases,
+            "estimated_total": estimated_total
+        }
+    }
 
 @app.get("/v1/system/health")
 async def system_health_diagnostic(
