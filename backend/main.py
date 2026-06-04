@@ -7487,16 +7487,17 @@ async def get_billing_simulator(
                     base_price = tier.price
                     break
                     
+            total_cost = active_cases * base_price
             results.append({
                 "company_id": comp.id,
                 "company_name": comp.nombre,
                 "users_count": users_count,
                 "active_cases": active_cases,
                 "applicable_tier": applicable_tier or "Sin rango",
-                "total_cost": base_price
+                "total_cost": total_cost
             })
             total_active_cases += active_cases
-            estimated_total += base_price
+            estimated_total += total_cost
             
         return {
             "ok": True,
