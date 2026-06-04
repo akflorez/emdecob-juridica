@@ -901,8 +901,13 @@ async def lifespan(app: FastAPI):
                 print("Migración: Columna assignee_name añadida")
             conn.commit()
             
-            # --- AUTO-MIGRACIÓN SaaS POSTGRESQL ---
-            tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
+        except Exception as e:
+            print(f"[DB] Error en migraciones de tareas antiguas: {e}")
+            
+        # --- AUTO-MIGRACIÓN SaaS POSTGRESQL INDEPENDIENTE ---
+        try:
+            with engine.connect() as conn:
+                tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
             for t in tables_to_add:
                 try:
                     conn.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
@@ -935,11 +940,17 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 except Exception:
                     conn.rollback()
+                except Exception:
+                    conn.rollback()
                     pass
             
-            print(f"[MIGRACION] Auto-SaaS completado para CODE_ID = {code_id}")
+                print(f"[MIGRACION] Auto-SaaS completado para CODE_ID = {code_id}")
+        except Exception as e:
+            print(f"[DB] Error fatal en Auto-SaaS: {e}")
                 
-            cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
+        try:
+            with engine.connect() as conn:
+                cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
             if 'mes_busqueda' not in cols_pub:
                 print("Migración: Añadiendo columnas de cola a publicaciones_busquedas")
                 conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN mes_busqueda VARCHAR(20)"))
@@ -1690,8 +1701,53 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 
 
 # =========================
-# HOME
+# HOME Y DIAGNOSTICO
 # =========================
+@app.get("/api/saas-diagnostic")
+def saas_diagnostic(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    try:
+        diag = {}
+        # 1. Base de datos conectada (ocultando password)
+        url = str(engine.url)
+        diag["connection"] = {
+            "driver": engine.url.drivername,
+            "user": engine.url.username,
+            "host": engine.url.host,
+            "database": engine.url.database
+        }
+        
+        # 2. Diagnóstico de columnas en tasks
+        res = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'tasks' ORDER BY ordinal_position")).fetchall()
+        diag["tasks_columns"] = [r[0] for r in res]
+        
+        # 3. Identificar CODE_ID y Superadmin
+        code = db.execute(text("SELECT id, nombre FROM companies WHERE upper(nombre) = 'CODE' OR upper(nombre) = 'EMDECOB' LIMIT 1")).fetchone()
+        diag["code_company"] = {"id": code[0], "name": code[1]} if code else None
+        
+        superadmin = db.execute(text("SELECT id, username, company_id FROM users WHERE username = 'superadmin'")).fetchone()
+        diag["superadmin"] = {"id": superadmin[0], "username": superadmin[1], "company_id": superadmin[2]} if superadmin else None
+        
+        # 4. Estado de las tablas operativas
+        tables = ["users", "cases", "tasks", "case_events", "case_publications", "publicaciones_busquedas", "search_jobs", "invalid_radicados", "workspaces"]
+        table_stats = {}
+        for t in tables:
+            try:
+                has_col = db.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{t}' AND column_name = 'company_id'")).fetchone()
+                if has_col:
+                    nulls = db.execute(text(f"SELECT COUNT(*) FROM {t} WHERE company_id IS NULL")).fetchone()[0]
+                    table_stats[t] = {"exists": True, "has_company_id": True, "null_count": nulls}
+                else:
+                    table_stats[t] = {"exists": True, "has_company_id": False}
+            except Exception:
+                table_stats[t] = {"exists": False}
+        
+        diag["tables"] = table_stats
+        
+        return {"ok": True, "diagnostic": diag}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @app.get("/api/fix-saas-data")
 def fix_saas_data(db: Session = Depends(get_db)):
     from sqlalchemy import text
