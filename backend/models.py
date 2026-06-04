@@ -11,6 +11,7 @@ from sqlalchemy import (
     Table,
     BigInteger,
     Index,
+    Float,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, backref
