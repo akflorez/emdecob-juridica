@@ -36,7 +36,7 @@ import { Textarea } from '@/components/ui/textarea';export default function Admi
   const [newUser, setNewUser] = useState({ username: '', password: '', nombre: '', company_id: '', email: '', is_admin: false });
 
   useEffect(() => {
-    if (user?.is_admin && !user?.company_id) {
+    if (user?.is_admin || user?.is_superadmin) {
       fetchData();
     }
   }, [user]);

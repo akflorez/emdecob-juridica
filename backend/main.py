@@ -1845,14 +1845,18 @@ def get_current_user(
         raise HTTPException(status_code=400, detail=f"AUTH ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
 def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
-    # Superadmin = is_admin=True Y company_id=NULL
-    if not current_user.is_admin or current_user.company_id is not None:
+    # Superadmin = is_admin=True (company_id puede ser NULL o no)
+    if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Acceso denegado. Requiere privilegios de SuperAdmin.")
     return current_user
 
 def is_superadmin(user: User) -> bool:
-    """Helper: True si el usuario es superadmin global (is_admin=True y sin empresa)"""
-    return bool(user.is_admin and user.company_id is None)
+    """Helper: True si el usuario es superadmin global.
+    REGLA: is_admin=True es suficiente para ser Superadmin.
+    El company_id puede ser NULL o no, dependiendo de como fue creado el usuario.
+    NO usamos company_id como criterio porque las migraciones pueden haberlo alterado.
+    """
+    return bool(user.is_admin)
 
 def _ensure_default_user():
     db = SessionLocal()
@@ -2727,6 +2731,9 @@ def login(data: LoginRequest):
                     "username": user_db.username,
                     "nombre": user_db.nombre,
                     "is_admin": user_db.is_admin,
+                    "is_superadmin": user_db.is_admin,
+                    "company_id": user_db.company_id,
+                    "email": getattr(user_db, 'email', None),
                 }
             }
     except Exception as e:
@@ -2753,7 +2760,10 @@ def login(data: LoginRequest):
                 "id": user_id,
                 "username": username,
                 "is_admin": hc.get("is_admin", False),
-                "nombre": hc.get("nombre", username)
+                "is_superadmin": hc.get("is_admin", False),
+                "nombre": hc.get("nombre", username),
+                "company_id": user_db.company_id if user_db else None,
+                "email": getattr(user_db, 'email', None) if user_db else None,
             }
         }
 
@@ -2941,8 +2951,17 @@ def get_me(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "username": current_user.username,
         "nombre": current_user.nombre,
+        "email": getattr(current_user, 'email', None),
         "is_admin": current_user.is_admin,
+        "is_superadmin": current_user.is_admin,  # Superadmin = is_admin
         "is_active": current_user.is_active,
+        "company_id": current_user.company_id,
+        "roles": ["SUPERADMIN"] if current_user.is_admin else ["USER"],
+        "permissions": [
+            "admin.access", "companies.view", "companies.create", "companies.update",
+            "companies.suspend", "companies.reactivate", "users.view", "users.create",
+            "billing.view", "billing.simulate", "billing.configure", "billing.export"
+        ] if current_user.is_admin else [],
     }
 
 
@@ -7271,6 +7290,19 @@ async def get_billing_tiers(
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+    
+    # Seed inicial si no hay rangos
+    if not tiers:
+        seed = [
+            BillingTier(min_cases=0, max_cases=500, price=3000.0),
+            BillingTier(min_cases=501, max_cases=1000, price=2500.0),
+            BillingTier(min_cases=1001, max_cases=None, price=2000.0),
+        ]
+        for s in seed:
+            db.add(s)
+        db.commit()
+        tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+    
     return {"ok": True, "tiers": [
         {"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price}
         for t in tiers
