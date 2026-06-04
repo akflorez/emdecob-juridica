@@ -901,13 +901,13 @@ async def lifespan(app: FastAPI):
                 print("Migración: Columna assignee_name añadida")
             conn.commit()
             
-        except Exception as e:
-            print(f"[DB] Error en migraciones de tareas antiguas: {e}")
-            
-        # --- AUTO-MIGRACIÓN SaaS POSTGRESQL INDEPENDIENTE ---
-        try:
-            with engine.connect() as conn:
-                tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
+    except Exception as e:
+        print(f"[DB] Error en migraciones de tareas antiguas: {e}")
+        
+    # --- AUTO-MIGRACIÓN SaaS POSTGRESQL INDEPENDIENTE ---
+    try:
+        with engine.connect() as conn:
+            tables_to_add = ["case_events", "case_publications", "tasks", "search_jobs", "workspaces", "invalid_radicados"]
             for t in tables_to_add:
                 try:
                     conn.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS company_id INTEGER"))
@@ -940,17 +940,15 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 except Exception:
                     conn.rollback()
-                except Exception:
-                    conn.rollback()
                     pass
             
                 print(f"[MIGRACION] Auto-SaaS completado para CODE_ID = {code_id}")
-        except Exception as e:
-            print(f"[DB] Error fatal en Auto-SaaS: {e}")
-                
-        try:
-            with engine.connect() as conn:
-                cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
+    except Exception as e:
+        print(f"[DB] Error fatal en Auto-SaaS: {e}")
+            
+    try:
+        with engine.connect() as conn:
+            cols_pub = [c['name'] for c in inspector.get_columns('publicaciones_busquedas')]
             if 'mes_busqueda' not in cols_pub:
                 print("Migración: Añadiendo columnas de cola a publicaciones_busquedas")
                 conn.execute(text("ALTER TABLE publicaciones_busquedas ADD COLUMN mes_busqueda VARCHAR(20)"))
