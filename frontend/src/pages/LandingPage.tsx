@@ -26,7 +26,8 @@ import {
   ShieldCheck,
   ChevronRight,
   Menu,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 
 export default function LandingPage() {
