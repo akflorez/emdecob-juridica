@@ -2739,7 +2739,7 @@ def login(data: LoginRequest):
     try:
         db = SessionLocal()
         user_db = db.query(User).filter(
-            User.username == username,
+            or_(User.username == username, User.email == username),
             User.is_active == True
         ).first()
         
@@ -2759,7 +2759,7 @@ def login(data: LoginRequest):
                     "username": user_db.username,
                     "nombre": user_db.nombre,
                     "is_admin": user_db.is_admin,
-                    "is_superadmin": user_db.is_admin,
+                    "is_superadmin": is_global_superadmin(user_db),
                     "company_id": user_db.company_id,
                     "email": getattr(user_db, 'email', None),
                 }
@@ -2788,7 +2788,7 @@ def login(data: LoginRequest):
                 "id": user_id,
                 "username": username,
                 "is_admin": hc.get("is_admin", False),
-                "is_superadmin": hc.get("is_admin", False),
+                "is_superadmin": hc.get("is_superadmin", False),
                 "nombre": hc.get("nombre", username),
                 "company_id": user_db.company_id if user_db else None,
                 "email": getattr(user_db, 'email', None) if user_db else None,
