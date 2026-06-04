@@ -692,7 +692,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <span className="text-xs text-slate-400 block font-bold">CORREO ELECTRÓNICO</span>
-                  <span className="font-semibold text-sm font-mono">direccionanalitica@emdecob.com</span>
+                  <span className="font-semibold text-sm font-mono">direccionejecutiva@emdecob.com</span>
                 </div>
               </div>
 
@@ -702,7 +702,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <span className="text-xs text-slate-400 block font-bold">TELÉFONO / WHATSAPP</span>
-                  <span className="font-semibold text-sm font-mono">+57 314 247 2622</span>
+                  <span className="font-semibold text-sm font-mono">+57 314 892 3929</span>
                 </div>
               </div>
             </div>
