@@ -1,0 +1,374 @@
+=== Searching for Resumen de la publicación ===
+Header: div | Text: ENEnglishESSpanishRama JudicialAccederInicioAvisos vacantes temporalesOtras consultasConsulta históricaNovedadesConsulta de procesosContrasteReducir letraAumentar letraCentro de RelevoPublicaciones ProcesalesEste portal reúne los procesos judiciales de todos los despachos del país en un solo lugar. Aquí encontrará procesos publicados desde el 14 de mayo de 2024.ℹ️Para información anterior, remitirse a la "Consulta histórica" en el menú superior. A partir del 5 de diciembre se habilitan nuevos filtros de consulta. Lo invitamos a ver el material de apoyo.VerVideoVerInstructivoVerABCNotificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consultaRama JudicialNuestras redes sociales:EstosNo son canales oficialespara tramitarPQRSDFTotal de Visitantes :12358606Visitantes Últimas 24 horas :57199Ubicación Altas Cortes:Calle 12 No 7 - 65, Palacio de Justicia Alfonso Reyes Echandía Bogotá - ColombiaHorarios de Atención:Atención Presencial:Lunes a Viernes de 08:00 a.m. a 01:00 p.m. y de 02:00 p.m. a 05:00 p.m.Ubicación de Despachos Judiciales y Sedes administrativas:Directorio NacionalCanales de atención:EstosNo son canales oficialespara tramitarPQRSDFConsejo Superior de la Judicatura:(+57) 601 - 565 8500Corte Constitucional:(+57) 601 - 350 6200Consejo de Estado:(+57) 601 - 350 6700Comisión Nacional de Disciplina Judicial:(+57) 601 - 565 8500Corte Suprema de Justicia:(+57) 601 - 362 2000Dirección Ejecutiva de Administración Judicial - DEAJ:Carrera 7 # 27-18, Bogotá(+57) 601 - 565 8500Acceda a su correo electrónico institucional(Servidores Judiciales)Correo electrónico institucional:info@cendoj.ramajudicial.gov.coOtros Correos electrónicos:Directorio de Correos Electrónicos InstitucionalesEnlaces de interés:Cuentas de correo para Notificaciones JudicialesMapa del sitioPolíticas de privacidad y condiciones de usoSitio de atención al usuarioTransparencia y Acceso a la información
+Parent tag: body | Class: ['controls-visible', 'default', 'yui3-skin-sam', 'signed-out', 'public-page', 'site', 'content-home', 'dPrincipal']
+Found 51 links in parent:
+  - Link text: Saltar al contenido | href: #main-content
+  - Link text:  | href: https://www.ramajudicial.gov.co
+  - Link text: ENEnglish | href: #
+  - Link text: ESSpanish | href: #
+  - Link text:  | href: https://www.ramajudicial.gov.co/web/consejo-superior-de-la-judicatura
+  - Link text:  | href: https://www.cortesuprema.gov.co/
+  - Link text:  | href: https://www.corteconstitucional.gov.co/
+  - Link text:  | href: https://www.consejodeestado.gov.co/
+  - Link text:  | href: https://cndj.gov.co/
+  - Link text: Acceder | href: https://publicacionesprocesales.ramajudicial.gov.co/c/portal/login?p_l_id=139606187
+  - Link text: Inicio | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/inicio
+  - Link text: Avisos vacantes temporales | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/avisos-vacantes-temporales
+  - Link text: Otras consultas | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/otras-consultas
+  - Link text: Consulta histórica | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/consulta-historica
+  - Link text: Novedades | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/novedades
+  - Link text: Consulta de procesos | href: https://consultaprocesos.ramajudicial.gov.co/Procesos/Index
+  - Link text: Contraste | href: None
+  - Link text: Reducir letra | href: None
+  - Link text: Aumentar letra | href: None
+  - Link text: Centro de Relevo | href: https://centroderelevo.gov.co/632/w3-channel.html
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+  - Link text:  | href: https://www.facebook.com/ConsejoSuperiorJudicatura
+  - Link text:  | href: https://www.youtube.com/channel/UCBHrdbfpLE2lNsu4CTpDanA
+  - Link text:  | href: http://www.twitter.com/judicaturacsj
+  - Link text:  | href: https://www.instagram.com/consejosuperiorjudicatura/
+  - Link text: Directorio Nacional | href: https://directoriojudicial.ramajudicial.gov.co/Sierju-Web/app/consultaExternaDespachos-flow?execution=e1s1
+  - Link text: (Servidores Judiciales) | href: https://outlook.cloud.microsoft/mail/
+  - Link text: info@cendoj.ramajudicial.gov.co | href: mailto:info@cendoj.ramajudicial.gov.co
+  - Link text: Directorio de Correos Electrónicos Institucionales | href: https://www.ramajudicial.gov.co/directorio-cuentas-de-correo-electronico
+  - Link text: Cuentas de correo para Notificaciones Judiciales | href: https://www.ramajudicial.gov.co/web/informacion/cuentas-de-correo-para-notificaciones
+  - Link text: Mapa del sitio | href: https://www.ramajudicial.gov.co/web/guest/mapa-del-sitio
+  - Link text: Políticas de privacidad y condiciones de uso | href: https://www.ramajudicial.gov.co/portal/politicas-de-privacidad-y-condiciones-de-uso
+  - Link text: Sitio de atención al usuario | href: https://www.ramajudicial.gov.co/web/guest/portal/atencion-al-usuario
+  - Link text: Transparencia y Acceso a la información | href: https://www.ramajudicial.gov.co/transparencia-y-acceso-a-la-informacion-publica
+
+Next siblings:
+  - Sibling type: Tag | Content: <script>$(document).ready(function(){$(".item-mega-menu").click(function(e){$(".item-mega-menu").removeClass("show");$(".mega-menu-general").removeCla
+  - Sibling type: Tag | Content: <script type="text/javascript">function googleTranslateElementInit2(){new google.translate.TranslateElement({pageLanguage:"es",autoDisplay:false},"goo
+  - Sibling type: Tag | Content: <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit2" type="text/javascript"></script>
+  - Sibling type: Tag | Content: <script type="text/javascript">var $jqTools=jQuery.noConflict();$jqTools(".btn-lang-es").show();$jqTools(".btn-lang-en").hide();$jqTools(document).rea
+  - Sibling type: Tag | Content: <script crossorigin="anonymous" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" src="https://stackpath.bootstrapcd
+  - Sibling type: Tag | Content: <script crossorigin="anonymous" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" src="https://code.jquery.com/jquery-3.4.1.min.js"> </s
+  - Sibling type: Tag | Content: <script src="https://publicacionesprocesales.ramajudicial.gov.co/o/csj-main-theme/js/popper.min.js"></script>
+Header: div | Text: Publicaciones ProcesalesEste portal reúne los procesos judiciales de todos los despachos del país en un solo lugar. Aquí encontrará procesos publicados desde el 14 de mayo de 2024.ℹ️Para información anterior, remitirse a la "Consulta histórica" en el menú superior. A partir del 5 de diciembre se habilitan nuevos filtros de consulta. Lo invitamos a ver el material de apoyo.VerVideoVerInstructivoVerABCNotificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: section | Class: ['content-home']
+Found 18 links in parent:
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+  - Sibling type: Tag | Content: <form action="#" id="hrefFm" method="post" name="hrefFm"><span></span></form>
+Header: div | Text: Publicaciones ProcesalesEste portal reúne los procesos judiciales de todos los despachos del país en un solo lugar. Aquí encontrará procesos publicados desde el 14 de mayo de 2024.ℹ️Para información anterior, remitirse a la "Consulta histórica" en el menú superior. A partir del 5 de diciembre se habilitan nuevos filtros de consulta. Lo invitamos a ver el material de apoyo.VerVideoVerInstructivoVerABCNotificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['columns-1']
+Found 18 links in parent:
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Publicaciones ProcesalesEste portal reúne los procesos judiciales de todos los despachos del país en un solo lugar. Aquí encontrará procesos publicados desde el 14 de mayo de 2024.ℹ️Para información anterior, remitirse a la "Consulta histórica" en el menú superior. A partir del 5 de diciembre se habilitan nuevos filtros de consulta. Lo invitamos a ver el material de apoyo.VerVideoVerInstructivoVerABCNotificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['portlet-layout', 'row']
+Found 18 links in parent:
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Publicaciones ProcesalesEste portal reúne los procesos judiciales de todos los despachos del país en un solo lugar. Aquí encontrará procesos publicados desde el 14 de mayo de 2024.ℹ️Para información anterior, remitirse a la "Consulta histórica" en el menú superior. A partir del 5 de diciembre se habilitan nuevos filtros de consulta. Lo invitamos a ver el material de apoyo.VerVideoVerInstructivoVerABCNotificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['col-md-12', 'portlet-column', 'portlet-column-only']
+Found 18 links in parent:
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['portlet-dropzone', 'portlet-column-content', 'portlet-column-content-only']
+Found 18 links in parent:
+  - Link text: VerVideo | href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+  - Link text: VerInstructivo | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+  - Link text: VerABC | href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: section | Class: ['portlet']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['portlet-content']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['portlet-content-container']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['portlet-body']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Notificación por Estado No. 041 de 20 de abril de 2026Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['detalle-publicacion-ep', 'container-fluid', 'pr-6', 'pl-4']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+  - Sibling type: Tag | Content: <script src="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.js" type="text/javascript"></script>
+  - Sibling type: Tag | Content: <script>$(document).ready(function(){$("#tabla-docs-1-0").DataTable({initComplete:function(){var input=$(".dataTables_filter input").attr("id","search
+  - Sibling type: Tag | Content: <script crossorigin="anonymous" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" referrerpo
+  - Sibling type: Tag | Content: <script>document.addEventListener("DOMContentLoaded",function(){const urlParams=new URLSearchParams(window.location.search);var p_p_id=urlParams.get("
+  - Sibling type: Tag | Content: <style type="text/css">.ocultar{text-align:center;display:none}</style>
+Header: div | Text: Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['row', 'content-detalles', 'pl-3']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Datos de la PublicaciónEstado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026Documentos de la publicación(ID Carpeta 214936744 )Búsqueda de documentosNombre del DocumentoFecha IncorporaciónEstado 041-26.pdf17-abr-2026 16:59:562016-00301AutoTrámite17abril26.pdf17-abr-2026 16:59:572022-00286Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:572022-00329Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 16:59:582023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf17-abr-2026 16:59:582024-148-99 Sentencia 17abr26.pdf17-abr-2026 16:59:582025-00021AutoResuelvePeticion17abril26.pdf17-abr-2026 16:59:592025-00297 Sentencia 17abr26.pdf17-abr-2026 16:59:592025-00432AutoConducta17abril2026.pdf17-abr-2026 17:00:002025-00432AutoDecretaSecuestroInmueble17abril2026.pdf17-abr-2026 17:00:012025-00436AutoNotificCondConcl 17 abril 2026.pdf17-abr-2026 17:00:012026-00012Auto-DesignaCuradorDemandados17abril2026.pdf17-abr-2026 17:00:01Volver al resultado de la consultaRealizar una nueva consulta
+Parent tag: div | Class: ['main-contenido', 'row']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+Header: div | Text: Estado No.041Fecha de publicación20 abr 2026Fecha de Estado Electrónico20 abr 2026Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026
+Parent tag: div | Class: ['datos-publicacion', 'py-0', 'col-md-12', 'col-sm-12', 'col-xs-12']
+Found 15 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+  - Link text: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+  - Link text: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+  - Link text: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+  - Link text: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+  - Link text: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+  - Link text: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+  - Link text: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+  - Link text: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+  - Link text: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+  - Link text: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+  - Link text: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+  - Link text: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+  - Link text: Volver al resultado de la consulta | href: javascript:window.history.back()
+  - Link text: Realizar una nueva consulta | href: /
+
+Next siblings:
+  - Sibling type: Tag | Content: <div class="docs-publicacion col-md-12 col-sm-12 col-xs-12"> <div class="d-flex align-items-baseline"> <h4>Documentos de la publicación  </h4> <h5 cla
+    - Found link in sibling: Estado 041-26.pdf | href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+    - Found link in sibling: 2016-00301AutoTrámite17abril26.pdf | href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+    - Found link in sibling: 2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+    - Found link in sibling: 2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+    - Found link in sibling: 2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf | href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+    - Found link in sibling: 2024-148-99 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+    - Found link in sibling: 2025-00021AutoResuelvePeticion17abril26.pdf | href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+    - Found link in sibling: 2025-00297 Sentencia 17abr26.pdf | href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+    - Found link in sibling: 2025-00432AutoConducta17abril2026.pdf | href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+    - Found link in sibling: 2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf | href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+    - Found link in sibling: 2025-00436AutoNotificCondConcl 17 abril 2026.pdf | href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+    - Found link in sibling: 2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf | href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+    - Found link in sibling: Volver al resultado de la consulta | href: javascript:window.history.back()
+    - Found link in sibling: Realizar una nueva consulta | href: /
+Header: div | Text: Resumen de la publicaciónESTADO 041 DEL 20 DE ABRIL 2026
+Parent tag: div | Class: ['metadatos-publicacion', 'd-flex', 'flex-wrap']
+Found 1 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+
+Next siblings:
+Header: h4 | Text: Resumen de la publicación
+Parent tag: div | Class: ['my-3', 'resumen-publicacion', 'col-md-12']
+Found 1 links in parent:
+  - Link text: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+
+Next siblings:
+  - Sibling type: Tag | Content: <p><p><a href="/documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133" target="">ESTADO 041 DEL 20 DE ABR
+    - Found link in sibling: ESTADO 041 DEL 20 DE ABRIL 2026 | href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133

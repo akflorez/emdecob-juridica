@@ -52,6 +52,7 @@ export default function CasoDetailPage() {
   
   const [caseData, setCaseData] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
+  const [eventsWarning, setEventsWarning] = useState<string | null>(null);
   const [publications, setPublications] = useState<CasePublication[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,6 +115,7 @@ export default function CasoDetailPage() {
               getCasePublicationsById(Number(id))
             ]);
             setEvents(eventsResult.items || []);
+            setEventsWarning(eventsResult.warning || null);
             setPublications(pubsResult.items || []);
             if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
               setCaseData((prev: any) => prev ? {
@@ -144,6 +146,7 @@ export default function CasoDetailPage() {
                 getCasePublicationsById(result.id)
               ]);
               setEvents(eventsResult.items || []);
+              setEventsWarning(eventsResult.warning || null);
               setPublications(pubsResult.items || []);
               if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
                 setCaseData((prev: any) => prev ? {
@@ -308,6 +311,7 @@ export default function CasoDetailPage() {
         ]);
         
         setEvents(eventsResult.items || []);
+        setEventsWarning(eventsResult.warning || null);
         setPublications(pubsResult.items || []);
         setTasks(tasksResult || []);
         if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
@@ -328,6 +332,7 @@ export default function CasoDetailPage() {
               getCaseTasks(results[0].id)
             ]);
             setEvents(eventsResult.items || []);
+            setEventsWarning(eventsResult.warning || null);
             setPublications(pubsResult.items || []);
             setTasks(tasksResult || []);
             if (pubsResult && (pubsResult as any).sync_pub_status !== undefined) {
@@ -716,6 +721,12 @@ export default function CasoDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {eventsWarning && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-amber-600 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <p>{eventsWarning}</p>
+                </div>
+              )}
               {isLoadingEvents ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -723,7 +734,7 @@ export default function CasoDetailPage() {
               ) : filteredEvents.length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No hay actuaciones</p>
+                  <p className="text-muted-foreground">No hay actuaciones locales</p>
                 </div>
               ) : (
                 <div className="overflow-auto max-h-[600px] border rounded-lg">

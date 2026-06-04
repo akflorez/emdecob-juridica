@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Plus, Users, Building2, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiFetch } from '@/services/api';
+import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult } from '@/services/api';
+import { DollarSign, Save, RefreshCw } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -17,7 +18,10 @@ export default function AdminDashboard() {
   
   const [companies, setCompanies] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [tiers, setTiers] = useState<BillingTier[]>([]);
+  const [simulatorData, setSimulatorData] = useState<BillingSimulatorResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingTiers, setSavingTiers] = useState(false);
 
   // Modals
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -36,12 +40,16 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [compRes, usrRes] = await Promise.all([
+      const [compRes, usrRes, tiersRes, simRes] = await Promise.all([
         apiFetch<any[]>('/admin/companies'),
-        apiFetch<any[]>('/admin/users')
+        apiFetch<any[]>('/admin/users'),
+        getBillingTiers().catch(() => ({ tiers: [] as BillingTier[] })),
+        getBillingSimulator().catch(() => ({ simulator: [] as BillingSimulatorResult[] }))
       ]);
       setCompanies(compRes || []);
       setUsers(usrRes || []);
+      if (tiersRes && 'tiers' in tiersRes) setTiers(tiersRes.tiers);
+      if (simRes && 'simulator' in simRes) setSimulatorData(simRes.simulator);
     } catch (error: any) {
       toast({ title: "Error", description: "No se pudieron cargar los datos.", variant: "destructive" });
     } finally {
@@ -82,6 +90,42 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSaveTiers = async () => {
+    setSavingTiers(true);
+    try {
+      await updateBillingTiers(tiers);
+      toast({ title: "Rangos actualizados", description: "La configuración de facturación ha sido guardada." });
+      
+      // Refrescar el simulador con los nuevos rangos
+      const simRes = await getBillingSimulator();
+      if (simRes && 'simulator' in simRes) {
+        setSimulatorData(simRes.simulator);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "No se pudieron guardar los rangos", variant: "destructive" });
+    } finally {
+      setSavingTiers(false);
+    }
+  };
+
+  const addTier = () => {
+    const lastTier = tiers[tiers.length - 1];
+    const newMin = lastTier ? (lastTier.max_cases ? lastTier.max_cases + 1 : lastTier.min_cases + 100) : 0;
+    setTiers([...tiers, { min_cases: newMin, max_cases: null, price: 0 }]);
+  };
+
+  const updateTier = (index: number, field: keyof BillingTier, value: any) => {
+    const newTiers = [...tiers];
+    if (field === 'max_cases' && value === '') value = null;
+    else if (value !== null) value = Number(value);
+    newTiers[index] = { ...newTiers[index], [field]: value };
+    setTiers(newTiers);
+  };
+
+  const removeTier = (index: number) => {
+    setTiers(tiers.filter((_, i) => i !== index));
+  };
+
   if (!user?.is_admin || user?.company_id) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -110,6 +154,9 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="usuarios" className="flex items-center gap-2">
             <Users className="w-4 h-4" /> Usuarios Globales
+          </TabsTrigger>
+          <TabsTrigger value="facturacion" className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4" /> Facturación
           </TabsTrigger>
         </TabsList>
 
@@ -204,6 +251,95 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="facturacion">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Configurar Tarifas</CardTitle>
+                  <CardDescription>Define los rangos de cobro por radicados activos</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {tiers.map((tier, idx) => (
+                    <div key={idx} className="flex flex-col gap-2 p-3 bg-muted/30 rounded-lg border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold">Rango {idx + 1}</span>
+                        <Button variant="ghost" size="sm" onClick={() => removeTier(idx)} className="h-6 w-6 p-0 text-red-500 hover:text-red-700">X</Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Mínimo</Label>
+                          <Input type="number" value={tier.min_cases} onChange={(e) => updateTier(idx, 'min_cases', e.target.value)} className="h-8 text-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Máximo (vacío = ∞)</Label>
+                          <Input type="number" value={tier.max_cases ?? ''} onChange={(e) => updateTier(idx, 'max_cases', e.target.value)} className="h-8 text-sm" />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Tarifa Fija (COP)</Label>
+                          <Input type="number" value={tier.price} onChange={(e) => updateTier(idx, 'price', e.target.value)} className="h-8 text-sm font-semibold text-emerald-600" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <Button variant="outline" className="w-full border-dashed" onClick={addTier}>
+                    <Plus className="w-4 h-4 mr-2" /> Agregar Rango
+                  </Button>
+                  <Button className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white" onClick={handleSaveTiers} disabled={savingTiers}>
+                    {savingTiers ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Guardar y Simular
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="lg:col-span-2">
+              <Card className="h-full">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Simulador de Facturación</CardTitle>
+                    <CardDescription>Impacto de los rangos actuales en las empresas registradas</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchData}>
+                    <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>Empresa</TableHead>
+                          <TableHead className="text-center">Usuarios</TableHead>
+                          <TableHead className="text-center">Rad. Activos</TableHead>
+                          <TableHead>Rango Aplicado</TableHead>
+                          <TableHead className="text-right">A Cobrar</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {simulatorData.map((d, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{d.company_name}</TableCell>
+                            <TableCell className="text-center">{d.users_count}</TableCell>
+                            <TableCell className="text-center font-bold">{d.active_cases}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{d.applicable_tier}</TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">
+                              ${d.total_cost.toLocaleString('es-CO')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {simulatorData.length === 0 && (
+                          <TableRow><TableCell colSpan={5} className="text-center py-8">No hay datos para simular</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

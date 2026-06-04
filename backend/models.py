@@ -55,6 +55,8 @@ class Case(Base):
     sync_pub_status = Column(String(100), nullable=True)   # Ej: "Buscando...", "Finalizado"
     sync_pub_progress = Column(Integer, default=0)         # 0 a 100
 
+    is_active = Column(Boolean, default=True, nullable=False) # Para cobro por radicado activo
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime,
@@ -65,6 +67,24 @@ class Case(Base):
     
     tasks = relationship("Task", back_populates="case", cascade="all, delete-orphan")
     events = relationship("CaseEvent", back_populates="case", cascade="all, delete-orphan")
+
+
+class BillingTier(Base):
+    """Rangos de cobro para facturación por radicados activos"""
+    __tablename__ = "billing_tiers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    min_cases = Column(Integer, nullable=False)
+    max_cases = Column(Integer, nullable=True) # Null = en adelante
+    price = Column(Float, nullable=False)
+    
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
 
 class CaseEvent(Base):
@@ -223,6 +243,22 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class PasswordResetToken(Base):
+    """Tokens temporales para recuperación de contraseña"""
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(255), unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    ip_request = Column(String(100), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    
+    user = relationship("User", backref="reset_tokens")
 
 
 class CasePublication(Base):

@@ -162,9 +162,33 @@ class RegisterRequest(BaseModel):
     password: str
     nombre: Optional[str] = None
 
+class RegisterCompanyRequest(BaseModel):
+    company_name: str
+    company_nit: Optional[str] = None
+    admin_name: str
+    email: str
+    password: str
+    confirm_password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+    confirm_password: str
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class BillingTierCreate(BaseModel):
+    min_cases: int
+    max_cases: Optional[int]
+    price: float
+
+class BillingTierUpdateList(BaseModel):
+    tiers: List[BillingTierCreate]
 
 class LoginRequest(BaseModel):
     username: str
@@ -173,7 +197,8 @@ class LoginRequest(BaseModel):
 from backend.models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
-    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig, Tag
+    ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig, Tag,
+    Company, Role, PasswordResetToken, BillingTier
 )
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
@@ -932,7 +957,26 @@ async def lifespan(app: FastAPI):
             # Limpiar dato de prueba
             conn.execute(text("DELETE FROM case_events WHERE title LIKE '%Auto de prueba%'"))
             
-            # Migrar todo a CODE_ID
+            # Reparación estricta de orphans pedida por el usuario
+            try:
+                conn.execute(text("""
+                    UPDATE case_events ce 
+                    SET company_id = c.company_id 
+                    FROM cases c 
+                    WHERE ce.case_id = c.id AND ce.company_id IS NULL AND c.company_id IS NOT NULL
+                """))
+                conn.commit()
+                conn.execute(text("""
+                    UPDATE case_events ce 
+                    SET company_id = c.company_id 
+                    FROM cases c 
+                    WHERE ce.radicado = c.radicado AND ce.company_id IS NULL AND c.company_id IS NOT NULL
+                """))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            # Migrar huérfanos restantes a CODE_ID
             tables_to_update = ["cases", "case_events", "case_publications", "publicaciones_busquedas", "tasks", "search_jobs", "workspaces", "invalid_radicados", "audit_logs"]
             for t in tables_to_update:
                 try:
@@ -2107,6 +2151,130 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(new_user)
 
     return {"ok": True, "message": "Usuario registrado exitosamente", "user_id": new_user.id}
+
+@app.post("/auth/register-company")
+def register_company(data: RegisterCompanyRequest, db: Session = Depends(get_db)):
+    if data.password != data.confirm_password:
+        raise HTTPException(400, "Las contraseñas no coinciden")
+    
+    existing_user = db.query(User).filter(User.email == data.email).first()
+    if existing_user:
+        raise HTTPException(400, "El correo ya está registrado")
+        
+    existing_company = db.query(Company).filter(
+        or_(
+            Company.nombre.ilike(data.company_name),
+            Company.nit == data.company_nit if data.company_nit else False
+        )
+    ).first()
+    
+    if existing_company:
+        raise HTTPException(400, "La empresa ya se encuentra registrada (mismo nombre o NIT)")
+        
+    new_company = Company(
+        nombre=data.company_name,
+        nit=data.company_nit,
+        estado=True
+    )
+    db.add(new_company)
+    db.flush()
+    
+    company_admin_role = db.query(Role).filter(Role.name == "COMPANY_ADMIN").first()
+    if not company_admin_role:
+        company_admin_role = Role(name="COMPANY_ADMIN", description="Administrador de Empresa")
+        db.add(company_admin_role)
+        db.flush()
+        
+    new_user = User(
+        username=data.email,
+        email=data.email,
+        nombre=data.admin_name,
+        hashed_password=_hash_password(data.password),
+        is_active=True,
+        is_admin=False,
+        company_id=new_company.id
+    )
+    new_user.roles.append(company_admin_role)
+    db.add(new_user)
+    db.commit()
+    
+    return {"ok": True, "message": "Empresa y usuario creados exitosamente. Ahora puede iniciar sesión."}
+
+@app.post("/auth/forgot-password")
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    import hashlib
+    user = db.query(User).filter(User.email == data.email).first()
+    
+    # Generic response
+    response_msg = {"ok": True, "message": "Si el correo existe, enviaremos instrucciones de recuperación."}
+    if not user:
+        return response_msg
+        
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=datetime.utcnow() + timedelta(hours=1)
+    )
+    db.add(reset_token)
+    db.commit()
+    
+    # Send email (mock if no SMTP)
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = os.environ.get("SMTP_PORT")
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+    smtp_from = os.environ.get("SMTP_FROM_EMAIL", "no-reply@emdecob.com")
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    
+    reset_link = f"{frontend_url}/reset-password?token={raw_token}"
+    
+    if smtp_host and smtp_port:
+        import smtplib
+        msg = MIMEMultipart()
+        msg['From'] = smtp_from
+        msg['To'] = user.email
+        msg['Subject'] = "Recuperación de contraseña"
+        body = f"Hola {user.nombre or 'usuario'},\n\nPara recuperar tu contraseña ingresa al siguiente enlace:\n{reset_link}\n\nEste enlace expira en 1 hora."
+        msg.attach(MIMEText(body, 'plain'))
+        
+        try:
+            with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+                server.starttls()
+                if smtp_user and smtp_password:
+                    server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        except Exception as e:
+            print(f"[SMTP Error] No se pudo enviar correo: {e}")
+    else:
+        print(f"[DEV ONLY] Token de recuperación para {user.email}: {reset_link}")
+        
+    return response_msg
+
+@app.post("/auth/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    import hashlib
+    if data.new_password != data.confirm_password:
+        raise HTTPException(400, "Las contraseñas no coinciden")
+        
+    token_hash = hashlib.sha256(data.token.encode()).hexdigest()
+    
+    reset_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token_hash == token_hash,
+        PasswordResetToken.used_at == None
+    ).first()
+    
+    if not reset_token or reset_token.expires_at < datetime.utcnow():
+        raise HTTPException(400, "El token es inválido o ha expirado")
+        
+    user = reset_token.user
+    user.hashed_password = _hash_password(data.new_password)
+    reset_token.used_at = datetime.utcnow()
+    
+    db.commit()
+    return {"ok": True, "message": "Contraseña actualizada exitosamente"}
 
 @app.post("/auth/change-password")
 def change_password(
@@ -3486,8 +3654,11 @@ async def events_logic(c: Case, db: Session):
             # Si no hay eventos, lo hacemos Sincrono la primera vez para que el usuario vea algo
             if not db_events:
                 await sync_case_events_background(c.id)
-                # Volver a consultar para tener los datos frescos
                 db_events = db.query(CaseEvent).filter(CaseEvent.case_id == c.id).order_by(desc(CaseEvent.event_date), desc(CaseEvent.id)).all()
+                if not db_events and c.ultima_actuacion:
+                    return {"items": [], "total": 0, "warning": "El proceso tiene fecha de última actuación, pero el historial aún no está cargado o fue bloqueado. Presiona Actualizar para sincronizar."}
+                elif not db_events:
+                    return {"items": [], "total": 0, "warning": "No fue posible obtener nuevas actuaciones o el proceso no tiene historial registrado."}
             else:
                 # Si ya hay datos, el refresh se hace en segundo plano
                 asyncio.create_task(sync_case_events_background(c.id))
@@ -3540,6 +3711,10 @@ async def sync_case_events_background(case_id: int):
         elif isinstance(acts_resp, list):
             acts = acts_resp
 
+        if not acts and c.ultima_actuacion:
+            print(f"[SYNC] Advertencia: No se obtuvieron actuaciones para {c.radicado} pero tiene ultima_actuacion.")
+            # No borramos el historial anterior si falla la respuesta.
+
         new_count = 0
         for a in acts:
             it = {
@@ -3569,6 +3744,7 @@ async def sync_case_events_background(case_id: int):
             if not exists:
                 db.add(CaseEvent(
                     case_id=c.id,
+                    company_id=c.company_id,
                     event_date=it["event_date"],
                     title=it["title"],
                     detail=it["detail"],
@@ -6250,6 +6426,83 @@ async def regenerate_cally_key(
     
     db.commit()
     return {"api_key": new_key}
+
+# =========================
+# MODULO SUPERADMIN: SIMULADOR DE FACTURACION
+# =========================
+
+@app.get("/api/admin/billing/tiers")
+async def get_billing_tiers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.company_id is not None:
+        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
+    
+    tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+    return {"ok": True, "tiers": [
+        {"id": t.id, "min_cases": t.min_cases, "max_cases": t.max_cases, "price": t.price}
+        for t in tiers
+    ]}
+
+@app.post("/api/admin/billing/tiers")
+async def update_billing_tiers(
+    data: BillingTierUpdateList,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.company_id is not None:
+        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
+    
+    # Delete all and recreate
+    db.query(BillingTier).delete()
+    
+    for tier in data.tiers:
+        db.add(BillingTier(
+            min_cases=tier.min_cases,
+            max_cases=tier.max_cases,
+            price=tier.price
+        ))
+    db.commit()
+    
+    return {"ok": True, "message": "Rangos de facturación actualizados."}
+
+@app.get("/api/admin/billing/simulator")
+async def get_billing_simulator(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.company_id is not None:
+        raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
+        
+    companies = db.query(Company).filter(Company.estado == True).all()
+    tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
+    
+    results = []
+    for comp in companies:
+        users_count = db.query(User).filter(User.company_id == comp.id).count()
+        # Se cuenta is_active=True (usamos los campos genericos si is_active falla usamos todos)
+        active_cases = db.query(Case).filter(Case.company_id == comp.id).count() 
+        
+        applicable_tier = None
+        base_price = 0
+        
+        for tier in tiers:
+            if active_cases >= tier.min_cases and (tier.max_cases is None or active_cases <= tier.max_cases):
+                applicable_tier = f"{tier.min_cases} - {tier.max_cases if tier.max_cases else 'Adelante'}"
+                base_price = tier.price
+                break
+                
+        results.append({
+            "company_id": comp.id,
+            "company_name": comp.nombre,
+            "users_count": users_count,
+            "active_cases": active_cases,
+            "applicable_tier": applicable_tier or "Sin rango",
+            "total_cost": base_price
+        })
+        
+    return {"ok": True, "simulator": results}
 
 @app.get("/api/v1/system/health")
 async def system_health_diagnostic(

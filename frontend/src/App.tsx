@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import AccesoDenegadoPage from "./pages/AccesoDenegadoPage";
 import ImportarPage from "./pages/ImportarPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ConsultarPage from "./pages/ConsultarPage";
 import BulkSearchPage from "./pages/BulkSearchPage";
 import CasosPage from "./pages/CasosPage";
@@ -39,6 +40,7 @@ const App = () => (
               {/* Rutas públicas */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
               
               {/* Rutas protegidas */}

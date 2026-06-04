@@ -1,0 +1,77 @@
+=== Liferay details ===
+Found text: @media print { .col-md-12.datos { display: flex; } .my-3.resumen-publicacion.col-md-12 { text-align: left; } } #contentPrint .imgGeneral .detalle-publicacion-ep { padding-right: 0rem !important; } #contentPrint .contentIndiHistory { padding: 0px !important; border: none; } #contentPrint .main-contenido.row { padding-top: 10px; padding: 0px !important; } #contentPrint .contentIndiHistory { padding: 0px !important; border: none; border-top: 3px solid black !important; margin-top: 15px; } #contentPrint .contentIndiHistory ul { margin-top: 15px; } .docs-publicacion h5.fst-italic { display: none; } #contentPrint { .docs-publicacion h5.fst-italic { display: none; } } #contentPrint { .dataTables_filter { display: none; } } #contentPrint { .docs-publicacion.col-md-6, .docs-publicacion.col-sm-6, .docs-publicacion.col-xs-12 { width: 100% !important; /* Forzar el ancho al 100% */ flex: 0 0 100% !important; /* Asegurar que ocupe todo el espacio disponible */ max-width: 100% !important; /* Evitar que supere el 100% */ } } #contentPrint { .txtBusqueda { display: none; } .botonesVolver { display: none !important; } } .dataTables_wrapper .dataTables_scroll .dataTables_scrollBody .dataTable tr td:nth-child(2) { text-align: left !important; padding-left: 30px; border-left: 1px solid white; } .botonesVolver .btn:focus { box-shadow: none !important; } .botonesVolver .btn-primary:hover { border: 1px solid #19325B; } .btn-primary:not(:disabled):not(.disabled):active:focus { background-color: white !important; color: #19325B; } .botonesVolver .btn { border: none; } .botonesVolver .btnNueva:hover { border: 2px solid #8DD489 !important; } .botonesVolver .btnNueva { border: 2px solid #8DD489 !important; color: #19325B !important; } .datos-publicacion table th.col-3.sorting { border-left: 1px solid white; } .main-title h2 { font-weight: 500 !important; } .datos { margin: 7.5px; background-color: #F4F4F4; border-radius: 3px; } h2, h3, h5, h4, a, a.btn { color: #19325B; font-weight: bold; } h5 { font-weight: normal; } .datosDescription { margin: 10px; } .datosTitle { background-color: #E3E3E3; padding: 5px; color: #19325B; } table { border-radius: 5px; } table th { background: #A5A5A5; text-align: left; } .datosTitle b { color: #19325B; font-weight: 600; } .docs-publicacion table tr { border: 1px solid #A5A5A5; } .detalle-publicacion-ep .docs-publicacion td a { color: #3E3E3E; } .detalle-publicacion-ep table th, .detalle-publicacion-ep table td { padding: 0.5em; } .detalle-publicacion-ep table img { max-width: 1.3em; } .detalle-publicacion-ep table a:hover { text-decoration: underline; } .detalle-publicacion-ep table a { text-decoration: none; } .detalle-publicacion-ep .docs-publicacion td a { font-weight: 500 !important; } .detalle-publicacion-ep .docs-publicacion table thead, .detalle-publicacion-ep .docs-publicacion table thead th { background: #A5A5A5 !important; color: white; } .detalle-publicacion-ep .main-contenido .dataTables_filter:before { display: none; } .detalle-publicacion-ep .main-contenido .dataTables_filter { margin: 1em 0; } .dataTables_wrapper .dataTables_paginate .paginate_button:hover { color: #666 !important; } .dataTables_wrapper .dataTables_filter input { top: 0; } .dataTables_filter input { width: 90%; margin: 0; } .dataTables_filter label { width: 48%; } .lupa-btn { display: inline-block; padding: 10px; margin-left: 8px; background-color: #8DD489; border-radius: 10px; cursor: pointer; transition: background-color 0.3s ease-in-out; } .lupa-btn:hover { background-color: white; border: 2px solid #8DD489; } .fa-search { color: #19325B; font-size: 18px; display: flex !important; width: 25px; height: 25px; align-items: center; justify-content: center; } .dataTables_info select, .mostrar select { font-family: 'Montserrat', sans-serif !important; font-size: 1rem !important; font-weight: 500; height: 50px; border-radius: 5px; } .dataTables_info select:focus, .mostrar select:focus { outline: none; border-color: #007bff; } .dataTables_info { padding: 0; } .botonesVolver a { display: flex; height: 50px; align-items: center; } .botonesVolver { display: flex !important; align-items: center; justify-content: right; } .botonesVolver .btn { margin: 5px; background-color: #8DD489; color: #19325B; } .botonesVolver .btn:hover { background-color: white; color: #19335a !important; } .btnNueva { border: 2px solid #8DD489; background-color: white !important; color: #4E4E4E !important; } .btnNueva:hover { border: 2px solid #0d6efd; background-color: #8DD489 !important; color: #4E4E4E !important; } .dataTables_wrapper .dataTables_length { margin: 0 !important; } .main-title h2 { border-bottom: 2px solid #E3E3E3; } .txtBusqueda { top: 15px; position: relative; color: #19335a; } thead { border-radius: 50px 50px 0 0; } table.dataTable tbody tr td { border-bottom: none; } table.dataTable tbody tr { background-color: transparent; height: 50px; } .datos-publicacion table thead th:first-child { border-top-left-radius: 5px !important; } .datos-publicacion table thead th:last-child { border-top-right-radius: 5px !important; } table tr.table-active>td { background-color: #F4F4F4 !important; } div#metadata { margin-bottom: 50px; padding-left: 0px; } div#metadata .categoria-ep { font-size: 12px; border-radius: 6px !important; padding: 3px 8px; color: #19325b !important; font-weight: 500 !important; width: fit-content; background-color: #e5e5e5; color: grey; border-radius: 1em; padding: 0 .5em; margin-inline: 5px; } div#metadata b { color: #19325b !important; font-weight: 600 !important; } @media (max-width: 768px) { /* Breakpoint para dispositivos móviles */ .opciones .btn { height: 75px; /* Altura para pantallas móviles */ } } @media (max-width: 576px) { /* Breakpoint para dispositivos móviles */ .dataTables_filter label { width: 100%; } } .datos.radicado { width: fit-content; height: fit-content; } .datosDescription { margin: 10px !important; overflow: auto; } .datos .datosDescription p { font-size: 0.9em !important; } | Parent Tag: style | Class: 
+  Parent full text: @media print { .col-md-12.datos { display: flex; } .my-3.resumen-publicacion.col-md-12 { text-align: left; } } #contentPrint .imgGeneral .detalle-publicacion-ep { padding-right: 0rem !important; } #contentPrint .contentIndiHistory { padding: 0px !important; border: none; } #contentPrint .main-conten
+Found text: Notificación por Estado No. 041 de 20 de abril de 2026 | Parent Tag: h2 | Class: 
+  Parent full text: Notificación por Estado No. 041 de 20 de abril de 2026
+Found text: Estado No. | Parent Tag: b | Class: 
+  Parent full text: Estado No.
+Found text: Fecha de publicación | Parent Tag: b | Class: 
+  Parent full text: Fecha de publicación
+Found text: Fecha de Estado Electrónico | Parent Tag: b | Class: 
+  Parent full text: Fecha de Estado Electrónico
+Found text: Resumen de la publicación | Parent Tag: h4 | Class: 
+  Parent full text: Resumen de la publicación
+Found text: ESTADO 041 DEL 20 DE ABRIL 2026 | Parent Tag: a | Class: 
+  Parent full text: ESTADO 041 DEL 20 DE ABRIL 2026
+Found text: Documentos de la publicación | Parent Tag: h4 | Class: 
+  Parent full text: Documentos de la publicación
+Found text: Búsqueda de documentos | Parent Tag: h6 | Class: ['txtBusqueda', 'fw-bold']
+  Parent full text: Búsqueda de documentos
+Found text: Nombre del Documento | Parent Tag: th | Class: ['col-9']
+  Parent full text: Nombre del Documento
+Found text: Fecha Incorporación | Parent Tag: th | Class: ['col-3']
+  Parent full text: Fecha Incorporación
+Found text: Estado 041-26.pdf | Parent Tag: a | Class: 
+  Parent full text: Estado 041-26.pdf
+Found text: Consejo de Estado: | Parent Tag: strong | Class: 
+  Parent full text: Consejo de Estado:
+
+=== All links in the page ===
+Text: 'Saltar al contenido' | Href: #main-content
+Text: '' | Href: https://www.ramajudicial.gov.co
+Text: 'ENEnglish' | Href: #
+Text: 'ESSpanish' | Href: #
+Text: '' | Href: https://www.ramajudicial.gov.co/web/consejo-superior-de-la-judicatura
+Text: '' | Href: https://www.cortesuprema.gov.co/
+Text: '' | Href: https://www.corteconstitucional.gov.co/
+Text: '' | Href: https://www.consejodeestado.gov.co/
+Text: '' | Href: https://cndj.gov.co/
+Text: 'Acceder' | Href: https://publicacionesprocesales.ramajudicial.gov.co/c/portal/login?p_l_id=139606187
+Text: 'Inicio' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/inicio
+Text: 'Avisos vacantes temporales' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/avisos-vacantes-temporales
+Text: 'Otras consultas' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/otras-consultas
+Text: 'Consulta histórica' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/consulta-historica
+Text: 'Novedades' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/novedades
+Text: 'Consulta de procesos' | Href: https://consultaprocesos.ramajudicial.gov.co/Procesos/Index
+Text: 'Centro de Relevo' | Href: https://centroderelevo.gov.co/632/w3-channel.html
+Text: 'VerVideo' | Href: https://publicacionesprocesales.ramajudicial.gov.co/web/publicaciones-procesales/como-consultar-publicaciones-procesales
+Text: 'VerInstructivo' | Href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/infografia+publicaciones+procesales+%281%29+%281%29+%281%29+%281%29.pdf/cea8a8a2-caca-a83f-5ef0-c92cc9e49b4b?t=1764256990760
+Text: 'VerABC' | Href: https://publicacionesprocesales.ramajudicial.gov.co/documents/20135/35673230/UTDI_Portales_ABC_Ciudadano_v20dic24.pdf/e52ad11e-9703-232f-744e-be348c3e687c?t=1734963488857
+Text: 'ESTADO 041 DEL 20 DE ABRIL 2026' | Href: /documents/6098902/214936744/Estado+041-26.pdf/ae48f1df-c5ee-5569-afb5-fc91482dbaed?t=1776463197133
+Text: 'Estado 041-26.pdf' | Href: /c/document_library/get_file?uuid=ae48f1df-c5ee-5569-afb5-fc91482dbaed&groupId=6098902
+Text: '2016-00301AutoTrámite17abril26.pdf' | Href: /c/document_library/get_file?uuid=fc02656f-e5fa-5dec-1735-6431445b7171&groupId=6098902
+Text: '2022-00286Auto-DesignaCuradorDemandados17abril2026.pdf' | Href: /c/document_library/get_file?uuid=5a56c73f-d7e5-2437-5548-a59ce464a298&groupId=6098902
+Text: '2022-00329Auto-DesignaCuradorDemandados17abril2026.pdf' | Href: /c/document_library/get_file?uuid=8ed5241b-b1fd-18c4-c1eb-23146f70523a&groupId=6098902
+Text: '2023-00426-99AutoAdmiteLiquidatorio17abril2026.pdf' | Href: /c/document_library/get_file?uuid=8df248ca-e73f-02a8-d460-48cc81fef3ff&groupId=6098902
+Text: '2024-148-99 Sentencia 17abr26.pdf' | Href: /c/document_library/get_file?uuid=a7c93a18-f993-2807-bdeb-5190d6cf8753&groupId=6098902
+Text: '2025-00021AutoResuelvePeticion17abril26.pdf' | Href: /c/document_library/get_file?uuid=729a66c4-66bc-9025-2da0-b64e2e4ef818&groupId=6098902
+Text: '2025-00297 Sentencia 17abr26.pdf' | Href: /c/document_library/get_file?uuid=3bb2f543-3ff0-f291-0a9f-16a3372f990d&groupId=6098902
+Text: '2025-00432AutoConducta17abril2026.pdf' | Href: /c/document_library/get_file?uuid=276dee95-5dc2-d602-8455-b552847e8686&groupId=6098902
+Text: '2025-00432AutoDecretaSecuestroInmueble17abril2026.pdf' | Href: /c/document_library/get_file?uuid=7a5a3d05-b207-0192-5f10-51fba770bbb6&groupId=6098902
+Text: '2025-00436AutoNotificCondConcl 17 abril 2026.pdf' | Href: /c/document_library/get_file?uuid=a9cbede7-44d3-2813-1135-12d3334558cc&groupId=6098902
+Text: '2026-00012Auto-DesignaCuradorDemandados17abril2026.pdf' | Href: /c/document_library/get_file?uuid=969a6657-3b18-84a6-dd9b-ea479cf0680d&groupId=6098902
+Text: 'Volver al resultado de la consulta' | Href: javascript:window.history.back()
+Text: 'Realizar una nueva consulta' | Href: /
+Text: '' | Href: https://www.facebook.com/ConsejoSuperiorJudicatura
+Text: '' | Href: https://www.youtube.com/channel/UCBHrdbfpLE2lNsu4CTpDanA
+Text: '' | Href: http://www.twitter.com/judicaturacsj
+Text: '' | Href: https://www.instagram.com/consejosuperiorjudicatura/
+Text: 'Directorio Nacional' | Href: https://directoriojudicial.ramajudicial.gov.co/Sierju-Web/app/consultaExternaDespachos-flow?execution=e1s1
+Text: '(Servidores Judiciales)' | Href: https://outlook.cloud.microsoft/mail/
+Text: 'info@cendoj.ramajudicial.gov.co' | Href: mailto:info@cendoj.ramajudicial.gov.co
+Text: 'Directorio de Correos Electrónicos Institucionales' | Href: https://www.ramajudicial.gov.co/directorio-cuentas-de-correo-electronico
+Text: 'Cuentas de correo para Notificaciones Judiciales' | Href: https://www.ramajudicial.gov.co/web/informacion/cuentas-de-correo-para-notificaciones
+Text: 'Mapa del sitio' | Href: https://www.ramajudicial.gov.co/web/guest/mapa-del-sitio
+Text: 'Políticas de privacidad y condiciones de uso' | Href: https://www.ramajudicial.gov.co/portal/politicas-de-privacidad-y-condiciones-de-uso
+Text: 'Sitio de atención al usuario' | Href: https://www.ramajudicial.gov.co/web/guest/portal/atencion-al-usuario
+Text: 'Transparencia y Acceso a la información' | Href: https://www.ramajudicial.gov.co/transparencia-y-acceso-a-la-informacion-publica

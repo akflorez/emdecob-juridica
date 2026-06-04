@@ -76,6 +76,30 @@ export function login(username: string, password: string) {
   );
 }
 
+export function registerCompany(data: any) {
+  return apiFetch<{ ok: boolean; message: string }>(
+    "/auth/register-company",
+    { method: "POST", body: JSON.stringify(data) },
+    false
+  );
+}
+
+export function forgotPassword(email: string) {
+  return apiFetch<{ ok: boolean; message: string }>(
+    "/auth/forgot-password",
+    { method: "POST", body: JSON.stringify({ email }) },
+    false
+  );
+}
+
+export function resetPassword(data: any) {
+  return apiFetch<{ ok: boolean; message: string }>(
+    "/auth/reset-password",
+    { method: "POST", body: JSON.stringify(data) },
+    false
+  );
+}
+
 export type User = {
   id: number;
   username: string;
@@ -153,11 +177,11 @@ export type EventOut = {
 
 export function getCaseEvents(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/by-radicado/${r}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number; warning?: string }>(`/cases/by-radicado/${r}/events`);
 }
 
 export function getCaseEventsById(id: number) {
-  return apiFetch<{ items: EventOut[]; total?: number }>(`/cases/id/${id}/events`);
+  return apiFetch<{ items: EventOut[]; total?: number; warning?: string }>(`/cases/id/${id}/events`);
 }
 
 /** ---------------------------
@@ -588,6 +612,40 @@ export function getNotificationLogs(page: number = 1, pageSize: number = 20) {
   return apiFetch<NotificationLogsResponse>(
     `/config/notifications/logs?page=${page}&page_size=${pageSize}`
   );
+}
+
+/** ---------------------------
+ * BILLING & SUPERADMIN
+ * -------------------------- */
+export type BillingTier = {
+  id?: number;
+  min_cases: number;
+  max_cases: number | null;
+  price: number;
+};
+
+export type BillingSimulatorResult = {
+  company_id: number;
+  company_name: string;
+  users_count: number;
+  active_cases: number;
+  applicable_tier: string;
+  total_cost: number;
+};
+
+export function getBillingTiers() {
+  return apiFetch<{ ok: boolean; tiers: BillingTier[] }>("/admin/billing/tiers");
+}
+
+export function updateBillingTiers(tiers: BillingTier[]) {
+  return apiFetch<{ ok: boolean; message: string }>("/admin/billing/tiers", {
+    method: "POST",
+    body: JSON.stringify({ tiers }),
+  });
+}
+
+export function getBillingSimulator() {
+  return apiFetch<{ ok: boolean; simulator: BillingSimulatorResult[] }>("/admin/billing/simulator");
 }
 
 /** ---------------------------

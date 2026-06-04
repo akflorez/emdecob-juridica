@@ -15,19 +15,37 @@ import {
   ArrowRight,
   Mail,
   Shield,
-  Headphones
+  Headphones,
+  Building2,
+  CheckCircle2,
+  ArrowLeft
 } from 'lucide-react';
+import { registerCompany, forgotPassword } from '@/services/api';
 
 /* Use a new filename to absolutely bypass any cache */
 const LOGIN_BG = "/login-vfinal.png";
 
 export default function LoginPage() {
+  const [view, setView] = useState<'login' | 'register' | 'forgot_password'>('login');
+  
+  // Login State
   const [username, setUsername] = useState('juricob');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
+  
+  // Register State
+  const [regCompany, setRegCompany] = useState('');
+  const [regNit, setRegNit] = useState('');
+  const [regAdmin, setRegAdmin] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirm, setRegConfirm] = useState('');
+  
+  // Forgot Password State
+  const [forgotEmail, setForgotEmail] = useState('');
   
   const { login } = useAuth();
   const { toast } = useToast();
@@ -36,18 +54,56 @@ export default function LoginPage() {
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/consultar';
 
-  const handleForgotPassword = () => {
-    toast({
-      title: "Recuperación de contraseña",
-      description: "Por favor comuníquese con el administrador del sistema para recuperar su contraseña.",
-    });
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      setLoginError('Por favor ingrese su correo');
+      return;
+    }
+    setLoginError(null);
+    setIsSubmitting(true);
+    try {
+      const res = await forgotPassword(forgotEmail);
+      toast({
+        title: "Correo enviado",
+        description: res.message,
+      });
+      setView('login');
+    } catch (e: any) {
+      setLoginError(e.message || 'Error al solicitar recuperación');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRequestAccess = () => {
-    toast({
-      title: "Solicitud de acceso",
-      description: "Por favor comuníquese con el equipo de soporte para solicitar una cuenta.",
-    });
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    if (regPassword !== regConfirm) {
+      setLoginError('Las contraseñas no coinciden');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await registerCompany({
+        company_name: regCompany,
+        company_nit: regNit,
+        admin_name: regAdmin,
+        email: regEmail,
+        password: regPassword,
+        confirm_password: regConfirm
+      });
+      toast({
+        title: "Cuenta creada",
+        description: res.message,
+      });
+      setView('login');
+      setUsername(regEmail);
+    } catch (e: any) {
+      setLoginError(e.message || 'Error al registrar empresa');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,58 +194,125 @@ export default function LoginPage() {
 
         <div className="form-area">
           <div className="premium-login-card animate-in fade-in zoom-in duration-700">
-            <div className="text-center mb-12">
-              <h1 className="text-3xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-[0.2em] mb-8">Acceso seguro</h1>
+            <div className="text-center mb-12 relative">
+              {view !== 'login' && (
+                <Button variant="ghost" size="icon" onClick={() => setView('login')} className="absolute left-0 top-0 text-[#021C33]">
+                  <ArrowLeft className="h-6 w-6" />
+                </Button>
+              )}
+              <h1 className="text-3xl font-normal text-[#021C33] font-serif-juricob uppercase tracking-[0.2em] mb-8">
+                {view === 'login' ? 'Acceso seguro' : view === 'register' ? 'Crear cuenta' : 'Recuperación'}
+              </h1>
               <div className="flex items-center justify-center gap-6">
                 <div className="h-[1.5px] flex-1 bg-slate-100"></div>
                 <div className="w-20 h-20 rounded-full border border-emerald-400 flex items-center justify-center bg-white shadow-sm">
-                  <Lock className="w-8 h-8 text-[#021C33]" />
+                  {view === 'register' ? <Building2 className="w-8 h-8 text-[#021C33]" /> : <Lock className="w-8 h-8 text-[#021C33]" />}
                 </div>
                 <div className="h-[1.5px] flex-1 bg-slate-100"></div>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="space-y-3">
-                <Label htmlFor="u" className="text-sm font-bold text-slate-700 ml-1">Correo electrónico</Label>
-                <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
-                  <Input id="u" type="text" placeholder="ejemplo@correo.com" value={username} onChange={(e) => setUsername(e.target.value)} className="pl-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
+            {view === 'login' && (
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="space-y-3">
+                  <Label htmlFor="u" className="text-sm font-bold text-slate-700 ml-1">Correo electrónico</Label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+                    <Input id="u" type="text" placeholder="ejemplo@correo.com" value={username} onChange={(e) => setUsername(e.target.value)} className="pl-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                <Label htmlFor="p" className="text-sm font-bold text-slate-700 ml-1">Contraseña</Label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
-                  <Input id="p" type={showPassword ? 'text' : 'password'} placeholder="••••••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-14 pr-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
+                <div className="space-y-3">
+                  <Label htmlFor="p" className="text-sm font-bold text-slate-700 ml-1">Contraseña</Label>
+                  <div className="relative group">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+                    <Input id="p" type={showPassword ? 'text' : 'password'} placeholder="••••••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-14 pr-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center space-x-2 cursor-pointer group">
-                  <input type="checkbox" id="rem" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer" />
-                  <label htmlFor="rem" className="text-xs text-slate-500 font-medium cursor-pointer group-hover:text-emerald-600 transition-colors">Recordarme</label>
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="rem" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer" />
+                    <label htmlFor="rem" className="text-xs text-slate-500 font-medium cursor-pointer group-hover:text-emerald-600 transition-colors">Recordarme</label>
+                  </div>
+                  <button type="button" onClick={() => { setView('forgot_password'); setLoginError(null); }} className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
                 </div>
-                <button type="button" onClick={handleForgotPassword} className="text-xs font-bold text-emerald-700 hover:text-emerald-500 transition-colors">¿Olvidaste tu contraseña?</button>
-              </div>
 
-              {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
+                {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
 
-              <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-normal text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all font-serif-juricob uppercase tracking-widest">
-                {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-6 w-6" /></>}
-              </Button>
+                <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-normal text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all font-serif-juricob uppercase tracking-widest">
+                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Iniciar sesión</span><ArrowRight className="h-6 w-6" /></>}
+                </Button>
 
-              <div className="relative py-4">
-                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-                 <div className="relative flex justify-center text-xs"><span className="bg-white px-8 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
-              </div>
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                  <div className="relative flex justify-center text-xs"><span className="bg-white px-8 text-slate-400 font-bold uppercase tracking-widest">¿No tienes una cuenta?</span></div>
+                </div>
 
-              <Button type="button" onClick={handleRequestAccess} variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Solicitar acceso</Button>
-            </form>
+                <Button type="button" onClick={() => { setView('register'); setLoginError(null); }} variant="outline" className="w-full h-14 border-slate-200 text-[#021C33] font-bold rounded-2xl text-base flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-[0.98]">Crear cuenta</Button>
+              </form>
+            )}
+
+            {view === 'forgot_password' && (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-8">
+                <p className="text-center text-sm text-slate-500">Ingresa tu correo y te enviaremos instrucciones para recuperar tu acceso.</p>
+                <div className="space-y-3">
+                  <Label htmlFor="fe" className="text-sm font-bold text-slate-700 ml-1">Correo electrónico</Label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+                    <Input id="fe" type="email" placeholder="ejemplo@correo.com" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required className="pl-14 h-14 bg-slate-50/50 border-slate-100 focus:border-emerald-400 rounded-2xl text-base font-sans-juricob" />
+                  </div>
+                </div>
+
+                {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
+
+                <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-16 text-white rounded-2xl font-normal text-xl flex items-center justify-center gap-4 shadow-2xl shadow-emerald-900/10 hover:opacity-95 active:scale-[0.98] transition-all font-serif-juricob uppercase tracking-widest">
+                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : <><span>Enviar Enlace</span><ArrowRight className="h-6 w-6" /></>}
+                </Button>
+              </form>
+            )}
+
+            {view === 'register' && (
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">Empresa</Label>
+                    <Input placeholder="Nombre Empresa" required value={regCompany} onChange={(e) => setRegCompany(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">NIT (Opcional)</Label>
+                    <Input placeholder="123456" value={regNit} onChange={(e) => setRegNit(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 ml-1">Administrador</Label>
+                  <Input placeholder="Nombre completo" required value={regAdmin} onChange={(e) => setRegAdmin(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 ml-1">Correo electrónico</Label>
+                  <Input type="email" placeholder="ejemplo@correo.com" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">Contraseña</Label>
+                    <Input type="password" required value={regPassword} onChange={(e) => setRegPassword(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">Confirmar</Label>
+                    <Input type="password" required value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} className="h-12 bg-slate-50/50 rounded-xl" />
+                  </div>
+                </div>
+
+                {loginError && <p className="text-red-500 text-[11px] text-center font-bold bg-red-50 py-2 rounded-lg">{loginError}</p>}
+
+                <Button type="submit" disabled={isSubmitting} className="btn-target-grad w-full h-14 mt-4 text-white rounded-2xl font-normal text-lg flex items-center justify-center gap-4 shadow-xl hover:opacity-95 active:scale-[0.98] transition-all uppercase tracking-widest">
+                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'Registrar Empresa'}
+                </Button>
+              </form>
+            )}
           </div>
 
           {/* Footer Info - Centered with the card and larger */}
