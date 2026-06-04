@@ -2973,6 +2973,32 @@ def change_password(
     return {"ok": True, "message": "Contraseña actualizada correctamente"}
 
 
+@app.get("/debug-db")
+def debug_db(db: Session = Depends(get_db)):
+    try:
+        from backend.db import DATABASE_URL
+        from sqlalchemy import text
+        res = db.execute(text("SELECT current_database(), current_user, version()")).fetchone()
+        
+        col_res = db.execute(text("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'users';
+        """)).fetchall()
+        columns = [row[0] for row in col_res]
+        
+        return {
+            "DATABASE_URL": DATABASE_URL,
+            "current_database": res[0] if res else None,
+            "current_user": res[1] if res else None,
+            "version": res[2] if res else None,
+            "users_columns": columns
+        }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+
 @app.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
     is_sa = is_global_superadmin(current_user)
