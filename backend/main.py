@@ -7004,7 +7004,7 @@ class UserCreateRequest(BaseModel):
     email: Optional[str] = None
     is_admin: bool = False
 
-@app.get("/api/admin/companies")
+@app.get("/admin/companies")
 async def get_admin_companies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -7033,7 +7033,7 @@ async def get_admin_companies(
         for c in comps
     ]
 
-@app.post("/api/admin/companies")
+@app.post("/admin/companies")
 async def create_admin_company(
     data: CompanyCreateRequest,
     db: Session = Depends(get_db),
@@ -7063,7 +7063,7 @@ async def create_admin_company(
         "created_at": str(comp.created_at) if getattr(comp, 'created_at', None) else None,
     }
 
-@app.get("/api/admin/users")
+@app.get("/admin/users")
 async def get_admin_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -7074,7 +7074,7 @@ async def get_admin_users(
     users = db.query(User).order_by(User.id.desc()).all()
     return [{"id": u.id, "username": u.username, "nombre": u.nombre, "company_id": u.company_id, "is_admin": u.is_admin} for u in users]
 
-@app.post("/api/admin/users")
+@app.post("/admin/users")
 async def create_admin_user(
     data: UserCreateRequest,
     db: Session = Depends(get_db),
@@ -7106,7 +7106,7 @@ class CompanySuspendRequest(BaseModel):
 class CompanyReactivateRequest(BaseModel):
     notes: Optional[str] = None
 
-@app.post("/api/admin/companies/{company_id}/suspend")
+@app.post("/admin/companies/{company_id}/suspend")
 async def suspend_company(
     company_id: int,
     data: CompanySuspendRequest,
@@ -7132,7 +7132,7 @@ async def suspend_company(
     db.refresh(comp)
     return {"ok": True, "message": "Empresa suspendida exitosamente."}
 
-@app.post("/api/admin/companies/{company_id}/reactivate")
+@app.post("/admin/companies/{company_id}/reactivate")
 async def reactivate_company(
     company_id: int,
     data: CompanyReactivateRequest,
@@ -7158,7 +7158,7 @@ async def reactivate_company(
     db.refresh(comp)
     return {"ok": True, "message": "Empresa reactivada exitosamente."}
 
-@app.post("/api/admin/companies/{company_id}/mark-overdue")
+@app.post("/admin/companies/{company_id}/mark-overdue")
 async def mark_overdue_company(
     company_id: int,
     db: Session = Depends(get_db),
@@ -7180,7 +7180,7 @@ async def mark_overdue_company(
 # MODULO SUPERADMIN: SIMULADOR DE FACTURACION
 # =========================
 
-@app.get("/api/admin/billing/tiers")
+@app.get("/admin/billing/tiers")
 async def get_billing_tiers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -7194,7 +7194,7 @@ async def get_billing_tiers(
         for t in tiers
     ]}
 
-@app.post("/api/admin/billing/tiers")
+@app.post("/admin/billing/tiers")
 async def update_billing_tiers(
     data: BillingTierUpdateList,
     db: Session = Depends(get_db),
@@ -7216,7 +7216,7 @@ async def update_billing_tiers(
     
     return {"ok": True, "message": "Rangos de facturación actualizados."}
 
-@app.get("/api/admin/billing/simulator")
+@app.get("/admin/billing/simulator")
 async def get_billing_simulator(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -7253,7 +7253,7 @@ async def get_billing_simulator(
         
     return {"ok": True, "simulator": results}
 
-@app.get("/api/v1/system/health")
+@app.get("/v1/system/health")
 async def system_health_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
