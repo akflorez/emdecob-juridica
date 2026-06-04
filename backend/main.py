@@ -1497,9 +1497,13 @@ async def lifespan(app: FastAPI):
             res = conn.execute(text("SELECT id FROM companies WHERE upper(nombre) = 'CODE' OR upper(nombre) = 'EMDECOB' ORDER BY id LIMIT 1")).fetchone()
             code_id = res[0] if res else 1
             
-            # Asegurar Superadmin
-            conn.execute(text(f"UPDATE users SET company_id = {code_id} WHERE company_id IS NULL AND username != 'superadmin'"))
-            conn.execute(text("UPDATE users SET company_id = NULL WHERE username = 'superadmin'"))
+            # Asegurar Superadmin: el superadmin es is_admin=True Y company_id=NULL
+            # Primero: asignar company_id a usuarios sin empresa que NO son superadmin
+            # (is_admin=True con company_id=NULL los protegemos)
+            conn.execute(text(f"UPDATE users SET company_id = {code_id} WHERE company_id IS NULL AND is_admin = FALSE"))
+            # Segundo: asegurar que is_admin=TRUE siempre tenga company_id=NULL
+            # (el superadmin NO pertenece a ninguna empresa)
+            conn.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = TRUE"))
             
             # Limpiar dato de prueba
             conn.execute(text("DELETE FROM case_events WHERE title LIKE '%Auto de prueba%'"))
@@ -1841,9 +1845,14 @@ def get_current_user(
         raise HTTPException(status_code=400, detail=f"AUTH ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
 def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
-    if not current_user.is_admin and current_user.company_id is not None:
+    # Superadmin = is_admin=True Y company_id=NULL
+    if not current_user.is_admin or current_user.company_id is not None:
         raise HTTPException(status_code=403, detail="Acceso denegado. Requiere privilegios de SuperAdmin.")
     return current_user
+
+def is_superadmin(user: User) -> bool:
+    """Helper: True si el usuario es superadmin global (is_admin=True y sin empresa)"""
+    return bool(user.is_admin and user.company_id is None)
 
 def _ensure_default_user():
     db = SessionLocal()
@@ -7009,7 +7018,7 @@ async def get_admin_companies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     comps = db.query(Company).order_by(Company.id.desc()).all()
@@ -7039,7 +7048,7 @@ async def create_admin_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     comp = Company(nombre=data.nombre, nit=data.nit, limite_usuarios=data.limite_usuarios, estado='activo')
@@ -7068,7 +7077,7 @@ async def get_admin_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     users = db.query(User).order_by(User.id.desc()).all()
@@ -7080,7 +7089,7 @@ async def create_admin_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     from passlib.context import CryptContext
@@ -7113,7 +7122,7 @@ async def suspend_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado.")
     
     comp = db.query(Company).filter(Company.id == company_id).first()
@@ -7139,7 +7148,7 @@ async def reactivate_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado.")
     
     comp = db.query(Company).filter(Company.id == company_id).first()
@@ -7164,7 +7173,7 @@ async def mark_overdue_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado.")
     
     comp = db.query(Company).filter(Company.id == company_id).first()
@@ -7185,7 +7194,7 @@ async def get_billing_tiers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     tiers = db.query(BillingTier).order_by(BillingTier.min_cases).all()
@@ -7200,7 +7209,7 @@ async def update_billing_tiers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
     
     # Delete all and recreate
@@ -7221,7 +7230,7 @@ async def get_billing_simulator(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.company_id is not None:
+    if not is_superadmin(current_user):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo para Superadmin.")
         
     companies = db.query(Company).filter(Company.estado.notin_(['suspendida_pago', 'inactiva'])).all()
