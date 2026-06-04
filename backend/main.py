@@ -5002,7 +5002,10 @@ async def get_case_publications(
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
         
-    pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id).order_by(desc(CasePublication.fecha_publicacion)).all()
+    q_pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id)
+    if not is_superadmin(current_user):
+        q_pubs = q_pubs.filter(CasePublication.estado_validacion == "validado")
+    pubs = q_pubs.order_by(desc(CasePublication.fecha_publicacion)).all()
     
     # Auto-encolar búsquedas si faltan (liviano, sin scraping web)
     from backend.service.publicaciones import auto_queue_publicaciones

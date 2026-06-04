@@ -255,8 +255,27 @@ def split_document_into_lines(text: str) -> List[str]:
     return lines
 
 def build_context_window(text: str, match_position: int, size: int = 1200) -> str:
-    """Extrae un bloque de texto alrededor de una posición, asegurando capturar contexto cercano."""
+    """Extrae un bloque de texto alrededor de una posición, prefiriendo líneas completas."""
     if not text: return ""
+    
+    # Intentar extracción basada en líneas si hay suficientes saltos de línea
+    if text.count('\n') > 5:
+        lines = text.split('\n')
+        
+        # Encontrar en qué línea cayó el match_position
+        char_count = 0
+        match_line_idx = 0
+        for i, line in enumerate(lines):
+            char_count += len(line) + 1  # +1 for \n
+            if char_count > match_position:
+                match_line_idx = i
+                break
+                
+        start_line = max(0, match_line_idx - 5)
+        end_line = min(len(lines), match_line_idx + 6)
+        return '\n'.join(lines[start_line:end_line])
+        
+    # Fallback a ventana de caracteres si no hay buenos saltos de línea
     start_pos = max(0, match_position - size // 2)
     end_pos = min(len(text), match_position + size // 2)
     return text[start_pos:end_pos]
@@ -355,7 +374,7 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
     # Recorrer todas las posibles apariciones del número interno como anclas
     for iv in internal_variants:
         for match in re.finditer(re.escape(iv), text):
-            # Extraer bloque de contexto (aprox 1200 caracteres alrededor del hit)
+            # Extraer bloque de contexto basado en líneas (±5 líneas)
             block = build_context_window(text, match.start(), 1200)
             block_norm = normalize_text(block).lower()
             
@@ -370,32 +389,34 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
             estado = "descartado"
             m_type = "ninguno"
             
-            if has_despacho and has_demandante and has_demandado:
-                score = 92
-                estado = "validado"
-                m_type = "despacho_partes_interno"
-                motivo = f"Número interno ({iv}) junto con despacho y ambas partes"
-            elif has_despacho:
-                score = 90
-                estado = "validado"
-                m_type = "despacho_interno"
-                motivo = f"Despacho y número interno ({iv}) en el mismo bloque"
-            elif has_demandante and has_demandado:
-                score = 88
+            # REGLAS ESTRICTAS DE PUNTUACIÓN (>= 90 es validado)
+            if has_demandante and has_demandado:
+                score = 95
                 estado = "validado"
                 m_type = "interno_ambas_partes"
                 motivo = f"Número interno ({iv}) y ambas partes en el bloque"
-            elif (has_demandante or has_demandado) and is_filtered_source:
-                score = 78
+            elif (has_demandante or has_demandado) and has_despacho:
+                score = 92
+                estado = "validado"
+                m_type = "interno_despacho_una_parte"
+                motivo = f"Número interno ({iv}), despacho y al menos una parte en el bloque"
+            elif has_despacho and is_filtered_source:
+                # El documento viene de la búsqueda oficial del despacho, y encontramos el número interno + nombre del despacho, pero SIN partes
+                score = 80
                 estado = "requiere_revision"
-                m_type = "interno_una_parte_fuente_filtrada"
-                motivo = f"Número interno ({iv}) y una parte en el bloque (fuente oficial del despacho)"
+                m_type = "interno_despacho_sin_partes"
+                motivo = f"Número interno ({iv}) y despacho en el bloque, pero sin coincidencia de partes (posible listado múltiple)"
+            elif has_demandante or has_demandado:
+                score = 85
+                estado = "requiere_revision"
+                m_type = "interno_una_parte"
+                motivo = f"Número interno ({iv}) y una parte en el bloque (sin despacho evidente)"
             elif is_filtered_source:
-                # El documento viene de la búsqueda oficial del despacho, y encontramos el número interno pero sin partes
-                score = 65
-                estado = "requiere_revision" if score >= 70 else "descartado"
-                m_type = "interno_fuente_filtrada"
-                motivo = f"Número interno ({iv}) en fuente del despacho, pero sin partes ni despacho textual"
+                # Solo el interno en fuente oficial
+                score = 70
+                estado = "descartado"
+                m_type = "solo_interno_fuente_filtrada"
+                motivo = "Coincidencia débil o componentes dispersos"
                 
             elementos = {
                 "internal": iv,
@@ -417,7 +438,7 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                 )
 
     # Considerar casos de extracción pobre
-    if best_score < 70 and is_filtered_source:
+    if best_score < 75 and is_filtered_source:
         # Si extrajimos muy poco texto (ej. imagen escaneada no ocrizada) pero venía de fuente oficial
         if len(text.strip()) < 500:
             return MatchResult(False, "extraccion_pobre", "Extracción de texto pobre en fuente oficial. Requiere revisión visual.", 50, "requiere_revision", text.strip()[:200], {})
@@ -427,6 +448,12 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
         best_result.estado_validacion = "requiere_revision"
         best_result.is_valid = False
         best_result.reasons += " (Relegado a revisión manual por falta de bloque de evidencia de texto)"
+
+    # Regla Final: Si best score < 75, forzar descartado
+    if best_result.score < 75 and best_result.estado_validacion != "requiere_revision":
+        best_result.estado_validacion = "descartado"
+        best_result.is_valid = False
+        best_result.reasons = "Coincidencia débil o componentes dispersos"
 
     return best_result
 
