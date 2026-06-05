@@ -302,11 +302,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
           {/* Lado izquierdo: Foto de equipo */}
           <div className="lg:col-span-6 flex justify-center w-full">
-            <div className="relative max-w-[550px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
+            <div className="relative max-w-[650px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
               <img 
-                src="/juricob-team-three.png" 
+                src="/juricob-team-premium.png" 
                 alt="Equipo de EMDECOB" 
-                className="w-full h-auto object-cover"
+                className="w-full h-auto object-cover aspect-square"
               />
             </div>
           </div>
