@@ -14,7 +14,7 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 174 83% 36%;
+    --primary: 158 100% 36%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222 47% 11.2%;
@@ -26,17 +26,17 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 174 83% 36%;
+    --ring: 158 100% 36%;
     --radius: 0.75rem;
 
     --sidebar-background: 210 40% 98%;
     --sidebar-foreground: 222 47% 11.2%;
-    --sidebar-primary: 174 83% 36%;
+    --sidebar-primary: 158 100% 36%;
     --sidebar-primary-foreground: 210 40% 98%;
     --sidebar-accent: 210 40% 94%;
-    --sidebar-accent-foreground: 174 83% 36%;
+    --sidebar-accent-foreground: 158 100% 36%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 174 83% 36%;
+    --sidebar-ring: 158 100% 36%;
 
     --success: 142 70% 45%;
     --success-foreground: 210 40% 98%;
@@ -45,7 +45,7 @@
     --info: 199 89% 48%;
     --info-foreground: 210 40% 98%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(174 83% 36%), hsl(199 89% 48%));
+    --gradient-primary: linear-gradient(135deg, hsl(158 100% 36%), hsl(199 89% 48%));
   }
 
   .dark {
@@ -62,7 +62,7 @@
     --popover-foreground: 210 20% 95%;
 
     /* Primary - EMDECOB Teal/Green accent */
-    --primary: 174 83% 36%;
+    --primary: 158 100% 36%;
     --primary-foreground: 210 40% 98%;
 
     /* Secondary - Muted blue-gray */
@@ -74,7 +74,7 @@
     --muted-foreground: 215 15% 55%;
 
     /* Accent - Lighter teal */
-    --accent: 174 60% 45%;
+    --accent: 158 75% 45%;
     --accent-foreground: 210 40% 98%;
 
     /* Destructive */
@@ -84,17 +84,17 @@
     /* Borders and inputs */
     --border: 220 20% 20%;
     --input: 220 25% 18%;
-    --ring: 174 83% 36%;
+    --ring: 158 100% 36%;
 
     /* Sidebar - darker than background */
     --sidebar-background: 220 45% 5%;
     --sidebar-foreground: 210 15% 75%;
-    --sidebar-primary: 174 83% 36%;
+    --sidebar-primary: 158 100% 36%;
     --sidebar-primary-foreground: 210 40% 98%;
     --sidebar-accent: 220 30% 12%;
     --sidebar-accent-foreground: 210 20% 90%;
     --sidebar-border: 220 25% 15%;
-    --sidebar-ring: 174 83% 36%;
+    --sidebar-ring: 158 100% 36%;
 
     /* Custom EMDECOB tokens */
     --success: 142 70% 45%;
@@ -105,7 +105,7 @@
     --info-foreground: 210 40% 98%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(174 83% 36%), hsl(199 89% 48%));
+    --gradient-primary: linear-gradient(135deg, hsl(158 100% 36%), hsl(199 89% 48%));
     --gradient-card: linear-gradient(180deg, hsl(220 35% 12%), hsl(220 35% 10%));
     --gradient-sidebar: linear-gradient(180deg, hsl(220 45% 6%), hsl(220 45% 4%));
   }
@@ -147,7 +147,7 @@
   
   .card-hover:hover {
     @apply border-primary/30 shadow-lg;
-    box-shadow: 0 4px 20px -4px hsl(174 83% 36% / 0.15);
+    box-shadow: 0 4px 20px -4px hsl(158 100% 36% / 0.15);
   }
 
   /* Timeline styles */
@@ -161,7 +161,7 @@
 
   /* Glow effect for primary elements */
   .glow-primary {
-    box-shadow: 0 0 20px -5px hsl(174 83% 36% / 0.4);
+    box-shadow: 0 0 20px -5px hsl(158 100% 36% / 0.4);
   }
 
   /* Status badges */
@@ -224,10 +224,10 @@
 
   @keyframes pulseGlow {
     0%, 100% {
-      box-shadow: 0 0 10px -2px hsl(174 83% 36% / 0.3);
+      box-shadow: 0 0 10px -2px hsl(158 100% 36% / 0.3);
     }
     50% {
-      box-shadow: 0 0 20px -2px hsl(174 83% 36% / 0.5);
+      box-shadow: 0 0 20px -2px hsl(158 100% 36% / 0.5);
     }
   }
 }

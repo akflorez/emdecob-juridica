@@ -75,16 +75,18 @@ export default function RegisterPage() {
         />
         <div className="relative z-10 flex flex-col justify-center items-center w-full px-12">
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
-              <Scale className="w-9 h-9 text-primary" />
-            </div>
+            <img 
+              src="/juricob-shield.png" 
+              alt="JURICOB Logo" 
+              className="w-16 h-16 object-contain"
+            />
             <div>
-              <h1 className="text-3xl font-bold text-foreground">EMDECOB</h1>
-              <p className="text-muted-foreground text-sm">Registro de Usuarios</p>
+              <h1 className="text-3xl font-bold text-foreground leading-none">JURICOB</h1>
+              <p className="text-primary text-sm font-bold uppercase tracking-wider mt-2">Registro de Usuarios</p>
             </div>
           </div>
           <div className="text-center max-w-sm">
-            <h2 className="text-xl font-medium text-foreground mb-4">Bienvenido al sistema jurídico de EMDECOB</h2>
+            <h2 className="text-xl font-medium text-foreground mb-4">Bienvenido al sistema jurídico JURICOB</h2>
             <p className="text-muted-foreground">Cree su cuenta para comenzar a gestionar sus procesos y tareas de manera eficiente y segura.</p>
           </div>
         </div>

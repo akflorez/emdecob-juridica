@@ -126,11 +126,11 @@ export default function LandingPage() {
             <img 
               src="/juricob-shield.png" 
               alt="JURICOB Shield" 
-              className="w-10 h-10 object-contain"
+              className="w-14 h-14 object-contain"
             />
             <div className="flex flex-col justify-center">
-              <span className="font-sans font-bold text-xl tracking-widest text-white leading-none">JURICOB</span>
-              <span className="text-[8px] tracking-[0.16em] text-[#00B873] font-bold mt-1 leading-none uppercase">PORTAL JURÍDICO</span>
+              <span className="font-sans font-bold text-2xl tracking-widest text-white leading-none">JURICOB</span>
+              <span className="text-[10px] tracking-[0.18em] text-[#00B873] font-bold mt-1.5 leading-none uppercase">PORTAL JURÍDICO</span>
             </div>
           </div>
 
@@ -223,14 +223,14 @@ export default function LandingPage() {
       </header>
 
       {/* 2. HERO PRINCIPAL */}
-      <section id="inicio" className="bg-gradient-hero pt-32 pb-24 md:pt-40 md:pb-32 text-white relative overflow-hidden">
+      <section id="inicio" className="bg-gradient-hero pt-36 pb-24 md:pt-48 md:pb-36 text-white relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
         <div className="absolute top-1/4 right-0 w-96 h-96 rounded-full bg-[#00B873]/10 blur-3xl pointer-events-none"></div>
 
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
           {/* Lado izquierdo */}
-          <div className="space-y-6">
+          <div className="lg:col-span-6 space-y-6">
             <div className="text-sm font-bold text-[#00B873] tracking-widest uppercase">
               JURICOB
             </div>
@@ -284,8 +284,8 @@ export default function LandingPage() {
           </div>
 
           {/* Lado derecho: Image Mockup */}
-          <div className="flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-[530px] rounded-2xl overflow-hidden shadow-2xl transition-all duration-700 hover:scale-[1.01]">
+          <div className="lg:col-span-6 flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-[620px] rounded-2xl overflow-hidden shadow-2xl transition-all duration-700 hover:scale-[1.01]">
               <img 
                 src="/juricob-hero-mockup.png" 
                 alt="JURICOB Dashboard and Mobile View Mockup" 
@@ -301,7 +301,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           {/* Lado izquierdo: Foto de equipo */}
           <div className="flex justify-center">
-            <div className="relative max-w-[432px] overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50">
+            <div className="relative max-w-[500px] w-full overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50">
               <img 
                 src="/juricob-team-three.png" 
                 alt="Equipo de EMDECOB" 
@@ -331,7 +331,7 @@ export default function LandingPage() {
             Una plataforma diseñada para la gestión judicial moderna
           </h2>
           <p className="text-slate-600 text-lg leading-relaxed font-light max-w-3xl mx-auto">
-            JURICOB centraliza la información judicial de empresas, abogados and equipos de cartera jurídica. Permite consultar procesos de manera masiva, visualizar actuaciones en tiempo real, controlar publicaciones procesales oficiales, delegar tareas internas, monitorear vencimientos y tomar decisiones informadas con bases de datos consolidadas.
+            JURICOB centraliza la información judicial de empresas, abogados y equipos de cartera jurídica. Permite consultar procesos de manera masiva, visualizar actuaciones en tiempo real, controlar publicaciones procesales oficiales, delegar tareas internas, monitorear vencimientos y tomar decisiones informadas con bases de datos consolidadas.
           </p>
         </div>
       </section>
@@ -656,7 +656,7 @@ export default function LandingPage() {
               <img 
                 src="/juricob-contact-scale.png" 
                 alt="Balanza de la justicia" 
-                className="max-w-[324px] h-auto object-contain opacity-90"
+                className="max-w-[380px] h-auto object-contain opacity-90"
               />
             </div>
           </div>
@@ -671,7 +671,7 @@ export default function LandingPage() {
               <img 
                 src="/juricob-shield.png" 
                 alt="JURICOB Shield Logo" 
-                className="w-8 h-8 object-contain"
+                className="w-12 h-12 object-contain"
               />
               <div className="flex flex-col">
                 <span className="font-sans text-lg tracking-widest font-bold leading-none">JURICOB</span>

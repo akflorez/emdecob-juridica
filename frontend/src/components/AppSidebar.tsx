@@ -31,13 +31,15 @@ export function AppSidebar() {
       {/* Logo */}
       <div className={`border-b border-sidebar-border ${collapsed ? "p-3" : "p-6"} transition-all duration-300`}>
         <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-            <Scale className="h-6 w-6 text-primary" />
-          </div>
+          <img 
+            src="/juricob-shield.png" 
+            alt="JURICOB Logo" 
+            className="w-10 h-10 object-contain flex-shrink-0"
+          />
           {!collapsed && (
             <div>
-              <h1 className="text-lg font-bold text-foreground">EMDECOB</h1>
-              <p className="text-xs text-muted-foreground">Consultas</p>
+              <h1 className="text-lg font-bold text-foreground leading-none">JURICOB</h1>
+              <p className="text-[9px] text-primary font-bold uppercase tracking-wider mt-1.5 leading-none">Portal Jurídico</p>
             </div>
           )}
         </div>
