@@ -299,20 +299,20 @@ export default function LandingPage() {
 
       {/* 3. SECCIÓN DE CONFIANZA / EQUIPO */}
       <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           {/* Lado izquierdo: Foto de equipo */}
-          <div className="lg:col-span-6 flex justify-center w-full">
-            <div className="relative max-w-[650px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
+          <div className="lg:col-span-7 flex justify-center w-full">
+            <div className="relative max-w-[700px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
               <img 
-                src="/juricob-team-premium.png" 
+                src="/juricob-team-three.png" 
                 alt="Equipo de EMDECOB" 
-                className="w-full h-auto object-cover aspect-square"
+                className="w-full h-auto object-cover"
               />
             </div>
           </div>
 
           {/* Lado derecho: Respaldo */}
-          <div className="lg:col-span-6 space-y-6 lg:pl-4">
+          <div className="lg:col-span-5 space-y-6 lg:pl-4">
             <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Respaldo por EMDECOB</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827] leading-tight">
               Experiencia, tecnología y compromiso al servicio de la gestión judicial
