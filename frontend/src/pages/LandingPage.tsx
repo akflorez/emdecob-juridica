@@ -223,22 +223,22 @@ export default function LandingPage() {
       </header>
 
       {/* 2. HERO PRINCIPAL */}
-      <section id="inicio" className="bg-gradient-hero pt-36 pb-28 md:pt-48 md:pb-36 text-white relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-        <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-[#00B873]/10 blur-[100px] pointer-events-none"></div>
+    <section id="inicio" className="bg-gradient-hero pt-40 pb-32 md:pt-52 md:pb-40 lg:pt-56 lg:pb-44 text-white relative overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+      <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-[#00B873]/10 blur-[100px] pointer-events-none"></div>
 
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
-          {/* Lado izquierdo */}
-          <div className="lg:col-span-6 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B873]/10 border border-[#00B873]/25 text-xs font-semibold text-[#00B873] mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00B873] animate-pulse"></span>
-              Plataforma Premium de Gestión Judicial
-            </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-5xl font-bold tracking-tight leading-tight">
-              Gestión judicial inteligente en una sola plataforma
-            </h1>
-            <p className="text-slate-300 text-lg leading-relaxed max-w-xl font-light">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
+        {/* Lado izquierdo */}
+        <div className="lg:col-span-6 space-y-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B873]/10 border border-[#00B873]/25 text-xs font-semibold text-[#00B873] mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00B873] animate-pulse"></span>
+            Plataforma Premium de Gestión Judicial
+          </div>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.1]">
+            Gestión judicial inteligente en una sola plataforma
+          </h1>
+          <p className="text-slate-300 text-lg md:text-xl leading-relaxed max-w-2xl font-light">
               Consulta, monitorea y administra procesos judiciales con actuaciones, estados electrónicos, publicaciones procesales, alertas, tareas y control multi-empresa desde una solución segura en la nube.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-2">
@@ -284,68 +284,68 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Lado derecho: Image Mockup */}
-          <div className="lg:col-span-6 flex justify-center lg:justify-end w-full">
-            <div className="relative w-full max-w-[650px] rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,184,115,0.12)] border border-slate-850 transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_20px_50px_rgba(0,184,115,0.22)]">
-              <img 
-                src="/juricob-hero-mockup.png" 
-                alt="JURICOB Dashboard and Mobile View Mockup" 
-                className="w-full h-auto object-cover"
-              />
-            </div>
+        {/* Lado derecho: Image Mockup */}
+        <div className="lg:col-span-6 flex justify-center lg:justify-end w-full">
+          <div className="relative w-full max-w-[720px] rounded-3xl overflow-hidden shadow-[0_25px_60px_rgba(0,184,115,0.18)] border border-slate-800 transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_25px_60px_rgba(0,184,115,0.28)]">
+            <img 
+              src="/juricob-hero-mockup.png" 
+              alt="JURICOB Dashboard and Mobile View Mockup" 
+              className="w-full h-auto object-cover"
+            />
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      {/* 3. SECCIÓN DE CONFIANZA / EQUIPO */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
-          {/* Lado izquierdo: Foto de equipo */}
-          <div className="lg:col-span-7 flex justify-center w-full">
-            <div className="relative max-w-[700px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
-              <img 
-                src="/juricob-team-three.png" 
-                alt="Equipo de EMDECOB" 
-                className="w-full h-auto object-cover"
-              />
-            </div>
-          </div>
-
-          {/* Lado derecho: Respaldo */}
-          <div className="lg:col-span-5 space-y-6 lg:pl-4">
-            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Respaldo por EMDECOB</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827] leading-tight">
-              Experiencia, tecnología y compromiso al servicio de la gestión judicial
-            </h2>
-            <p className="text-slate-600 leading-relaxed font-light text-lg">
-              JURICOB nace como una solución desarrollada por <strong>EMDECOB</strong> para optimizar la consulta, vigilancia y administración de procesos judiciales, integrando tecnología, trazabilidad y gestión especializada.
-            </p>
+    {/* 3. SECCIÓN DE CONFIANZA / EQUIPO */}
+    <section className="py-32 md:py-40 bg-white">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-center">
+        {/* Lado izquierdo: Foto de equipo */}
+        <div className="lg:col-span-7 flex justify-center w-full">
+          <div className="relative max-w-[850px] w-full overflow-hidden rounded-3xl shadow-[0_20px_45px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
+            <img 
+              src="/juricob-team-three.png" 
+              alt="Equipo de EMDECOB" 
+              className="w-full h-auto object-cover"
+            />
           </div>
         </div>
-      </section>
 
-      {/* 4. ¿QUÉ ES JURICOB? */}
-      <section id="plataforma" className="py-20 bg-slate-50">
-        <div className="max-w-5xl mx-auto px-6 text-center space-y-6">
-          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">¿Qué es JURICOB?</div>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827] max-w-2xl mx-auto">
-            Una plataforma diseñada para la gestión judicial moderna
+        {/* Lado derecho: Respaldo */}
+        <div className="lg:col-span-5 space-y-8 lg:pl-4">
+          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Respaldo por EMDECOB</div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#031827] leading-tight">
+            Experiencia, tecnología y compromiso al servicio de la gestión judicial
           </h2>
-          <p className="text-slate-600 text-lg leading-relaxed font-light max-w-3xl mx-auto">
+          <p className="text-slate-600 leading-relaxed font-light text-lg md:text-xl">
+            JURICOB nace como una solución desarrollada por <strong>EMDECOB</strong> para optimizar la consulta, vigilancia y administración de procesos judiciales, integrando tecnología, trazabilidad y gestión especializada.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    {/* 4. ¿QUÉ ES JURICOB? */}
+    <section id="plataforma" className="py-32 md:py-40 bg-slate-50">
+      <div className="max-w-6xl mx-auto px-6 text-center space-y-8">
+        <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">¿Qué es JURICOB?</div>
+        <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#031827] max-w-3xl mx-auto">
+          Una plataforma diseñada para la gestión judicial moderna
+        </h2>
+        <p className="text-slate-600 text-lg md:text-xl leading-relaxed font-light max-w-4xl mx-auto">
             JURICOB centraliza la información judicial de empresas, abogados y equipos de cartera jurídica. Permite consultar procesos de manera masiva, visualizar actuaciones en tiempo real, controlar publicaciones procesales oficiales, delegar tareas internas, monitorear vencimientos y tomar decisiones informadas con bases de datos consolidadas.
           </p>
         </div>
       </section>
 
-      {/* 5. FUNCIONALIDADES PRINCIPALES */}
-      <section id="funcionalidades" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-16">
-          <div className="text-center space-y-4">
-            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Funcionalidades Principales</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              Todo lo que tu equipo jurídico necesita en un solo lugar
-            </h2>
-          </div>
+    {/* 5. FUNCIONALIDADES PRINCIPALES */}
+    <section id="funcionalidades" className="py-32 md:py-40 bg-white">
+      <div className="max-w-7xl mx-auto px-6 space-y-20">
+        <div className="text-center space-y-6">
+          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Funcionalidades Principales</div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#031827]">
+            Todo lo que tu equipo jurídico necesita en un solo lugar
+          </h2>
+        </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {[
@@ -402,12 +402,12 @@ export default function LandingPage() {
             ].map((card, idx) => {
               const Icon = card.icon;
               return (
-                <div key={idx} className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#00B873]/30 hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center group cursor-default">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-all duration-300 group-hover:scale-105">
-                    <Icon className="w-6 h-6" />
+                <div key={idx} className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#00B873]/30 hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center group cursor-default">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mb-6 group-hover:bg-[#00B873] group-hover:text-white transition-all duration-300 group-hover:scale-105">
+                    <Icon className="w-7 h-7" />
                   </div>
-                  <h3 className="text-sm font-bold text-[#031827] mb-2">{card.t}</h3>
-                  <p className="text-slate-500 text-xs font-light leading-normal">{card.d}</p>
+                  <h3 className="text-base font-bold text-[#031827] mb-3">{card.t}</h3>
+                  <p className="text-slate-500 text-sm font-light leading-relaxed">{card.d}</p>
                 </div>
               );
             })}
@@ -415,15 +415,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6. BENEFICIOS */}
-      <section id="beneficios" className="py-24 bg-[#031827] text-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-16">
-          <div className="text-center space-y-4">
-            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Beneficios</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              Más control, menos riesgo, mejores resultados
-            </h2>
-          </div>
+    {/* 6. BENEFICIOS */}
+    <section id="beneficios" className="py-32 md:py-40 bg-[#031827] text-white">
+      <div className="max-w-7xl mx-auto px-6 space-y-20">
+        <div className="text-center space-y-6">
+          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Beneficios</div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+            Más control, menos riesgo, mejores resultados
+          </h2>
+        </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-6 text-center">
             {[
@@ -450,15 +450,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 7. PLANES */}
-      <section id="planes" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-16">
-          <div className="text-center space-y-4">
-            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Planes flexibles para cada necesidad</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              Elige el plan que mejor se adapta a tu empresa
-            </h2>
-          </div>
+    {/* 7. PLANES */}
+    <section id="planes" className="py-32 md:py-40 bg-white">
+      <div className="max-w-7xl mx-auto px-6 space-y-20">
+        <div className="text-center space-y-6">
+          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Planes flexibles para cada necesidad</div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#031827]">
+            Elige el plan que mejor se adapta a tu empresa
+          </h2>
+        </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
             {/* Plan Básico */}
@@ -514,14 +514,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 8. CONTACTO */}
-      <section id="contacto" className="py-20 bg-slate-50 border-t border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          {/* Lado izquierdo: Formulario */}
-          <div className="lg:col-span-6 space-y-6">
-            <h2 className="text-3xl font-bold tracking-tight text-[#031827]">
-              ¿Listo para transformar tu gestión judicial?
-            </h2>
+    {/* 8. CONTACTO */}
+    <section id="contacto" className="py-32 md:py-40 bg-slate-50 border-t border-slate-100">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+        {/* Lado izquierdo: Formulario */}
+        <div className="lg:col-span-6 space-y-8">
+          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#031827] leading-tight">
+            ¿Listo para transformar tu gestión judicial?
+          </h2>
             <form onSubmit={handleContactSubmit} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -628,14 +628,14 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Background Image of Scale */}
-            <div className="w-full h-auto mt-6 flex justify-end">
-              <img 
-                src="/juricob-contact-scale.png" 
-                alt="Balanza de la justicia" 
-                className="max-w-[380px] h-auto object-contain opacity-90"
-              />
-            </div>
+          {/* Background Image of Scale */}
+          <div className="w-full h-auto mt-6 flex justify-end">
+            <img 
+              src="/juricob-contact-scale.png" 
+              alt="Balanza de la justicia" 
+              className="max-w-[460px] w-full h-auto object-contain opacity-95"
+            />
+          </div>
           </div>
         </div>
       </section>
