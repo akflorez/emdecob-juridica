@@ -56,7 +56,7 @@ export default function LandingPage() {
         const el = document.getElementById(section);
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top <= 180 && rect.bottom >= 180) {
+          if (rect.top <= 200 && rect.bottom >= 200) {
             setActiveSection(section);
             break;
           }
@@ -117,7 +117,7 @@ export default function LandingPage() {
       {/* 1. HEADER / NAVBAR */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled 
-          ? 'bg-[#031827]/95 backdrop-blur-md py-3 shadow-lg border-b border-[#082A3A]' 
+          ? 'bg-[#031827]/90 backdrop-blur-md py-3 shadow-lg border-b border-white/5' 
           : 'bg-transparent py-5'
       }`}>
         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
@@ -126,11 +126,11 @@ export default function LandingPage() {
             <img 
               src="/juricob-shield.png" 
               alt="JURICOB Shield" 
-              className="w-14 h-14 object-contain"
+              className="w-14 h-14 object-contain transition-transform duration-300 hover:scale-105"
             />
             <div className="flex flex-col justify-center">
               <span className="font-sans font-bold text-2xl tracking-widest text-white leading-none">JURICOB</span>
-              <span className="text-[10px] tracking-[0.18em] text-[#00B873] font-bold mt-1.5 leading-none uppercase">PORTAL JURÍDICO</span>
+              <span className="text-[10px] tracking-[0.2em] text-[#00B873] font-bold mt-1.5 leading-none uppercase">PORTAL JURÍDICO</span>
             </div>
           </div>
 
@@ -163,13 +163,13 @@ export default function LandingPage() {
           <div className="hidden md:flex items-center gap-4">
             <Button 
               onClick={() => navigate('/login')} 
-              className="border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 bg-transparent text-sm font-semibold px-5 py-2 h-auto rounded-lg"
+              className="border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 bg-transparent text-sm font-semibold px-5 py-2 h-auto rounded-lg transition-all"
             >
               Ingresar
             </Button>
             <Button 
               onClick={() => navigate('/register-company')} 
-              className="bg-[#00B873] hover:bg-[#00A86B] text-white text-sm font-semibold px-5 py-2 h-auto rounded-lg shadow-md shadow-[#00B873]/10"
+              className="bg-[#00B873] hover:bg-[#00A86B] text-white text-sm font-semibold px-5 py-2 h-auto rounded-lg shadow-md shadow-[#00B873]/10 transition-all"
             >
               Crear cuenta
             </Button>
@@ -223,16 +223,17 @@ export default function LandingPage() {
       </header>
 
       {/* 2. HERO PRINCIPAL */}
-      <section id="inicio" className="bg-gradient-hero pt-36 pb-24 md:pt-48 md:pb-36 text-white relative overflow-hidden">
+      <section id="inicio" className="bg-gradient-hero pt-36 pb-28 md:pt-48 md:pb-36 text-white relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-        <div className="absolute top-1/4 right-0 w-96 h-96 rounded-full bg-[#00B873]/10 blur-3xl pointer-events-none"></div>
+        <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-[#00B873]/10 blur-[100px] pointer-events-none"></div>
 
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
           {/* Lado izquierdo */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="text-sm font-bold text-[#00B873] tracking-widest uppercase">
-              JURICOB
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B873]/10 border border-[#00B873]/25 text-xs font-semibold text-[#00B873] mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00B873] animate-pulse"></span>
+              Plataforma Premium de Gestión Judicial
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-5xl font-bold tracking-tight leading-tight">
               Gestión judicial inteligente en una sola plataforma
@@ -243,7 +244,7 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 pt-2">
               <Button 
                 onClick={() => navigate('/login')} 
-                className="bg-[#00B873] hover:bg-[#00A86B] text-white px-6 py-4 rounded-lg text-sm font-semibold shadow-lg shadow-[#00B873]/10 flex items-center justify-center gap-2 group transition-all h-auto"
+                className="bg-[#00B873] hover:bg-[#00A86B] text-white px-6 py-4 rounded-lg text-sm font-semibold shadow-lg shadow-[#00B873]/15 flex items-center justify-center gap-2 group transition-all h-auto"
               >
                 Ingresar a la plataforma
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -272,8 +273,8 @@ export default function LandingPage() {
               ].map((item, idx) => {
                 const Icon = item.icon;
                 return (
-                  <div key={idx} className="flex flex-col gap-2 items-center sm:items-start text-center sm:text-left">
-                    <div className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-[#00B873] bg-[#061B2E]/50">
+                  <div key={idx} className="flex flex-col gap-2 items-center sm:items-start text-center sm:text-left group">
+                    <div className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-[#00B873] bg-[#061B2E]/50 group-hover:border-[#00B873]/50 transition-colors">
                       <Icon className="w-4 h-4" />
                     </div>
                     <span className="text-xs font-semibold text-slate-300 max-w-[120px]">{item.t}</span>
@@ -284,8 +285,8 @@ export default function LandingPage() {
           </div>
 
           {/* Lado derecho: Image Mockup */}
-          <div className="lg:col-span-6 flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-[620px] rounded-2xl overflow-hidden shadow-2xl transition-all duration-700 hover:scale-[1.01]">
+          <div className="lg:col-span-6 flex justify-center lg:justify-end w-full">
+            <div className="relative w-full max-w-[650px] rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,184,115,0.12)] border border-slate-850 transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_20px_50px_rgba(0,184,115,0.22)]">
               <img 
                 src="/juricob-hero-mockup.png" 
                 alt="JURICOB Dashboard and Mobile View Mockup" 
@@ -297,11 +298,11 @@ export default function LandingPage() {
       </section>
 
       {/* 3. SECCIÓN DE CONFIANZA / EQUIPO */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <section className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
           {/* Lado izquierdo: Foto de equipo */}
-          <div className="flex justify-center">
-            <div className="relative max-w-[500px] w-full overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50">
+          <div className="lg:col-span-6 flex justify-center w-full">
+            <div className="relative max-w-[550px] w-full overflow-hidden rounded-3xl shadow-[0_15px_35px_rgba(0,0,0,0.12)] border border-slate-100 bg-slate-50 transition-all duration-500 hover:scale-[1.015]">
               <img 
                 src="/juricob-team-three.png" 
                 alt="Equipo de EMDECOB" 
@@ -311,12 +312,12 @@ export default function LandingPage() {
           </div>
 
           {/* Lado derecho: Respaldo */}
-          <div className="space-y-6">
+          <div className="lg:col-span-6 space-y-6 lg:pl-4">
             <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Respaldo por EMDECOB</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827] leading-tight">
               Experiencia, tecnología y compromiso al servicio de la gestión judicial
             </h2>
-            <p className="text-slate-600 leading-relaxed font-light text-base">
+            <p className="text-slate-600 leading-relaxed font-light text-lg">
               JURICOB nace como una solución desarrollada por <strong>EMDECOB</strong> para optimizar la consulta, vigilancia y administración de procesos judiciales, integrando tecnología, trazabilidad y gestión especializada.
             </p>
           </div>
@@ -337,8 +338,8 @@ export default function LandingPage() {
       </section>
 
       {/* 5. FUNCIONALIDADES PRINCIPALES */}
-      <section id="funcionalidades" className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-12">
+      <section id="funcionalidades" className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6 space-y-16">
           <div className="text-center space-y-4">
             <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Funcionalidades Principales</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
@@ -401,9 +402,9 @@ export default function LandingPage() {
             ].map((card, idx) => {
               const Icon = card.icon;
               return (
-                <div key={idx} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col items-center text-center group">
-                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center mb-4 group-hover:bg-[#00B873] group-hover:text-white transition-colors duration-300">
-                    <Icon className="w-5 h-5" />
+                <div key={idx} className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#00B873]/30 hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center group cursor-default">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-all duration-300 group-hover:scale-105">
+                    <Icon className="w-6 h-6" />
                   </div>
                   <h3 className="text-sm font-bold text-[#031827] mb-2">{card.t}</h3>
                   <p className="text-slate-500 text-xs font-light leading-normal">{card.d}</p>
@@ -415,8 +416,8 @@ export default function LandingPage() {
       </section>
 
       {/* 6. BENEFICIOS */}
-      <section id="beneficios" className="py-20 bg-[#031827] text-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-12">
+      <section id="beneficios" className="py-24 bg-[#031827] text-white">
+        <div className="max-w-7xl mx-auto px-6 space-y-16">
           <div className="text-center space-y-4">
             <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Beneficios</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
@@ -437,11 +438,11 @@ export default function LandingPage() {
             ].map((b, idx) => {
               const Icon = b.icon;
               return (
-                <div key={idx} className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-xl border border-white/10 hover:border-[#00B873]/50 transition-colors">
-                  <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-[#00B873]">
+                <div key={idx} className="flex flex-col items-center gap-3 p-5 bg-white/5 rounded-2xl border border-white/10 hover:border-[#00B873]/50 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
+                  <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-[#00B873] bg-white/5">
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-medium text-slate-200">{b.t}</span>
+                  <span className="text-xs font-semibold text-slate-200">{b.t}</span>
                 </div>
               );
             })}
@@ -450,8 +451,8 @@ export default function LandingPage() {
       </section>
 
       {/* 7. PLANES */}
-      <section id="planes" className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-6 space-y-12">
+      <section id="planes" className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6 space-y-16">
           <div className="text-center space-y-4">
             <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Planes flexibles para cada necesidad</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
@@ -461,7 +462,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
             {/* Plan Básico */}
-            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative">
+            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-slate-200 hover:-translate-y-1 transition-all duration-300 relative">
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
@@ -484,27 +485,27 @@ export default function LandingPage() {
             </div>
 
             {/* Plan Premium */}
-            <div className="p-8 bg-white border-2 border-[#00B873] rounded-3xl shadow-md flex flex-col justify-between relative">
-              <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[9px] font-bold tracking-widest px-3 py-1 uppercase rounded-bl-xl">Popular</div>
+            <div className="p-8 bg-[#061B2E] border-2 border-[#00B873] rounded-3xl shadow-[0_15px_35px_rgba(0,184,115,0.15)] flex flex-col justify-between text-white hover:-translate-y-1 transition-all duration-300 relative">
+              <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[9px] font-bold tracking-widest px-4 py-1.5 uppercase rounded-bl-2xl shadow-md">Popular</div>
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                    <Star className="w-5 h-5 fill-[#00B873]/20" />
+                  <div className="w-10 h-10 rounded-full bg-white/10 text-[#00B873] flex items-center justify-center">
+                    <Star className="w-5 h-5 fill-[#00B873]" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Plan Premium</h3>
-                    <p className="text-xs text-slate-400 font-light">Publicaciones procesales, actuaciones avanzadas, alertas, tareas y usuarios por empresa.</p>
+                    <h3 className="text-lg font-bold text-white">Plan Premium</h3>
+                    <p className="text-xs text-slate-300 font-light">Publicaciones procesales, actuaciones avanzadas, alertas, tareas y usuarios por empresa.</p>
                   </div>
                 </div>
-                <div className="h-px bg-slate-100"></div>
-                <ul className="space-y-3 text-sm text-slate-600">
+                <div className="h-px bg-slate-800"></div>
+                <ul className="space-y-3 text-sm text-slate-300">
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Estados electrónicos</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Gestión de tareas</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#00B873] hover:bg-[#00A86B] text-white py-3 h-auto font-semibold rounded-lg shadow-md shadow-[#00B873]/15">
                 Solicitar cotización
               </Button>
             </div>
