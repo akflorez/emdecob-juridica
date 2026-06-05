@@ -5,40 +5,39 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Scale, 
-  Building2, 
-  Users, 
-  CheckCircle2, 
-  FileText, 
-  Bell, 
-  Clock, 
-  DollarSign, 
-  Database, 
-  Shield, 
-  ArrowRight, 
-  Mail, 
-  Phone, 
-  Lock, 
-  Check, 
-  Sparkles,
-  HelpCircle,
-  ShieldCheck,
-  ChevronRight,
+import {
+  Search,
+  RefreshCw,
+  FileText,
+  Bell,
+  CheckSquare,
+  Building2,
+  Users,
+  Shield,
+  BarChart3,
+  Database,
+  ArrowRight,
+  Mail,
+  Phone,
+  Check,
   Menu,
   X,
-  RefreshCw
+  Globe,
+  Star,
+  ChevronRight,
+  ShieldCheck,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Scroll state for Header styling
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState('inicio');
 
-  // Contact Form State
   const [contactForm, setContactForm] = useState({
     nombre: '',
     empresa: '',
@@ -50,10 +49,18 @@ export default function LandingPage() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 50) {
-        setScrolled(true);
-      } else {
-        setScrolled(false);
+      setScrolled(window.scrollY > 50);
+      
+      const sections = ['inicio', 'plataforma', 'funcionalidades', 'beneficios', 'planes', 'contacto'];
+      for (const section of sections) {
+        const el = document.getElementById(section);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 180 && rect.bottom >= 180) {
+            setActiveSection(section);
+            break;
+          }
+        }
       }
     };
     window.addEventListener('scroll', handleScroll);
@@ -71,7 +78,6 @@ export default function LandingPage() {
       return;
     }
     setSending(true);
-    // Simulate sending email
     setTimeout(() => {
       toast({
         title: "¡Solicitud enviada!",
@@ -90,6 +96,7 @@ export default function LandingPage() {
 
   const scrollToSection = (id: string) => {
     setMobileMenuOpen(false);
+    setActiveSection(id);
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -99,61 +106,72 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen font-sans bg-[#F5F7FA] text-[#111827] overflow-x-hidden selection:bg-[#00B873] selection:text-white">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap');
-        .font-serif-juricob { font-family: 'Cinzel', serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
         .font-sans-juricob { font-family: 'Outfit', sans-serif; }
         
         .bg-gradient-hero {
           background: linear-gradient(135deg, #031827 0%, #061B2E 50%, #082A3A 100%);
-        }
-        .text-gradient-emerald {
-          background: linear-gradient(90deg, #00A86B 0%, #00B873 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .border-emerald-glow {
-          box-shadow: 0 0 15px rgba(0, 184, 115, 0.15);
         }
       `}</style>
 
       {/* 1. HEADER / NAVBAR */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled 
-          ? 'bg-[#061B2E]/95 backdrop-blur-md py-3 shadow-lg border-b border-[#082A3A]' 
+          ? 'bg-[#031827]/95 backdrop-blur-md py-3 shadow-lg border-b border-[#082A3A]' 
           : 'bg-transparent py-5'
       }`}>
         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
           {/* Logo JURICOB */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('inicio')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00A86B] to-[#00B873] flex items-center justify-center shadow-md shadow-[#00A86B]/20">
-              <Scale className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <span className="font-serif-juricob text-xl font-bold tracking-widest text-white block">JURICOB</span>
-              <span className="text-[9px] uppercase tracking-[0.25em] text-slate-400 font-bold block leading-none">by EMDECOB</span>
+            <img 
+              src="/juricob-shield.png" 
+              alt="JURICOB Shield" 
+              className="w-10 h-10 object-contain"
+            />
+            <div className="flex flex-col justify-center">
+              <span className="font-sans font-bold text-xl tracking-widest text-white leading-none">JURICOB</span>
+              <span className="text-[8px] tracking-[0.16em] text-[#00B873] font-bold mt-1 leading-none uppercase">PORTAL JURÍDICO</span>
             </div>
           </div>
 
           {/* Nav links (Desktop) */}
           <nav className="hidden md:flex items-center gap-8">
-            <button onClick={() => scrollToSection('inicio')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Inicio</button>
-            <button onClick={() => scrollToSection('plataforma')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Plataforma</button>
-            <button onClick={() => scrollToSection('funcionalidades')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Funcionalidades</button>
-            <button onClick={() => scrollToSection('beneficios')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Beneficios</button>
-            <button onClick={() => scrollToSection('planes')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Planes</button>
-            <button onClick={() => scrollToSection('contacto')} className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Contacto</button>
+            {[
+              { id: 'inicio', label: 'Inicio' },
+              { id: 'plataforma', label: 'Plataforma' },
+              { id: 'funcionalidades', label: 'Funcionalidades' },
+              { id: 'beneficios', label: 'Beneficios' },
+              { id: 'planes', label: 'Planes' },
+              { id: 'contacto', label: 'Contacto' }
+            ].map((link) => (
+              <button 
+                key={link.id} 
+                onClick={() => scrollToSection(link.id)} 
+                className={`text-sm font-semibold transition-colors relative py-1 ${
+                  activeSection === link.id ? 'text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {link.label}
+                {activeSection === link.id && (
+                  <span className="absolute -bottom-1.5 left-0 w-full h-[2px] bg-[#00B873]"></span>
+                )}
+              </button>
+            ))}
           </nav>
 
           {/* Action buttons (Desktop) */}
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-300 hover:text-white hover:bg-[#082A3A]/50 font-semibold text-sm">
+            <Button 
+              onClick={() => navigate('/login')} 
+              className="border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 bg-transparent text-sm font-semibold px-5 py-2 h-auto rounded-lg"
+            >
               Ingresar
             </Button>
-            <Button onClick={() => navigate('/register-company')} className="bg-[#00B873] hover:bg-[#00A86B] text-white font-semibold text-sm shadow-md shadow-[#00B873]/10">
+            <Button 
+              onClick={() => navigate('/register-company')} 
+              className="bg-[#00B873] hover:bg-[#00A86B] text-white text-sm font-semibold px-5 py-2 h-auto rounded-lg shadow-md shadow-[#00B873]/10"
+            >
               Crear cuenta
-            </Button>
-            <Button variant="outline" onClick={() => scrollToSection('contacto')} className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 font-semibold text-sm bg-transparent">
-              Solicitar Demo
             </Button>
           </div>
 
@@ -165,24 +183,39 @@ export default function LandingPage() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#061B2E] border-b border-[#082A3A] px-6 py-6 space-y-4 animate-in slide-in-from-top-5 duration-200">
+          <div className="md:hidden bg-[#031827] border-b border-[#082A3A] px-6 py-6 space-y-4 animate-in slide-in-from-top-5 duration-200">
             <nav className="flex flex-col gap-3">
-              <button onClick={() => scrollToSection('inicio')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Inicio</button>
-              <button onClick={() => scrollToSection('plataforma')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Plataforma</button>
-              <button onClick={() => scrollToSection('funcionalidades')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Funcionalidades</button>
-              <button onClick={() => scrollToSection('beneficios')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Beneficios</button>
-              <button onClick={() => scrollToSection('planes')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Planes</button>
-              <button onClick={() => scrollToSection('contacto')} className="text-left text-sm font-medium text-slate-300 hover:text-white py-1">Contacto</button>
+              {[
+                { id: 'inicio', label: 'Inicio' },
+                { id: 'plataforma', label: 'Plataforma' },
+                { id: 'funcionalidades', label: 'Funcionalidades' },
+                { id: 'beneficios', label: 'Beneficios' },
+                { id: 'planes', label: 'Planes' },
+                { id: 'contacto', label: 'Contacto' }
+              ].map((link) => (
+                <button 
+                  key={link.id}
+                  onClick={() => scrollToSection(link.id)} 
+                  className={`text-left text-sm font-semibold py-1 ${
+                    activeSection === link.id ? 'text-[#00B873]' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {link.label}
+                </button>
+              ))}
             </nav>
             <div className="flex flex-col gap-2 pt-4 border-t border-slate-800">
-              <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-300 justify-start px-0 hover:text-white">
+              <Button 
+                onClick={() => navigate('/login')} 
+                className="border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 bg-transparent text-sm font-semibold w-full justify-center py-2.5 h-auto rounded-lg"
+              >
                 Ingresar
               </Button>
-              <Button onClick={() => navigate('/register-company')} className="bg-[#00B873] hover:bg-[#00A86B] text-white w-full justify-center">
+              <Button 
+                onClick={() => navigate('/register-company')} 
+                className="bg-[#00B873] hover:bg-[#00A86B] text-white text-sm font-semibold w-full justify-center py-2.5 h-auto rounded-lg"
+              >
                 Crear cuenta
-              </Button>
-              <Button variant="outline" onClick={() => scrollToSection('contacto')} className="border-slate-700 text-slate-300 w-full justify-center bg-transparent">
-                Solicitar Demo
               </Button>
             </div>
           </div>
@@ -191,72 +224,73 @@ export default function LandingPage() {
 
       {/* 2. HERO PRINCIPAL */}
       <section id="inicio" className="bg-gradient-hero pt-32 pb-24 md:pt-40 md:pb-32 text-white relative overflow-hidden">
-        {/* Decorative Grid Patterns */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-[#00B873]/15 blur-3xl pointer-events-none"></div>
+        {/* Decorative elements */}
+        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+        <div className="absolute top-1/4 right-0 w-96 h-96 rounded-full bg-[#00B873]/10 blur-3xl pointer-events-none"></div>
 
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
           {/* Lado izquierdo */}
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B873]/10 border border-[#00B873]/20 text-xs font-semibold text-[#00B873]">
-              <Sparkles className="w-3.5 h-3.5" />
-              SaaS Judicial Premium para Empresas
+            <div className="text-sm font-bold text-[#00B873] tracking-widest uppercase">
+              JURICOB
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-              <span className="font-serif-juricob text-5xl sm:text-6xl lg:text-7xl block mb-2 tracking-widest text-[#00B873]">JURICOB</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-5xl font-bold tracking-tight leading-tight">
               Gestión judicial inteligente en una sola plataforma
             </h1>
             <p className="text-slate-300 text-lg leading-relaxed max-w-xl font-light">
-              Consulta, monitorea y administra procesos judiciales con actuaciones, estados electrónicos, publicaciones procesales, alertas, tareas y control de múltiples empresas desde una solución segura y moderna en la nube.
+              Consulta, monitorea y administra procesos judiciales con actuaciones, estados electrónicos, publicaciones procesales, alertas, tareas y control multi-empresa desde una solución segura en la nube.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Button onClick={() => navigate('/login')} className="bg-[#00B873] hover:bg-[#00A86B] text-white px-8 py-6 rounded-xl text-base font-semibold shadow-lg shadow-[#00B873]/20 flex items-center justify-center gap-2 group transition-all">
+            <div className="flex flex-col sm:flex-row gap-4 pt-2">
+              <Button 
+                onClick={() => navigate('/login')} 
+                className="bg-[#00B873] hover:bg-[#00A86B] text-white px-6 py-4 rounded-lg text-sm font-semibold shadow-lg shadow-[#00B873]/10 flex items-center justify-center gap-2 group transition-all h-auto"
+              >
                 Ingresar a la plataforma
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Button>
-              <Button onClick={() => navigate('/register-company')} variant="outline" className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 bg-transparent px-8 py-6 rounded-xl text-base font-semibold">
-                Crear cuenta
-              </Button>
-              <Button onClick={() => scrollToSection('contacto')} variant="ghost" className="text-slate-300 hover:text-white font-semibold text-base py-6 hover:bg-[#082A3A]/45">
+              <Button 
+                onClick={() => scrollToSection('contacto')} 
+                className="border border-slate-700 hover:border-slate-500 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
+              >
                 Solicitar demo
               </Button>
+              <Button 
+                onClick={() => navigate('/register-company')} 
+                className="border border-slate-700 hover:border-slate-500 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
+              >
+                Crear cuenta
+              </Button>
+            </div>
+
+            {/* Row of 4 Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-10 border-t border-slate-800/60 max-w-xl">
+              {[
+                { t: "Información centralizada", icon: Database },
+                { t: "Seguridad de datos", icon: Shield },
+                { t: "Acceso desde cualquier lugar", icon: Globe },
+                { t: "Alertas oportunas", icon: Bell }
+              ].map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <div key={idx} className="flex flex-col gap-2 items-center sm:items-start text-center sm:text-left">
+                    <div className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-[#00B873] bg-[#061B2E]/50">
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-300 max-w-[120px]">{item.t}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Lado derecho: Composición Visual */}
-          <div className="relative flex justify-center lg:justify-end animate-in fade-in zoom-in-95 duration-1000">
-            {/* Main Mockup container */}
-            <div className="relative w-full max-w-[500px] border border-slate-800 rounded-3xl overflow-hidden bg-[#061B2E] shadow-2xl border-emerald-glow">
-              <div className="flex items-center gap-2 bg-[#031827] px-4 py-3 border-b border-slate-800">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
-                <span className="text-[10px] text-slate-500 ml-4 font-mono">https://plataforma.juricob.com/dashboard</span>
-              </div>
+          {/* Lado derecho: Image Mockup */}
+          <div className="flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-[530px] rounded-2xl overflow-hidden shadow-2xl transition-all duration-700 hover:scale-[1.01]">
               <img 
-                src="/juricob-dashboard.png" 
-                alt="JURICOB SaaS Dashboard View" 
-                className="w-full h-auto object-cover opacity-90"
+                src="/juricob-hero-mockup.png" 
+                alt="JURICOB Dashboard and Mobile View Mockup" 
+                className="w-full h-auto object-cover"
               />
-            </div>
-
-            {/* Overlapping Floating Indicators */}
-            <div className="absolute -bottom-6 -left-6 bg-white text-slate-900 px-5 py-4 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-100 animate-bounce duration-5000">
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-xs text-slate-400 block font-bold">MONITOREO ACTIVO</span>
-                <span className="text-base font-bold text-[#031827] font-mono">100% Automatizado</span>
-              </div>
-            </div>
-
-            <div className="absolute -top-6 right-6 bg-[#031827] text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-800">
-              <div className="w-2 h-2 rounded-full bg-[#00B873] animate-pulse"></div>
-              <div>
-                <span className="text-xs text-slate-400 block">Radicados Vigilados</span>
-                <span className="text-sm font-bold text-white font-mono">2,934 Activos</span>
-              </div>
             </div>
           </div>
         </div>
@@ -265,52 +299,39 @@ export default function LandingPage() {
       {/* 3. SECCIÓN DE CONFIANZA / EQUIPO */}
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          {/* Lado izquierdo: Foto corporativa redondeada y elegante */}
+          {/* Lado izquierdo: Foto de equipo */}
           <div className="flex justify-center">
-            <div className="relative group max-w-md overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50">
+            <div className="relative max-w-[432px] overflow-hidden rounded-2xl shadow-lg border border-slate-100 bg-slate-50">
               <img 
-                src="/juricob-equipo.png" 
-                alt="Equipo Corporativo de EMDECOB" 
-                className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-102"
+                src="/juricob-team-three.png" 
+                alt="Equipo de EMDECOB" 
+                className="w-full h-auto object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
-                <p className="text-white text-xs font-semibold uppercase tracking-widest">Respaldo profesional interdisciplinario</p>
-              </div>
             </div>
           </div>
 
-          {/* Lado derecho: Mensaje de confianza */}
+          {/* Lado derecho: Respaldo */}
           <div className="space-y-6">
-            <div className="text-xs font-bold text-[#00B873] uppercase tracking-widest">Respaldo e Identidad</div>
+            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Respaldo por EMDECOB</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              Respaldado por un equipo jurídico, tecnológico y operativo
+              Experiencia, tecnología y compromiso al servicio de la gestión judicial
             </h2>
-            <p className="text-slate-600 leading-relaxed font-light">
-              JURICOB nace como una solución integral desarrollada por <strong>EMDECOB</strong> para optimizar la consulta, vigilancia y administración de procesos judiciales, integrando tecnología, trazabilidad y gestión especializada.
+            <p className="text-slate-600 leading-relaxed font-light text-base">
+              JURICOB nace como una solución desarrollada por <strong>EMDECOB</strong> para optimizar la consulta, vigilancia y administración de procesos judiciales, integrando tecnología, trazabilidad y gestión especializada.
             </p>
-            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-              <div>
-                <span className="text-3xl font-bold text-[#031827] block font-mono">EMDECOB</span>
-                <span className="text-xs text-slate-500 uppercase tracking-wider block mt-1">Casa Desarrolladora</span>
-              </div>
-              <div>
-                <span className="text-3xl font-bold text-[#00B873] block font-mono">100%</span>
-                <span className="text-xs text-slate-500 uppercase tracking-wider block mt-1">Seguro y en la nube</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* 4. QUÉ ES JURICOB */}
+      {/* 4. ¿QUÉ ES JURICOB? */}
       <section id="plataforma" className="py-20 bg-slate-50">
         <div className="max-w-5xl mx-auto px-6 text-center space-y-6">
-          <div className="text-xs font-bold text-[#00B873] uppercase tracking-widest">¿Qué es JURICOB?</div>
+          <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">¿Qué es JURICOB?</div>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827] max-w-2xl mx-auto">
             Una plataforma diseñada para la gestión judicial moderna
           </h2>
           <p className="text-slate-600 text-lg leading-relaxed font-light max-w-3xl mx-auto">
-            JURICOB centraliza la información judicial de empresas, abogados y equipos de cartera jurídica. Permite consultar procesos de manera masiva, visualizar actualizaciones en tiempo real, controlar publicaciones procesales oficiales, delegar tareas internas, monitorear vencimientos y tomar decisiones informadas con bases de datos consolidadas.
+            JURICOB centraliza la información judicial de empresas, abogados and equipos de cartera jurídica. Permite consultar procesos de manera masiva, visualizar actuaciones en tiempo real, controlar publicaciones procesales oficiales, delegar tareas internas, monitorear vencimientos y tomar decisiones informadas con bases de datos consolidadas.
           </p>
         </div>
       </section>
@@ -319,342 +340,196 @@ export default function LandingPage() {
       <section id="funcionalidades" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="text-center space-y-4">
-            <h2 className="text-3xl font-bold tracking-tight text-[#031827]">Funcionalidades Principales</h2>
-            <p className="text-slate-500 font-light max-w-xl mx-auto">
-              Todo lo necesario para el control y supervisión automatizada de causas jurídicas.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Card 1 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Scale className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Consulta de procesos judiciales</h3>
-              <p className="text-slate-500 text-sm font-light">Acceso rápido e indexado a la base de datos nacional de radicados y procesos jurídicos.</p>
-            </div>
-            {/* Card 2 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <RefreshCw className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Sincronización de actuaciones</h3>
-              <p className="text-slate-500 text-sm font-light">Descarga y actualización en tiempo real de providencias y movimientos en despachos.</p>
-            </div>
-            {/* Card 3 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <FileText className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Estados electrónicos y publicaciones</h3>
-              <p className="text-slate-500 text-sm font-light">Control y visualización de notificaciones procesales directamente asociadas al expediente.</p>
-            </div>
-            {/* Card 4 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Bell className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Alertas y vencimientos</h3>
-              <p className="text-slate-500 text-sm font-light">Notificaciones preventivas sobre fechas críticas de traslados y audiencias.</p>
-            </div>
-            {/* Card 5 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Clock className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Gestión de tareas internas</h3>
-              <p className="text-slate-500 text-sm font-light">Asignación, seguimiento y control de pendientes judiciales para abogados y auxiliares.</p>
-            </div>
-            {/* Card 6 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Building2 className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Administración de empresas</h3>
-              <p className="text-slate-500 text-sm font-light">Control independiente y aislado de los portafolios y expedientes de múltiples empresas.</p>
-            </div>
-            {/* Card 7 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Users className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Usuarios y permisos</h3>
-              <p className="text-slate-500 text-sm font-light">Roles personalizables que limitan el acceso a la información confidencial según alcances específicos.</p>
-            </div>
-            {/* Card 8 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Lock className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Panel SuperAdmin SaaS</h3>
-              <p className="text-slate-500 text-sm font-light">Administración global del sistema, suspensión, reactivación y control de inquilinos.</p>
-            </div>
-            {/* Card 9 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <DollarSign className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Facturación por radicados activos</h3>
-              <p className="text-slate-500 text-sm font-light">Simulador de tarifas integradas y control automático de consumo por rango de casos.</p>
-            </div>
-            {/* Card 10 */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:bg-[#00B873] group-hover:text-white transition-colors">
-                <Database className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-[#031827] mb-2">Auditoría y trazabilidad</h3>
-              <p className="text-slate-500 text-sm font-light">Registro detallado de acciones críticas para cumplir con las normativas corporativas.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 6. ESTADOS ELECTRÓNICOS */}
-      <section className="py-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-5 space-y-6">
-            <div className="text-xs font-bold text-[#00B873] uppercase tracking-widest">Publicaciones Procesales</div>
+            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Funcionalidades Principales</div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              Estados electrónicos correctos al ingresar al radicado
+              Todo lo que tu equipo jurídico necesita en un solo lugar
             </h2>
-            <p className="text-slate-600 leading-relaxed font-light">
-              JURICOB identifica y muestra las publicaciones procesales oficiales asociadas al expediente judicial, validando documentos por radicado, despacho, actuación y partes involucradas para reducir falsos positivos y centralizar la información legal en el detalle del caso.
-            </p>
-            
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              {[
-                "Publicaciones asociadas al radicado",
-                "Autos y providencias relacionados",
-                "Validación automática por evidencia",
-                "Conservación de historial",
-                "Consulta centralizada",
-                "Menos revisión manual"
-              ].map((bullet, index) => (
-                <li key={index} className="flex items-center gap-2 text-sm text-slate-700">
-                  <CheckCircle2 className="w-4 h-4 text-[#00B873] flex-shrink-0" />
-                  <span>{bullet}</span>
-                </li>
-              ))}
-            </ul>
           </div>
 
-          <div className="lg:col-span-7 flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-lg bg-[#031827] rounded-2xl shadow-xl p-6 border border-slate-800 text-white font-mono text-xs">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-                <span className="text-[#00B873] font-bold">EVIDENCIA DE ESTADO ELECTRÓNICO</span>
-                <span className="text-slate-500">ID #29342</span>
-              </div>
-              <div className="space-y-3 font-mono text-slate-300 leading-relaxed">
-                <div><span className="text-slate-500 font-bold">Radicado:</span> 11001400300720230045200</div>
-                <div><span className="text-slate-500 font-bold">Despacho:</span> Juzgado 03 Civil Municipal de Bogotá</div>
-                <div><span className="text-slate-500 font-bold">Fecha:</span> 2026-06-04</div>
-                <div><span className="text-slate-500 font-bold">Actuación:</span> Auto Admite Demanda</div>
-                <div className="p-3 bg-[#061B2E] rounded border border-slate-800 text-[11px] text-slate-400">
-                  <p className="font-semibold text-white mb-1">Evidencia Documental:</p>
-                  "Se deja constancia de publicación en estado electrónico del despacho correspondiente al radicado consultado con fecha del día de hoy..."
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+            {[
+              {
+                t: "Consulta de procesos",
+                d: "Consulta rápida y precisa de procesos judiciales en múltiples fuentes.",
+                icon: Search
+              },
+              {
+                t: "Sincronización de actuaciones",
+                d: "Actualización automática de actuaciones y movimientos del proceso.",
+                icon: RefreshCw
+              },
+              {
+                t: "Estados electrónicos",
+                d: "Publicaciones procesales, traslados, autos y documentos asociados al radicado.",
+                icon: FileText
+              },
+              {
+                t: "Alertas y vencimientos",
+                d: "Notificaciones de términos, audiencias, vencimientos y novedades importantes.",
+                icon: Bell
+              },
+              {
+                t: "Gestión de tareas",
+                d: "Organiza tareas internas, responsables y seguimiento de actividades.",
+                icon: CheckSquare
+              },
+              {
+                t: "Administración multiempresa",
+                d: "Gestiona múltiples empresas desde un panel centralizado y seguro.",
+                icon: Building2
+              },
+              {
+                t: "Usuarios y permisos",
+                d: "Control de roles, permisos y alcances por empresa y por usuario.",
+                icon: Users
+              },
+              {
+                t: "Panel SuperAdmin SaaS",
+                d: "Administra empresas, usuarios, consumos, estados de pago y configuraciones.",
+                icon: Shield
+              },
+              {
+                t: "Facturación por radicados",
+                d: "Control de consumo por radicados activos con simulador de tarifas.",
+                icon: BarChart3
+              },
+              {
+                t: "Auditoría y trazabilidad",
+                d: "Registro detallado de acciones, consumos, estados de pago y trazabilidad completa.",
+                icon: Database
+              }
+            ].map((card, idx) => {
+              const Icon = card.icon;
+              return (
+                <div key={idx} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col items-center text-center group">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center mb-4 group-hover:bg-[#00B873] group-hover:text-white transition-colors duration-300">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#031827] mb-2">{card.t}</h3>
+                  <p className="text-slate-500 text-xs font-light leading-normal">{card.d}</p>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-900 text-[10px] font-bold uppercase mt-2">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Evidencia Validada
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 7. VIGILANCIA Y ALERTAS */}
-      <section className="py-20 bg-white">
-        <div className="max-w-4xl mx-auto px-6 text-center space-y-6">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mx-auto shadow-sm">
-            <Bell className="w-8 h-8" />
-          </div>
-          <h2 className="text-3xl font-bold tracking-tight text-[#031827]">
-            Seguimiento judicial con alertas oportunas
-          </h2>
-          <p className="text-slate-600 leading-relaxed font-light text-lg">
-            Monitorea actuaciones, traslados, términos, audiencias y vencimientos relevantes para reducir riesgos operativos de caducidad o preclusión y mejorar el control integral de la gestión jurídica de tus clientes.
-          </p>
-        </div>
-      </section>
-
-      {/* 8. PANEL MULTIEMPRESA */}
-      <section className="py-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          <div className="space-y-6">
-            <div className="text-xs font-bold text-[#00B873] uppercase tracking-widest">Arquitectura Multitenant</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              Administración SaaS para empresas y equipos jurídicos
-            </h2>
-            <p className="text-slate-600 leading-relaxed font-light">
-              JURICOB permite administrar múltiples empresas inquilinas, usuarios, roles, permisos y radicados desde un panel global SuperAdmin que centraliza la administración operativa.
-            </p>
-            
-            <div className="space-y-4">
-              <div className="flex gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm shrink-0">SA</div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">SuperAdmin</h4>
-                  <p className="text-xs text-slate-500 font-light mt-0.5">Control global de inquilinos, creación y suspensión de empresas, facturación y simuladores.</p>
-                </div>
-              </div>
-              <div className="flex gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">AD</div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Administrador de Empresa</h4>
-                  <p className="text-xs text-slate-500 font-light mt-0.5">Gestión de usuarios internos y alcance limitado a los expedientes de su respectiva empresa.</p>
-                </div>
-              </div>
-              <div className="flex gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
-                <div className="w-10 h-10 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold text-sm shrink-0">US</div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Usuario Estándar</h4>
-                  <p className="text-xs text-slate-500 font-light mt-0.5">Gestión de expedientes judiciales asignados con visualización y actualización propia.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-center">
-            <div className="relative w-full max-w-md bg-white border rounded-2xl shadow-xl overflow-hidden p-6 border-slate-100">
-              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#00B873]" /> Inquilinos Activos
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border">
-                  <span className="font-semibold text-sm text-slate-700">Compañía Petrolera S.A.</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold uppercase">Activo</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border">
-                  <span className="font-semibold text-sm text-slate-700">Consorcio Inmobiliario Bogotá</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold uppercase">Activo</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border">
-                  <span className="font-semibold text-sm text-slate-700">Carboprocesos del Caribe</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold uppercase">Inactivo</span>
-                </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* 9. FACTURACIÓN Y CONTROL */}
-      <section className="py-20 bg-white">
-        <div className="max-w-5xl mx-auto px-6 text-center space-y-6">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mx-auto shadow-sm">
-            <DollarSign className="w-8 h-8" />
-          </div>
-          <h2 className="text-3xl font-bold tracking-tight text-[#031827]">
-            Control de consumo por radicados activos
-          </h2>
-          <p className="text-slate-600 leading-relaxed font-light text-lg max-w-3xl mx-auto">
-            El sistema permite calcular de manera inteligente el consumo mensual de cada empresa en base a sus radicados activos, simular tarifas por rangos de consumo, controlar estados de cobro y suspender administrativamente el acceso sin eliminación de datos para conservar la integridad histórica de sus causas judiciales.
-          </p>
-        </div>
-      </section>
-
-      {/* 10. BENEFICIOS */}
-      <section id="beneficios" className="py-20 bg-slate-50">
+      {/* 6. BENEFICIOS */}
+      <section id="beneficios" className="py-20 bg-[#031827] text-white">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="text-center space-y-4">
-            <h2 className="text-3xl font-bold tracking-tight text-[#031827]">Beneficios JURICOB</h2>
-            <p className="text-slate-500 font-light max-w-xl mx-auto">
-              Optimiza tus flujos de trabajo jurídicos y reduce los errores de vigilancia manual.
-            </p>
+            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Beneficios</div>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              Más control, menos riesgo, mejores resultados
+            </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-6 text-center">
             {[
-              { t: "Información centralizada", d: "Todos tus expedientes en una sola interfaz." },
-              { t: "Reducción de falsos positivos", d: "Validación inteligente y descarte automatizado." },
-              { t: "Mayor trazabilidad", d: "Historial completo de estados y actuaciones." },
-              { t: "Control de usuarios", d: "Seguridad y aislamiento de accesos." },
-              { t: "Seguridad de la información", d: "Respaldo y cifrado de datos críticos." },
-              { t: "Ahorro de tiempo operativo", d: "Búsqueda automática y sincronizada." },
-              { t: "Gestión de multiempresa", d: "Ideal para bufetes y firmas externas." },
-              { t: "Alertas oportunas", d: "Notificaciones y calendarios automáticos." },
-              { t: "Acceso móvil/web", d: "Ingresa desde cualquier lugar y dispositivo." },
-              { t: "Mejor seguimiento jurídico", d: "Evidencia de todas las actuaciones." }
-            ].map((b, idx) => (
-              <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm mb-2">{b.t}</h4>
-                  <p className="text-xs text-slate-500 font-light leading-normal">{b.d}</p>
+              { t: "Información centralizada", icon: Database },
+              { t: "Reducción de falsos positivos", icon: ShieldCheck },
+              { t: "Mayor trazabilidad", icon: ChevronRight },
+              { t: "Ahorro de tiempo operativo", icon: Clock },
+              { t: "Seguridad de la información", icon: Shield },
+              { t: "Acceso desde cualquier lugar", icon: Globe },
+              { t: "Alertas oportunas", icon: Bell },
+              { t: "Mejor seguimiento jurídico", icon: CheckCircle2 }
+            ].map((b, idx) => {
+              const Icon = b.icon;
+              return (
+                <div key={idx} className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-xl border border-white/10 hover:border-[#00B873]/50 transition-colors">
+                  <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-[#00B873]">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-medium text-slate-200">{b.t}</span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* 11. PLANES */}
+      {/* 7. PLANES */}
       <section id="planes" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="text-center space-y-4">
-            <h2 className="text-3xl font-bold tracking-tight text-[#031827]">Planes y Suscripción</h2>
-            <p className="text-slate-500 font-light max-w-xl mx-auto">
-              Elige el plan ideal para el tamaño de tu firma u organización.
-            </p>
+            <div className="text-sm font-bold text-[#00B873] uppercase tracking-widest">Planes flexibles para cada necesidad</div>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
+              Elige el plan que mejor se adapta a tu empresa
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Plan 1 */}
-            <div className="p-8 bg-white border border-slate-150 rounded-3xl shadow-sm flex flex-col justify-between hover:border-[#00B873] transition-colors relative overflow-hidden">
+            {/* Plan Básico */}
+            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative">
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Plan Básico</h3>
-                  <p className="text-xs text-slate-400 mt-1 font-light">Para abogados independientes</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Plan Básico</h3>
+                    <p className="text-xs text-slate-400 font-light">Consulta y seguimiento de procesos judiciales.</p>
+                  </div>
                 </div>
                 <div className="h-px bg-slate-100"></div>
                 <ul className="space-y-3 text-sm text-slate-600">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta básica de radicados</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Sincronización de actuaciones</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Historial unificado</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta de procesos</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Actuaciones básicas</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
                 Solicitar cotización
               </Button>
             </div>
 
-            {/* Plan 2 - Destacado */}
-            <div className="p-8 bg-[#061B2E] border border-slate-800 rounded-3xl shadow-lg flex flex-col justify-between text-white relative overflow-hidden border-emerald-glow scale-102">
-              <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[10px] font-bold tracking-widest px-4 py-1 uppercase rounded-bl-xl">Popular</div>
+            {/* Plan Profesional */}
+            <div className="p-8 bg-white border-2 border-[#00B873] rounded-3xl shadow-md flex flex-col justify-between relative">
+              <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[9px] font-bold tracking-widest px-3 py-1 uppercase rounded-bl-xl">Popular</div>
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-white">Plan Profesional</h3>
-                  <p className="text-xs text-slate-400 mt-1 font-light">Para bufetes y firmas legales</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
+                    <Star className="w-5 h-5 fill-[#00B873]/20" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Plan Profesional</h3>
+                    <p className="text-xs text-slate-400 font-light">Publicaciones procesales, alertas, tareas y usuarios por empresa.</p>
+                  </div>
                 </div>
-                <div className="h-px bg-slate-800"></div>
-                <ul className="space-y-3 text-sm text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Publicaciones procesales completas</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas preventivas y vencimientos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Asignación de tareas internas</li>
+                <div className="h-px bg-slate-100"></div>
+                <ul className="space-y-3 text-sm text-slate-600">
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Estados electrónicos</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Gestión de tareas</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#00B873] hover:bg-[#00A86B] text-white shadow-md shadow-[#00B873]/20">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
                 Solicitar cotización
               </Button>
             </div>
 
-            {/* Plan 3 */}
-            <div className="p-8 bg-white border border-slate-150 rounded-3xl shadow-sm flex flex-col justify-between hover:border-[#00B873] transition-colors relative overflow-hidden">
+            {/* Plan Empresarial */}
+            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative">
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Plan Empresarial</h3>
-                  <p className="text-xs text-slate-400 mt-1 font-light">Para corporaciones y gran volumen</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Plan Empresarial</h3>
+                    <p className="text-xs text-slate-400 font-light">Multiempresa, SuperAdmin, facturación, auditoría y analítica.</p>
+                  </div>
                 </div>
                 <div className="h-px bg-slate-100"></div>
                 <ul className="space-y-3 text-sm text-slate-600">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Soporte corporativo multiempresa</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Módulo global SuperAdmin</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Facturación por consumo</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Auditoría e integraciones API</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Todo en Plan Profesional</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Administración multiempresa</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Panel SuperAdmin SaaS</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Facturación y auditoría avanzada</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
                 Solicitar cotización
               </Button>
             </div>
@@ -662,143 +537,165 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 12. CONTACTO */}
-      <section id="contacto" className="py-20 bg-slate-50 border-t">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Lado izquierdo: Información corporativa */}
-          <div className="space-y-6 flex flex-col justify-center">
-            <div className="text-xs font-bold text-[#00B873] uppercase tracking-widest">Contacto</div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#031827]">
-              ¿Interesado en optimizar tu gestión judicial?
+      {/* 8. CONTACTO */}
+      <section id="contacto" className="py-20 bg-slate-50 border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          {/* Lado izquierdo: Formulario */}
+          <div className="lg:col-span-6 space-y-6">
+            <h2 className="text-3xl font-bold tracking-tight text-[#031827]">
+              ¿Listo para transformar tu gestión judicial?
             </h2>
-            <p className="text-slate-600 leading-relaxed font-light">
-              Ponte en contacto con nosotros para recibir una cotización a tu medida o solicitar una demostración personalizada del panel SuperAdmin SaaS y las herramientas de vigilancia de JURICOB.
-            </p>
-            
-            <div className="space-y-4 pt-4 border-t">
-              <div className="flex items-center gap-3 text-slate-700">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                  <Building2 className="w-5 h-5" />
+            <form onSubmit={handleContactSubmit} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_name" className="text-xs font-semibold text-slate-500 uppercase">Nombre completo</Label>
+                  <Input 
+                    id="c_name" 
+                    value={contactForm.nombre} 
+                    onChange={e => setContactForm({...contactForm, nombre: e.target.value})} 
+                    className="border-slate-200"
+                    required
+                  />
                 </div>
-                <div>
-                  <span className="text-xs text-slate-400 block font-bold">DESARROLLADO POR</span>
-                  <span className="font-semibold text-sm">EMDECOB</span>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_emp" className="text-xs font-semibold text-slate-500 uppercase">Empresa</Label>
+                  <Input 
+                    id="c_emp" 
+                    value={contactForm.empresa} 
+                    onChange={e => setContactForm({...contactForm, empresa: e.target.value})} 
+                    className="border-slate-200"
+                  />
                 </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-slate-700">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block font-bold">CORREO ELECTRÓNICO</span>
-                  <span className="font-semibold text-sm font-mono">direccionejecutiva@emdecob.com</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-slate-700">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                  <Phone className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400 block font-bold">TELÉFONO / WHATSAPP</span>
-                  <span className="font-semibold text-sm font-mono">+57 314 892 3929</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Lado derecho: Formulario */}
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-md">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Solicitar Información</h3>
-            <form onSubmit={handleContactSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <Label htmlFor="c_name" className="text-xs font-bold text-slate-500 uppercase">Nombre Completo <span className="text-rose-500">*</span></Label>
-                <Input 
-                  id="c_name" 
-                  value={contactForm.nombre} 
-                  onChange={e => setContactForm({...contactForm, nombre: e.target.value})} 
-                  placeholder="Tu nombre..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="c_emp" className="text-xs font-bold text-slate-500 uppercase">Empresa / Firma</Label>
-                <Input 
-                  id="c_emp" 
-                  value={contactForm.empresa} 
-                  onChange={e => setContactForm({...contactForm, empresa: e.target.value})} 
-                  placeholder="Nombre de la empresa..."
-                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="c_mail" className="text-xs font-bold text-slate-500 uppercase">Correo de Contacto <span className="text-rose-500">*</span></Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_mail" className="text-xs font-semibold text-slate-500 uppercase">Correo electrónico</Label>
                   <Input 
                     id="c_mail" 
                     type="email"
                     value={contactForm.correo} 
                     onChange={e => setContactForm({...contactForm, correo: e.target.value})} 
-                    placeholder="ejemplo@correo.com"
+                    className="border-slate-200"
                     required
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="c_tel" className="text-xs font-bold text-slate-500 uppercase">Teléfono Movil</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_tel" className="text-xs font-semibold text-slate-500 uppercase">Teléfono</Label>
                   <Input 
                     id="c_tel" 
                     value={contactForm.telefono} 
                     onChange={e => setContactForm({...contactForm, telefono: e.target.value})} 
-                    placeholder="Ej. +57 300 123 4567"
+                    className="border-slate-200"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="c_msg" className="text-xs font-bold text-slate-500 uppercase">Mensaje <span className="text-rose-500">*</span></Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="c_msg" className="text-xs font-semibold text-slate-500 uppercase">Mensaje</Label>
                 <Textarea 
                   id="c_msg" 
                   value={contactForm.mensaje} 
                   onChange={e => setContactForm({...contactForm, mensaje: e.target.value})} 
-                  placeholder="Escribe tu mensaje..."
+                  className="border-slate-200"
                   rows={4}
                   required
                 />
               </div>
 
-              <Button type="submit" disabled={sending} className="w-full mt-4 bg-[#00B873] hover:bg-[#00A86B] text-white font-semibold shadow-md shadow-[#00B873]/10">
-                {sending ? 'Enviando...' : 'Solicitar Información'}
+              <Button type="submit" disabled={sending} className="w-full bg-[#00B873] hover:bg-[#00A86B] text-white font-semibold py-3 h-auto rounded-lg shadow-md shadow-[#00B873]/10">
+                {sending ? 'Enviando...' : 'Solicitar información'}
               </Button>
             </form>
+          </div>
+
+          {/* Lado derecho: Contacto e imagen */}
+          <div className="lg:col-span-6 space-y-8 h-full flex flex-col justify-between relative min-h-[400px]">
+            {/* Contact Details */}
+            <div className="space-y-6 relative z-10 pt-6">
+              <h3 className="text-xl font-bold text-[#031827]">Contáctanos</h3>
+              
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center shrink-0">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 block font-semibold uppercase">CORREO ELECTRÓNICO</span>
+                    <span className="font-semibold text-sm text-slate-700 font-mono">direccionejecutiva@emdecob.com</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 block font-semibold uppercase">TELÉFONO</span>
+                    <span className="font-semibold text-sm text-slate-700 font-mono">314 892 3929</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center shrink-0">
+                    <Globe className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 block font-semibold uppercase">UBICACIÓN</span>
+                    <span className="font-semibold text-sm text-slate-700 font-mono">Colombia</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 font-light mt-4">
+                Estamos listos para ayudarte a llevar tu gestión judicial al siguiente nivel.
+              </p>
+            </div>
+
+            {/* Background Image of Scale */}
+            <div className="w-full h-auto mt-6 flex justify-end">
+              <img 
+                src="/juricob-contact-scale.png" 
+                alt="Balanza de la justicia" 
+                className="max-w-[324px] h-auto object-contain opacity-90"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 13. FOOTER */}
+      {/* 9. FOOTER */}
       <footer className="bg-[#031827] text-white py-12 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00B873] flex items-center justify-center">
-              <Scale className="w-4 h-4 text-white" />
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-8 border-b border-slate-800 pb-8 mb-8">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/juricob-shield.png" 
+                alt="JURICOB Shield Logo" 
+                className="w-8 h-8 object-contain"
+              />
+              <div className="flex flex-col">
+                <span className="font-sans text-lg tracking-widest font-bold leading-none">JURICOB</span>
+                <span className="text-[8px] text-[#00B873] uppercase tracking-widest block mt-1 leading-none font-bold">PORTAL JURÍDICO</span>
+              </div>
             </div>
+
+            <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-400">
+              <button onClick={() => scrollToSection('inicio')} className="hover:text-white transition-colors">Inicio</button>
+              <button onClick={() => scrollToSection('plataforma')} className="hover:text-white transition-colors">Plataforma</button>
+              <button onClick={() => scrollToSection('funcionalidades')} className="hover:text-white transition-colors">Funcionalidades</button>
+              <button onClick={() => scrollToSection('beneficios')} className="hover:text-white transition-colors">Beneficios</button>
+              <button onClick={() => scrollToSection('planes')} className="hover:text-white transition-colors">Planes</button>
+              <button onClick={() => scrollToSection('contacto')} className="hover:text-white transition-colors">Contacto</button>
+            </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-mono">
             <div>
-              <span className="font-serif-juricob text-lg tracking-widest font-bold">JURICOB</span>
-              <span className="text-[8px] text-slate-400 uppercase tracking-widest block leading-none">by EMDECOB</span>
+              © {new Date().getFullYear()} EMDECOB. Todos los derechos reservados.
             </div>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-400">
-            <button onClick={() => scrollToSection('inicio')} className="hover:text-white transition-colors">Inicio</button>
-            <button onClick={() => scrollToSection('plataforma')} className="hover:text-white transition-colors">Plataforma</button>
-            <button onClick={() => navigate('/login')} className="hover:text-white transition-colors">Ingresar</button>
-            <button onClick={() => navigate('/register-company')} className="hover:text-white transition-colors">Crear Cuenta</button>
-            <button onClick={() => scrollToSection('contacto')} className="hover:text-white transition-colors">Contacto</button>
-          </div>
-
-          <div className="text-xs text-slate-500 font-mono">
-            © {new Date().getFullYear()} EMDECOB. Todos los derechos reservados.
+            <div className="flex items-center gap-1">
+              Desarrollado por <span className="font-bold text-[#00B873]">EMDECOB</span>
+            </div>
           </div>
         </div>
       </footer>
