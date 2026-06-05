@@ -459,7 +459,7 @@ export default function LandingPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
             {/* Plan Básico */}
             <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative">
               <div className="space-y-6">
@@ -483,7 +483,7 @@ export default function LandingPage() {
               </Button>
             </div>
 
-            {/* Plan Profesional */}
+            {/* Plan Premium */}
             <div className="p-8 bg-white border-2 border-[#00B873] rounded-3xl shadow-md flex flex-col justify-between relative">
               <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[9px] font-bold tracking-widest px-3 py-1 uppercase rounded-bl-xl">Popular</div>
               <div className="space-y-6">
@@ -492,8 +492,8 @@ export default function LandingPage() {
                     <Star className="w-5 h-5 fill-[#00B873]/20" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Plan Profesional</h3>
-                    <p className="text-xs text-slate-400 font-light">Publicaciones procesales, alertas, tareas y usuarios por empresa.</p>
+                    <h3 className="text-lg font-bold text-slate-800">Plan Premium</h3>
+                    <p className="text-xs text-slate-400 font-light">Publicaciones procesales, actuaciones avanzadas, alertas, tareas y usuarios por empresa.</p>
                   </div>
                 </div>
                 <div className="h-px bg-slate-100"></div>
@@ -502,31 +502,6 @@ export default function LandingPage() {
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Gestión de tareas</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
-                </ul>
-              </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
-                Solicitar cotización
-              </Button>
-            </div>
-
-            {/* Plan Empresarial */}
-            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative">
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                    <Building2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">Plan Empresarial</h3>
-                    <p className="text-xs text-slate-400 font-light">Multiempresa, SuperAdmin, facturación, auditoría y analítica.</p>
-                  </div>
-                </div>
-                <div className="h-px bg-slate-100"></div>
-                <ul className="space-y-3 text-sm text-slate-600">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Todo en Plan Profesional</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Administración multiempresa</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Panel SuperAdmin SaaS</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Facturación y auditoría avanzada</li>
                 </ul>
               </div>
               <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
