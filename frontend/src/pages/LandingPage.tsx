@@ -476,7 +476,7 @@ export default function LandingPage() {
                 <div className="h-px bg-slate-100"></div>
                 <ul className="space-y-3 text-sm text-slate-600">
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta de procesos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Actuaciones básicas</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Búsqueda de radicados</li>
                 </ul>
               </div>
               <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
@@ -499,9 +499,10 @@ export default function LandingPage() {
                 </div>
                 <div className="h-px bg-slate-800"></div>
                 <ul className="space-y-3 text-sm text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Estados electrónicos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta de procesos</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Búsqueda de radicados</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Gestión de tareas</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
                 </ul>
               </div>
