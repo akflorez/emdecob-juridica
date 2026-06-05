@@ -32,7 +32,7 @@ export function AppSidebar() {
       <div className={`border-b border-sidebar-border ${collapsed ? "p-3" : "p-6"} transition-all duration-300`}>
         <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
           <img 
-            src="/juricob-shield.png" 
+            src={theme === "dark" ? "/juricob-shield.png" : "/juricob-shield-light.png"} 
             alt="JURICOB Logo" 
             className="w-10 h-10 object-contain flex-shrink-0"
           />
