@@ -1,7 +1,7 @@
 import os
 
 # Feature flags for multisource checks (Fase 1 compliance defaults)
-MULTISOURCE_ENABLED = os.getenv("MULTISOURCE_ENABLED", "false").lower() == "true"
+MULTISOURCE_ENABLED = os.getenv("MULTISOURCE_ENABLED", "true").lower() == "true"
 MULTISOURCE_DRY_RUN = os.getenv("MULTISOURCE_DRY_RUN", "true").lower() == "true"
 MULTISOURCE_TIMEOUT_SECONDS = int(os.getenv("MULTISOURCE_TIMEOUT_SECONDS", "30"))
 MULTISOURCE_MAX_RETRIES = int(os.getenv("MULTISOURCE_MAX_RETRIES", "2"))
