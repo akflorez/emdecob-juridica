@@ -1499,11 +1499,7 @@ async def lifespan(app: FastAPI):
             
             # Asegurar Superadmin: el superadmin es is_admin=True Y company_id=NULL
             # Primero: asignar company_id a usuarios sin empresa que NO son superadmin
-            # (is_admin=True con company_id=NULL los protegemos)
             conn.execute(text(f"UPDATE users SET company_id = {code_id} WHERE company_id IS NULL AND is_admin = FALSE"))
-            # Segundo: asegurar que is_admin=TRUE siempre tenga company_id=NULL
-            # (el superadmin NO pertenece a ninguna empresa)
-            conn.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = TRUE"))
             
             # Limpiar dato de prueba
             conn.execute(text("DELETE FROM case_events WHERE title LIKE '%Auto de prueba%'"))
@@ -2550,14 +2546,8 @@ def debug_superadmin(db: Session = Depends(get_db)):
         except Exception as e:
             result["total_users_error"] = str(e)
             
-        # 5. FIX INMEDIATO: Forzar company_id=NULL para todos los is_admin=TRUE
-        try:
-            db.execute(text("UPDATE users SET company_id = NULL WHERE is_admin = TRUE"))
-            db.commit()
-            result["fix_applied"] = "company_id=NULL set for all is_admin=TRUE users"
-        except Exception as e:
-            db.rollback()
-            result["fix_error"] = str(e)
+        # 5. FIX INMEDIATO: Removido por requerimiento de diseño (SaaS multi-tenant)
+        result["fix_applied"] = "No se aplica fix automático de company_id = NULL para admins"
         
         # 6. Agregar columnas faltantes en companies
         missing_fixed = []
