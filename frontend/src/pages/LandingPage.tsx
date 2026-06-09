@@ -530,7 +530,7 @@ export default function LandingPage() {
                     id="c_name" 
                     value={contactForm.nombre} 
                     onChange={e => setContactForm({...contactForm, nombre: e.target.value})} 
-                    className="border-slate-200"
+                    className="border-slate-200 bg-white text-slate-900 focus-visible:ring-emerald-500"
                     required
                   />
                 </div>
@@ -540,7 +540,7 @@ export default function LandingPage() {
                     id="c_emp" 
                     value={contactForm.empresa} 
                     onChange={e => setContactForm({...contactForm, empresa: e.target.value})} 
-                    className="border-slate-200"
+                    className="border-slate-200 bg-white text-slate-900 focus-visible:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -553,7 +553,7 @@ export default function LandingPage() {
                     type="email"
                     value={contactForm.correo} 
                     onChange={e => setContactForm({...contactForm, correo: e.target.value})} 
-                    className="border-slate-200"
+                    className="border-slate-200 bg-white text-slate-900 focus-visible:ring-emerald-500"
                     required
                   />
                 </div>
@@ -563,7 +563,7 @@ export default function LandingPage() {
                     id="c_tel" 
                     value={contactForm.telefono} 
                     onChange={e => setContactForm({...contactForm, telefono: e.target.value})} 
-                    className="border-slate-200"
+                    className="border-slate-200 bg-white text-slate-900 focus-visible:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -574,7 +574,7 @@ export default function LandingPage() {
                   id="c_msg" 
                   value={contactForm.mensaje} 
                   onChange={e => setContactForm({...contactForm, mensaje: e.target.value})} 
-                  className="border-slate-200"
+                  className="border-slate-200 bg-white text-slate-900 focus-visible:ring-emerald-500"
                   rows={4}
                   required
                 />
