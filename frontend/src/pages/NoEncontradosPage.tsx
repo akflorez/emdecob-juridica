@@ -122,14 +122,15 @@ export default function NoEncontradosPage() {
       const result = await retryInvalidRadicado(item.id);
       
       if (result.found) {
+        const isAlternative = result.source && result.source !== "rama_judicial";
         toast({
-          title: "¡Radicado encontrado!",
-          description: `El radicado ${item.radicado} fue agregado a los casos`,
+          title: isAlternative ? "✅ Encontrado en fuente alternativa" : "✅ ¡Radicado encontrado!",
+          description: result.message || `El radicado ${item.radicado} fue agregado a los casos`,
         });
       } else {
         toast({
           title: "No encontrado",
-          description: "El radicado sigue sin aparecer en Rama Judicial",
+          description: "El radicado no aparece en Rama Judicial ni en fuentes alternativas",
           variant: "destructive",
         });
       }

@@ -3679,27 +3679,47 @@ def download_invalid_radicados_excel(
     )
 
 @app.post("/invalid-radicados/{radicado_id}/retry")
-async def retry_invalid_radicado(radicado_id: int, db: Session = Depends(get_db)):
+async def retry_invalid_radicado(
+    radicado_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     item = db.query(InvalidRadicado).filter(InvalidRadicado.id == radicado_id).first()
     if not item:
         raise HTTPException(404, "Radicado no encontrado")
 
-    result = await validar_radicado_completo(item.radicado, db, is_new_import=True)
-    if result["found"]:
+    from backend.service.fallback_search import search_radicado_with_fallbacks
+    company_id = item.company_id or (current_user.company_id if current_user else None)
+    result = await search_radicado_with_fallbacks(
+        radicado=item.radicado,
+        company_id=company_id,
+        db=db,
+        current_user=current_user,
+        force=True
+    )
+
+    status = result.get("status")
+    if status in ("found", "found_alternative"):
+        source = result.get("source", "rama_judicial")
         db.delete(item)
         db.commit()
-        return {"ok": True, "found": True, "message": "Radicado encontrado, validado y agregado a casos"}
+        msg = "Radicado encontrado en Rama Judicial y agregado a casos" if source == "rama_judicial" \
+              else f"Radicado encontrado en fuente alternativa ({source}) y agregado a casos"
+        return {"ok": True, "found": True, "source": source, "message": msg}
     else:
         item.intentos += 1
+        item.motivo = "No encontrado en Rama Judicial ni en fuentes alternativas"
         item.updated_at = now_colombia()
         db.commit()
-        return {"ok": True, "found": False, "message": "Radicado sigue sin encontrarse en Rama Judicial"}
+        return {"ok": True, "found": False, "message": "Radicado sigue sin encontrarse en ninguna fuente oficial"}
 
 @app.post("/invalid-radicados/retry-all")
 async def retry_all_invalid_radicados(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     delay_seconds: float = Query(default=0.5, ge=0.1, le=5),
 ):
+    from backend.service.fallback_search import search_radicado_with_fallbacks
     items = db.query(InvalidRadicado).order_by(InvalidRadicado.id).all()
     if not items:
         return {"ok": True, "processed": 0, "found": 0, "still_not_found": 0, "remaining": 0, "message": "No hay radicados para reintentar"}
@@ -3712,13 +3732,21 @@ async def retry_all_invalid_radicados(
             if i > 0:
                 await asyncio.sleep(delay_seconds + random.uniform(0, 0.3))
 
-            result = await validar_radicado_completo(item.radicado, db, is_new_import=True)
-            if result["found"]:
+            company_id = item.company_id or (current_user.company_id if current_user else None)
+            result = await search_radicado_with_fallbacks(
+                radicado=item.radicado,
+                company_id=company_id,
+                db=db,
+                current_user=current_user,
+                force=True
+            )
+            if result.get("status") in ("found", "found_alternative"):
                 db.delete(item)
                 db.flush()
                 found += 1
             else:
                 item.intentos += 1
+                item.motivo = "No encontrado en Rama Judicial ni en fuentes alternativas"
                 item.updated_at = now_colombia()
                 still_not_found += 1
         except Exception:
@@ -3739,8 +3767,10 @@ async def retry_all_invalid_radicados(
 @app.post("/invalid-radicados/retry-batch")
 async def retry_batch_invalid_radicados(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     batch_size: int = Query(default=20, ge=1, le=100),
 ):
+    from backend.service.fallback_search import search_radicado_with_fallbacks
     items = db.query(InvalidRadicado).order_by(InvalidRadicado.id).limit(batch_size).all()
     if not items:
         return {"ok": True, "processed": 0, "found": 0, "still_not_found": 0, "remaining": 0, "message": "No hay radicados para reintentar"}
@@ -3753,12 +3783,20 @@ async def retry_batch_invalid_radicados(
             if i > 0:
                 await delay_between_requests(0.3, 0.6)
 
-            result = await validar_radicado_completo(item.radicado, db, is_new_import=True)
-            if result["found"]:
+            company_id = item.company_id or (current_user.company_id if current_user else None)
+            result = await search_radicado_with_fallbacks(
+                radicado=item.radicado,
+                company_id=company_id,
+                db=db,
+                current_user=current_user,
+                force=True
+            )
+            if result.get("status") in ("found", "found_alternative"):
                 db.delete(item)
                 found += 1
             else:
                 item.intentos += 1
+                item.motivo = "No encontrado en Rama Judicial ni en fuentes alternativas"
                 item.updated_at = now_colombia()
                 still_not_found += 1
         except Exception:
