@@ -103,18 +103,26 @@ def is_relevant_actuacion(actuacion_text: str) -> bool:
         return False
     texto = normalize_text(actuacion_text)
     
-    # Debe detectar actuaciones relevantes si contienen cualquiera de estas palabras clave
-    keywords = [
+    # Palabras clave solicitadas por el usuario (normalizadas para comparar)
+    raw_keywords = [
         "auto",
         "estado",
-        "fijacion estado",
-        "fijacion de estado",
-        "fijacion en estado",
+        "fijacion",
+        "fijación",
+        "traslado",
+        "termina",
+        "requiere",
+        "libra mandamiento",
+        "admite",
+        "inadmite",
+        "resuelve",
+        "aprueba",
+        "ordena",
         "notificacion por estado",
-        "notificado por estado",
-        "publicacion por estado",
-        "publicado por estado"
+        "notificación por estado"
     ]
+    keywords = [normalize_text(kw) for kw in raw_keywords]
+    
     for kw in keywords:
         if kw in texto:
             return True
@@ -469,16 +477,21 @@ def guardar_publicacion_validada(db, data: dict):
     import json
     radicado = data.get("radicado")
     case_id = data.get("case_id")
-    if not case_id and radicado:
+    
+    case = None
+    if case_id:
+        case = db.query(Case).filter(Case.id == case_id).first()
+    elif radicado:
         case = db.query(Case).filter(Case.radicado == radicado).first()
-        if case:
-            case_id = case.id
-            
-    if not case_id:
+        
+    if not case:
         print("[guardar_publicacion_validada] Error: No se encontro el caso para guardar la publicacion.")
         print("[PUBLICACIONES][GUARDADO]\nmes=N/A\nguardado=false\nmotivo_no_guardado=No se encontro el caso para guardar la publicacion")
         return None
         
+    case_id = case.id
+    company_id = case.company_id
+    
     fecha_pub = parse_fecha_pub(data.get("fecha_publicacion")) if isinstance(data.get("fecha_publicacion"), str) else data.get("fecha_publicacion")
     fecha_est = parse_fecha_pub(data.get("fecha_estado_electronico")) if isinstance(data.get("fecha_estado_electronico"), str) else data.get("fecha_estado_electronico")
     
@@ -491,6 +504,7 @@ def guardar_publicacion_validada(db, data: dict):
     ).first()
     
     if existing:
+        existing.company_id = company_id
         existing.tipo_publicacion = data.get("categoria_publicacion") or data.get("tipo_publicacion") or existing.tipo_publicacion
         existing.descripcion = data.get("descripcion") or data.get("texto_fuente_principal", "")[:500] or existing.descripcion
         existing.documento_url = data.get("url_fuente_principal") or existing.documento_url
@@ -522,6 +536,7 @@ def guardar_publicacion_validada(db, data: dict):
         return existing
     else:
         new_pub = CasePublication(
+            company_id=company_id,
             case_id=case_id,
             fecha_publicacion=fecha_pub,
             tipo_publicacion=data.get("categoria_publicacion") or data.get("tipo_publicacion") or "Publicación Procesal",
@@ -559,9 +574,11 @@ def guardar_publicacion_validada(db, data: dict):
         print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=")
         return new_pub
 
+
 def guardar_estado_busqueda(db, data: dict):
     from backend.models import CasePublicationSearch
     radicado = data.get("radicado")
+    company_id = data.get("company_id")
     fecha_act = data.get("fecha_actuacion")
     if isinstance(fecha_act, str):
         fecha_act = parse_fecha_pub(fecha_act)
@@ -581,21 +598,18 @@ def guardar_estado_busqueda(db, data: dict):
     if not fecha_fin:
         fecha_fin = fecha_act
         
-    if fecha_ini:
-        existing = db.query(CasePublicationSearch).filter(
-            CasePublicationSearch.radicado == radicado,
-            CasePublicationSearch.fecha_inicio_busqueda == fecha_ini
-        ).first()
-    else:
-        existing = db.query(CasePublicationSearch).filter(
-            CasePublicationSearch.radicado == radicado,
-            CasePublicationSearch.fecha_actuacion == fecha_act
-        ).first()
-    
-    estado = data.get("estado_busqueda") or data.get("estado") or "pendiente"
     mes_busqueda = data.get("mes_busqueda")
     if not mes_busqueda and fecha_ini:
         mes_busqueda = fecha_ini.strftime("%Y-%m")
+        
+    # Buscar si ya existe por company_id + radicado + mes_busqueda
+    existing = db.query(CasePublicationSearch).filter(
+        CasePublicationSearch.company_id == company_id,
+        CasePublicationSearch.radicado == radicado,
+        CasePublicationSearch.mes_busqueda == mes_busqueda
+    ).first()
+    
+    estado = data.get("estado_busqueda") or data.get("estado") or "pendiente"
         
     if existing:
         existing.fecha_inicio_busqueda = fecha_ini or existing.fecha_inicio_busqueda
@@ -615,6 +629,7 @@ def guardar_estado_busqueda(db, data: dict):
             existing.next_retry_at = None
             existing.locked_at = None
             existing.locked_by = None
+            existing.processed_at = None
             
         db.flush()
         db.commit()
@@ -622,6 +637,7 @@ def guardar_estado_busqueda(db, data: dict):
     else:
         new_search = CasePublicationSearch(
             radicado=radicado,
+            company_id=company_id,
             fecha_actuacion=fecha_act or date.today(),
             fecha_inicio_busqueda=fecha_ini,
             fecha_fin_busqueda=fecha_fin,
@@ -635,26 +651,37 @@ def guardar_estado_busqueda(db, data: dict):
             mes_busqueda=mes_busqueda,
             prioridad=data.get("prioridad", 0),
             source_trigger=data.get("source_trigger"),
-            force=data.get("force", False),
-            company_id=data.get("company_id")
+            force=data.get("force", False)
         )
         db.add(new_search)
         db.flush()
         db.commit()
         return new_search
 
-def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trigger: str = "auto_update"):
-    from backend.models import CaseEvent, Case
+def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) -> int:
+    from backend.models import Case, CaseEvent, CasePublicationSearch
     import calendar
+    from datetime import date
     
-    case = db.query(Case).filter(Case.radicado == radicado).first()
-    if not case:
-        return 0
+    if isinstance(case, str):
+        radicado = case
+        case_obj = db.query(Case).filter(Case.radicado == radicado).first()
+        if not case_obj:
+            print(f"[auto_queue_publicaciones_for_case] Caso no encontrado para radicado: {radicado}")
+            return 0
+        case = case_obj
         
+    radicado = case.radicado
+    company_id = case.company_id
+    
+    # Leer actuaciones del caso
     events = db.query(CaseEvent).filter(CaseEvent.case_id == case.id).all()
+    
+    # Filtrar actuaciones relevantes
     relevant_events = [e for e in events if is_relevant_actuacion(e.title)]
     
     if not relevant_events:
+        print(f"[auto_queue_publicaciones_for_case] No se encontraron actuaciones relevantes para {radicado}")
         return 0
         
     queued_count = 0
@@ -664,35 +691,67 @@ def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trig
         for year, month in meses:
             mes_str = f"{year}-{month:02d}"
             
-            from backend.models import CasePublicationSearch
+            # Buscar por company_id + radicado + mes_busqueda para evitar duplicidad
             existing = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.company_id == company_id,
                 CasePublicationSearch.radicado == radicado,
                 CasePublicationSearch.mes_busqueda == mes_str
             ).first()
             
-            if not existing or force:
+            if existing:
+                if force:
+                    existing.estado = "pendiente"
+                    existing.estado_busqueda = "pendiente"
+                    existing.intentos = 0
+                    existing.ultimo_error = None
+                    existing.processed_at = None
+                    existing.locked_at = None
+                    existing.locked_by = None
+                    existing.force = True
+                    db.flush()
+                    queued_count += 1
+            else:
                 fecha_inicio_str = f"{year}-{month:02d}-01"
                 last_day = calendar.monthrange(year, month)[1]
                 fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
                 
                 despacho_codigo = extract_despacho_code(radicado)
                 
-                guardar_estado_busqueda(db, {
-                    "company_id": case.company_id,
-                    "radicado": radicado,
-                    "fecha_actuacion": ev.event_date,
-                    "fecha_inicio_busqueda": fecha_inicio_str,
-                    "fecha_fin_busqueda": fecha_fin_str,
-                    "despacho_codigo": despacho_codigo,
-                    "estado": "pendiente",
-                    "mes_busqueda": mes_str,
-                    "prioridad": 10 if force else 0,
-                    "source_trigger": source_trigger,
-                    "force": force
-                })
+                event_date_val = ev.event_date
+                if isinstance(event_date_val, str):
+                    event_date_val = parse_fecha_pub(event_date_val)
+                
+                new_search = CasePublicationSearch(
+                    company_id=company_id,
+                    radicado=radicado,
+                    fecha_actuacion=event_date_val or date.today(),
+                    fecha_inicio_busqueda=parse_fecha_pub(fecha_inicio_str),
+                    fecha_fin_busqueda=parse_fecha_pub(fecha_fin_str),
+                    despacho_codigo=despacho_codigo,
+                    estado="pendiente",
+                    estado_busqueda="pendiente",
+                    mes_busqueda=mes_str,
+                    prioridad=10 if force else 0,
+                    source_trigger="auto_queue",
+                    force=force
+                )
+                db.add(new_search)
+                db.flush()
                 queued_count += 1
                 
+    if queued_count > 0:
+        db.commit()
+        print(f"[auto_queue_publicaciones_for_case] Encoladas {queued_count} busquedas para {radicado} (company_id={company_id})")
+        
     return queued_count
+
+def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trigger: str = "auto_update"):
+    from backend.models import Case
+    case = db.query(Case).filter(Case.radicado == radicado).first()
+    if not case:
+        return 0
+    return auto_queue_publicaciones_for_case(db, case, force=force)
+
 
 def parse_result_cards(html: str) -> list:
     soup = BeautifulSoup(html, "html.parser")

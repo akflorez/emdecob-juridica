@@ -58,6 +58,22 @@ class Case(Base):
 
     is_active = Column(Boolean, default=True, nullable=False) # Para cobro por radicado activo
 
+    # Nuevos campos del motor fallback / fuentes alternativas
+    despacho = Column(String(255), nullable=True)
+    clase_proceso = Column(String(255), nullable=True)
+    tipo_proceso = Column(String(255), nullable=True)
+    estado = Column(String(255), nullable=True)
+    ponente_juez = Column(String(255), nullable=True)
+    departamento = Column(String(255), nullable=True)
+    municipio = Column(String(255), nullable=True)
+    ubicacion = Column(String(255), nullable=True)
+    fuente_encontrado = Column(String(255), nullable=True)
+    url_fuente = Column(String(500), nullable=True)
+    metodo_busqueda = Column(String(255), nullable=True)
+    confianza_busqueda = Column(Integer, nullable=True)
+    encontrado_en_fuente_alternativa = Column(Boolean, default=False, nullable=True)
+    requiere_revision = Column(Boolean, default=False, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime,
@@ -68,6 +84,8 @@ class Case(Base):
     
     tasks = relationship("Task", back_populates="case", cascade="all, delete-orphan")
     events = relationship("CaseEvent", back_populates="case", cascade="all, delete-orphan")
+    company = relationship("Company", foreign_keys=[company_id])
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class BillingTier(Base):
@@ -641,3 +659,33 @@ class CaseSourceCheck(Base):
     raw_summary = Column(Text, nullable=True) # JSON raw response summary
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class CaseSearchSourceResult(Base):
+    """Historial y logs de consultas de radicados en el motor fallback con fuentes alternativas"""
+    __tablename__ = "case_search_source_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
+    radicado = Column(String(60), index=True, nullable=False)
+    fuente = Column(String(100), nullable=True)
+    tipo_fuente = Column(String(100), nullable=True)
+    url = Column(String(500), nullable=True)
+    encontrado = Column(Boolean, default=False, nullable=False)
+    confianza = Column(Integer, default=0, nullable=True)
+    estado = Column(String(50), nullable=True)
+    mensaje = Column(Text, nullable=True)
+    datos_extraidos_json = Column(Text, nullable=True)
+    raw_response = Column(String(50000), nullable=True) # Limit response size to 50k chars
+    error_type = Column(String(100), nullable=True)
+    http_status = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, default=0)
+    source_order = Column(Integer, nullable=True)
+    force = Column(Boolean, default=False, nullable=True)
+    requiere_revision = Column(Boolean, default=False, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    case = relationship("Case", backref=backref("search_source_results", cascade="all, delete-orphan"))
+    user = relationship("User", backref=backref("case_searches"))

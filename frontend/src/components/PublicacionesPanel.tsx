@@ -74,11 +74,13 @@ export function PublicacionesPanel({
     if (radicado) fetchInitialStatus();
   }, [radicado, caseId]);
 
-  // Polling cada 8 segundos si hay búsquedas activas
+  // Polling cada 8 segundos si hay búsquedas activas (pendientes o en procesamiento)
   useEffect(() => {
     let interval: any;
     
-    if (syncStatus === 'pendiente' || syncStatus === 'procesando' || isRefreshing) {
+    const hasActiveSearches = busquedas.some(b => b.estado === 'pendiente' || b.estado === 'procesando');
+    
+    if (syncStatus === 'pendiente' || syncStatus === 'procesando' || isRefreshing || hasActiveSearches) {
       interval = setInterval(async () => {
         try {
           const result = caseId 
@@ -88,11 +90,14 @@ export function PublicacionesPanel({
           if (result && !Array.isArray(result)) {
             const items = result.items || [];
             const status = result.estado_busqueda || result.sync_pub_status;
+            const currentBusquedas = result.busquedas || [];
             
-            setBusquedas(result.busquedas || []);
+            setBusquedas(currentBusquedas);
             setSyncStatus(status);
             
-            if (status === 'completado' || status === 'error' || status === 'sin_resultado') {
+            const stillActive = currentBusquedas.some((b: any) => b.estado === 'pendiente' || b.estado === 'procesando');
+            
+            if (!stillActive && status !== 'pendiente' && status !== 'procesando') {
               onRefresh(items);
               setIsRefreshing(false);
               if (interval) clearInterval(interval);
@@ -105,7 +110,7 @@ export function PublicacionesPanel({
     }
 
     return () => { if (interval) clearInterval(interval); };
-  }, [syncStatus, isRefreshing, radicado, caseId, onRefresh]);
+  }, [syncStatus, isRefreshing, busquedas, radicado, caseId, onRefresh]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -164,15 +169,30 @@ export function PublicacionesPanel({
     );
   }
 
+  const isSearching = busquedas.some(b => b.estado === 'pendiente' || b.estado === 'procesando') || syncStatus === 'pendiente' || syncStatus === 'procesando';
+
   return (
     <div className="space-y-4">
+      {/* BANNER DE BÚSQUEDA ACTIVA */}
+      {isSearching && (
+        <Card className="bg-blue-500/5 border-blue-500/20 animate-in fade-in slide-in-from-top-2 duration-500">
+          <CardContent className="pt-4 pb-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">Buscando publicaciones procesales en segundo plano...</p>
+              <p className="text-xs text-muted-foreground">El worker está procesando las búsquedas y aparecerán aquí automáticamente.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* SECCIÓN DE BÚSQUEDAS EN COLA */}
       {busquedas.length > 0 && (
         <Card className="bg-muted/30 border-primary/20 animate-in fade-in slide-in-from-top-2 duration-500">
           <CardContent className="pt-4 pb-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium flex items-center gap-2">
-                {(syncStatus === 'pendiente' || syncStatus === 'procesando' || isRefreshing) && (
+                {isSearching && (
                   <RefreshCw className="h-4 w-4 animate-spin text-primary" />
                 )}
                 Cola de Búsquedas Automáticas

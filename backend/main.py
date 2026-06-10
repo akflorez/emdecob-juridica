@@ -20,6 +20,41 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, sessionmaker, joinedload, selectinload
 from sqlalchemy import create_engine, or_, desc, and_, case as sql_case, func
 
+# In-memory rate limiting dictionary for password recovery
+# Format: { "email:user@example.com:timestamp_window": count, "ip:127.0.0.1:timestamp_window": count }
+RATE_LIMIT_STORE = {}
+
+def check_password_reset_rate_limit(email: str, ip: str) -> bool:
+    import time
+    now = time.time()
+    # 15 minutes window = 900 seconds
+    window = int(now / 900) * 900
+    
+    email_key = f"email:{email.strip().lower()}:{window}"
+    ip_key = f"ip:{ip}:{window}"
+    
+    email_count = RATE_LIMIT_STORE.get(email_key, 0)
+    ip_count = RATE_LIMIT_STORE.get(ip_key, 0)
+    
+    if email_count >= 3 or ip_count >= 10:
+        return False
+        
+    RATE_LIMIT_STORE[email_key] = email_count + 1
+    RATE_LIMIT_STORE[ip_key] = ip_count + 1
+    
+    # Simple clean up of expired keys (> 1 hour old) to prevent memory leak
+    for k in list(RATE_LIMIT_STORE.keys()):
+        try:
+            parts = k.split(':')
+            k_window = int(parts[-1])
+            if now - k_window > 3600:
+                RATE_LIMIT_STORE.pop(k, None)
+        except Exception:
+            pass
+            
+    return True
+
+
 # IMPORTACION ADAPTATIVA (Expert Mode)
 try:
     from backend.db import engine, SessionLocal, Base
@@ -87,6 +122,48 @@ try:
         try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS mes_busqueda VARCHAR(20)")
         try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS prioridad INTEGER DEFAULT 0")
         
+        # Fallback search migrations
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS despacho VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS clase_proceso VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS tipo_proceso VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS estado VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS ponente_juez VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS departamento VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS municipio VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS ubicacion VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS fuente_encontrado VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS url_fuente VARCHAR(500)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS metodo_busqueda VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS confianza_busqueda INTEGER")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS encontrado_en_fuente_alternativa BOOLEAN DEFAULT FALSE")
+        try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS requiere_revision BOOLEAN DEFAULT FALSE")
+
+        try_execute(conn, """
+            CREATE TABLE IF NOT EXISTS case_search_source_results (
+                id SERIAL PRIMARY KEY,
+                case_id INTEGER,
+                company_id INTEGER,
+                radicado VARCHAR(60) NOT NULL,
+                fuente VARCHAR(100),
+                tipo_fuente VARCHAR(100),
+                url VARCHAR(500),
+                encontrado BOOLEAN DEFAULT FALSE NOT NULL,
+                confianza INTEGER DEFAULT 0,
+                estado VARCHAR(50),
+                mensaje TEXT,
+                datos_extraidos_json TEXT,
+                raw_response VARCHAR(50000),
+                error_type VARCHAR(100),
+                http_status INTEGER,
+                duration_ms INTEGER DEFAULT 0,
+                source_order INTEGER,
+                force BOOLEAN DEFAULT FALSE,
+                requiere_revision BOOLEAN DEFAULT FALSE,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # TABLA DE LOGS PARA DEBUG
         try_execute(conn, """
             CREATE TABLE IF NOT EXISTS sync_debug_logs (
@@ -97,9 +174,11 @@ try:
             )
         """)
         
-        # INDICE PARA VELOCIDAD
+        # INDICE PARA VELOCIDAD Y COMPATIBILIDAD SAAS
         try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_case_pub_case_id ON case_publications(case_id)")
         try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_case_event_case_id ON case_events(case_id)")
+        try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_cases_company_radicado ON cases(company_id, radicado)")
+        try_execute(conn, "CREATE INDEX IF NOT EXISTS idx_case_search_source_results_company_radicado ON case_search_source_results(company_id, radicado)")
         
         print("[DB] Migraciones rapidas completadas")
 except Exception as e:
@@ -765,18 +844,25 @@ async def _pending_validation_loop():
         await asyncio.sleep(CYCLE_WAIT)
 
 async def run_publicaciones_worker_loop():
-    from backend.models import CasePublicationSearch
+    from backend.models import CasePublicationSearch, Case
     from backend.service.publicaciones import consultar_publicaciones_rango, parse_fecha_pub, guardar_publicacion_validada, guardar_estado_busqueda
     from sqlalchemy import text
     import traceback
+    import os
 
-    CONCURRENCY = 1
-    SLEEP_MS = 0.8
-    MAX_RETRIES = 2
-    LOCK_TIMEOUT_MINUTES = 15
-    BATCH_SIZE = 5
+    # Configuración inicial cargada desde variables de entorno
+    ENABLED = os.getenv("PUBLICACIONES_AUTO_SYNC_ENABLED", "true").lower() == "true"
+    if not ENABLED:
+        print("[pub-worker] Worker desactivado (PUBLICACIONES_AUTO_SYNC_ENABLED = false)")
+        return
 
-    print("[pub-worker] Iniciando worker automático de publicaciones procesales...")
+    CONCURRENCY = int(os.getenv("PUBLICACIONES_AUTO_SYNC_CONCURRENCY", "1"))
+    SLEEP_MS = float(os.getenv("PUBLICACIONES_AUTO_SYNC_SLEEP_MS", "800")) / 1000.0
+    MAX_RETRIES = int(os.getenv("PUBLICACIONES_AUTO_SYNC_MAX_RETRIES", "2"))
+    LOCK_TIMEOUT_MINUTES = int(os.getenv("PUBLICACIONES_LOCK_TIMEOUT_MINUTES", "15"))
+    BATCH_SIZE = int(os.getenv("PUBLICACIONES_AUTO_SYNC_BATCH_SIZE", "5"))
+
+    print(f"[pub-worker] Iniciando worker automático de publicaciones procesales (SLEEP_MS={SLEEP_MS}s, MAX_RETRIES={MAX_RETRIES}, BATCH_SIZE={BATCH_SIZE})...")
     await asyncio.sleep(5)  # Esperar a que inicie la app
 
     while True:
@@ -784,25 +870,31 @@ async def run_publicaciones_worker_loop():
         try:
             db = SessionLocal()
             
-            # Recuperar tareas colgadas
+            # Recuperar tareas colgadas (timeout_threshold)
             timeout_threshold = now_colombia() - timedelta(minutes=LOCK_TIMEOUT_MINUTES)
             colgadas = db.query(CasePublicationSearch).filter(
                 CasePublicationSearch.estado == "procesando",
                 CasePublicationSearch.locked_at < timeout_threshold
             ).all()
+            
             for c in colgadas:
-                c.estado = "pendiente"
-                c.estado_busqueda = "pendiente"
+                c.intentos += 1
+                c.ultimo_error = "Timeout. Recuperada por el worker."
                 c.locked_at = None
                 c.locked_by = None
-                c.ultimo_error = "Timeout. Recuperada por el worker."
-                c.intentos += 1
+                if c.intentos >= MAX_RETRIES and not c.force:
+                    c.estado = "error"
+                    c.estado_busqueda = "error"
+                else:
+                    c.estado = "pendiente"
+                    c.estado_busqueda = "pendiente"
+                    c.next_retry_at = now_colombia() + timedelta(minutes=5 * c.intentos)
+                    
             if colgadas:
                 db.commit()
                 print(f"[pub-worker] Recuperadas {len(colgadas)} tareas colgadas.")
 
-            # Obtener pendientes (Select for update skip locked no está en SQLite, usaremos un update atómico)
-            # Primero buscamos candidatos
+            # Obtener pendientes
             candidatos = db.query(CasePublicationSearch).filter(
                 CasePublicationSearch.estado == "pendiente",
                 or_(CasePublicationSearch.next_retry_at.is_(None), CasePublicationSearch.next_retry_at <= now_colombia())
@@ -838,10 +930,17 @@ async def run_publicaciones_worker_loop():
                     fecha_act_str = candidato.fecha_actuacion.strftime("%Y-%m-%d")
                     year, month = map(int, candidato.mes_busqueda.split("-"))
                     
+                    # Obtener demandante/demandado del caso para validación documental
+                    case_obj = db.query(Case).filter(Case.radicado == candidato.radicado).first()
+                    demandante = case_obj.demandante if case_obj else ""
+                    demandado = case_obj.demandado if case_obj else ""
+                    
                     # Llamar al scraper real
                     pubs = await consultar_publicaciones_rango(
                         candidato.radicado, 
                         fecha_act_str, 
+                        demandante=demandante,
+                        demandado=demandado,
                         year=year, 
                         month=month
                     )
@@ -1679,6 +1778,14 @@ class MarkReadAllRequest(BaseModel):
 class ValidateSelectedRequest(BaseModel):
     radicados: List[str]
 
+class CaseSearchRequest(BaseModel):
+    radicado: str
+    company_id: Optional[int] = None
+    force: Optional[bool] = False
+
+class BuscarNuevamenteRequest(BaseModel):
+    company_id: Optional[int] = None
+
 class AutoRefreshConfigRequest(BaseModel):
     interval_minutes: int = 60
 
@@ -2341,6 +2448,13 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
         except Exception as e:
             print(f"    Error actuaciones: {e}")
 
+        # Auto-encolar publicaciones automáticas para este caso
+        try:
+            from backend.service.publicaciones import auto_queue_publicaciones_for_case
+            auto_queue_publicaciones_for_case(db, c)
+        except Exception as pub_queue_err:
+            print(f"    [auto_queue] Error al auto-encolar publicaciones: {pub_queue_err}")
+
     return {"found": True, "case": c}
 
 
@@ -2882,56 +2996,132 @@ def register_company(data: RegisterCompanyRequest, db: Session = Depends(get_db)
 
 @app.post("/api/auth/forgot-password")
 @app.post("/auth/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(data: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     import hashlib
-    user = db.query(User).filter(User.email == data.email).first()
+    import secrets
+    from datetime import datetime, timedelta
     
     # Generic response
     response_msg = {"success": True, "message": "Si el correo existe, enviaremos instrucciones de recuperación."}
+    
+    # 1. Normalize email
+    email_clean = data.email.strip().lower()
+    
+    # 2. Rate limiting check
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if not check_password_reset_rate_limit(email_clean, client_ip):
+        print(f"[forgot-password] Rate limit exceeded for email={email_clean} or IP={client_ip}")
+        raise HTTPException(status_code=429, detail="Demasiadas solicitudes. Inténtalo de nuevo más tarde.")
+        
+    print(f"[forgot-password] Request received for email={email_clean} from IP={client_ip}")
+    
+    # 3. Search active user
+    user = db.query(User).filter(func.lower(User.email) == email_clean, User.is_active == True).first()
     if not user:
+        print("[forgot-password] User not found or inactive. Returning generic response.")
         return response_msg
         
+    # 4. Search active company if user has one
+    if user.company_id is not None:
+        from backend.models import Company
+        company = db.query(Company).filter(Company.id == user.company_id).first()
+        if not company or company.estado != "activo":
+            print(f"[forgot-password] Company {user.company_id} not found or not active. Returning generic response.")
+            return response_msg
+            
+    print(f"[forgot-password] Active user found: ID={user.id}")
+    
+    # 5. Invalidate previous active tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None)
+    ).update({PasswordResetToken.used_at: datetime.utcnow()}, synchronize_session=False)
+    db.flush()
+    
+    # 6. Generate secure random token and save its SHA-256 hash
     raw_token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     
     reset_token = PasswordResetToken(
         user_id=user.id,
         token_hash=token_hash,
-        expires_at=datetime.utcnow() + timedelta(hours=1)
+        expires_at=datetime.utcnow() + timedelta(minutes=60),
+        ip_request=client_ip,
+        user_agent=request.headers.get("user-agent") or "",
+        created_at=datetime.utcnow()
     )
     db.add(reset_token)
     db.commit()
+    print("[forgot-password] Token hash saved to database.")
     
-    # Send email (mock if no SMTP)
+    # 7. Build recovery link using FRONTEND_URL env var
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip('/')
+    reset_link = f"{frontend_url}/reset-password?token={raw_token}"
+    
+    # 8. Send email
     smtp_host = os.environ.get("SMTP_HOST")
     smtp_port = os.environ.get("SMTP_PORT")
     smtp_user = os.environ.get("SMTP_USER")
     smtp_password = os.environ.get("SMTP_PASSWORD")
-    smtp_from = os.environ.get("SMTP_FROM_EMAIL", "no-reply@emdecob.com")
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    smtp_from_email = os.environ.get("SMTP_FROM_EMAIL", smtp_user or "no-reply@emdecob.com")
+    smtp_from_name = os.environ.get("SMTP_FROM_NAME", "JURICOB")
+    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    env = os.environ.get("ENVIRONMENT", "development").lower()
     
-    reset_link = f"{frontend_url}/reset-password?token={raw_token}"
-    
-    if smtp_host and smtp_port:
+    if not smtp_host:
+        print("[SMTP Error] SMTP no configurado. No se pudo enviar correo de recuperación.")
+        if env != "production":
+            print(f"[DEV ONLY] Enlace de recuperación: {reset_link}")
+        return response_msg
+        
+    try:
         import smtplib
-        msg = MIMEMultipart()
-        msg['From'] = smtp_from
-        msg['To'] = user.email
-        msg['Subject'] = "Recuperación de contraseña"
-        body = f"Hola {user.nombre or 'usuario'},\n\nPara recuperar tu contraseña ingresa al siguiente enlace:\n{reset_link}\n\nEste enlace expira en 1 hora."
-        msg.attach(MIMEText(body, 'plain'))
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
         
         try:
-            with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+            port = int(smtp_port)
+        except (ValueError, TypeError):
+            port = 587
+            
+        msg = MIMEMultipart()
+        msg['From'] = f"{smtp_from_name} <{smtp_from_email}>" if smtp_from_name else smtp_from_email
+        msg['To'] = user.email
+        msg['Subject'] = "Restablece tu contraseña - JURICOB"
+        
+        body = f"""Hola,
+
+Recibimos una solicitud para restablecer la contraseña de tu cuenta en JURICOB.
+
+Haz clic en el siguiente enlace para crear una nueva contraseña:
+
+{reset_link}
+
+Este enlace vencerá en 60 minutos.
+
+Por favor, no compartas este enlace con nadie. Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura.
+
+Equipo JURICOB"""
+        
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        if use_tls:
+            if port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, port)
+            else:
+                server = smtplib.SMTP(smtp_host, port)
                 server.starttls()
-                if smtp_user and smtp_password:
-                    server.login(smtp_user, smtp_password)
-                server.send_message(msg)
-        except Exception as e:
-            print(f"[SMTP Error] No se pudo enviar correo: {e}")
-            # Do not crash, let it return success
-    else:
-        print(f"[DEV ONLY] Token de recuperación para {user.email}: {reset_link}")
+        else:
+            server = smtplib.SMTP(smtp_host, port)
+            
+        if smtp_user and smtp_password:
+            server.login(smtp_user, smtp_password)
+            
+        server.send_message(msg)
+        server.quit()
+        print(f"[forgot-password] Email sent successfully to {user.email}")
+    except Exception as smtp_err:
+        print(f"[SMTP Error] No se pudo enviar correo de recuperación a {user.email}: {smtp_err}")
         
     return response_msg
 
@@ -2939,25 +3129,60 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
 @app.post("/auth/reset-password")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     import hashlib
+    import re
+    from datetime import datetime
+    
+    print("[reset-password] Request received.")
+    
+    if not data.token:
+        print("[reset-password] Error: Token missing.")
+        raise HTTPException(400, "El token es obligatorio")
+        
+    if not data.new_password:
+        print("[reset-password] Error: Password missing.")
+        raise HTTPException(400, "La nueva contraseña es obligatoria")
+        
     if data.new_password != data.confirm_password:
+        print("[reset-password] Error: Password mismatch.")
         raise HTTPException(400, "Las contraseñas no coinciden")
+        
+    if len(data.new_password) < 8:
+        print("[reset-password] Error: Password length < 8.")
+        raise HTTPException(400, "La contraseña debe tener al menos 8 caracteres")
+        
+    if not re.search(r"[a-zA-Z]", data.new_password) or not re.search(r"\d", data.new_password):
+        print("[reset-password] Error: Password weak.")
+        raise HTTPException(400, "La contraseña debe contener al menos una letra y un número")
         
     token_hash = hashlib.sha256(data.token.encode()).hexdigest()
     
     reset_token = db.query(PasswordResetToken).filter(
-        PasswordResetToken.token_hash == token_hash,
-        PasswordResetToken.used_at == None
+        PasswordResetToken.token_hash == token_hash
     ).first()
     
-    if not reset_token or reset_token.expires_at < datetime.utcnow():
-        raise HTTPException(400, "El token es inválido o ha expirado")
+    if not reset_token or reset_token.used_at is not None or reset_token.expires_at < datetime.utcnow():
+        print("[reset-password] Error: Token invalid, used or expired.")
+        raise HTTPException(400, "El enlace expiró o ya fue usado. Solicita uno nuevo.")
         
     user = reset_token.user
+    if not user or not user.is_active:
+        print("[reset-password] Error: User inactive.")
+        raise HTTPException(400, "El enlace expiró o ya fue usado. Solicita uno nuevo.")
+        
+    if user.company_id is not None:
+        from backend.models import Company
+        company = db.query(Company).filter(Company.id == user.company_id).first()
+        if not company or company.estado != "activo":
+            print(f"[reset-password] Error: Company {user.company_id} inactive.")
+            raise HTTPException(400, "El enlace expiró o ya fue usado. Solicita uno nuevo.")
+            
+    # Update password and invalidate token
     user.hashed_password = _hash_password(data.new_password)
     reset_token.used_at = datetime.utcnow()
-    
     db.commit()
-    return {"ok": True, "message": "Contraseña actualizada exitosamente"}
+    
+    print(f"[reset-password] Password updated successfully for user ID={user.id}")
+    return {"success": True, "message": "Contraseña actualizada correctamente."}
 
 @app.post("/auth/change-password")
 def change_password(
@@ -3746,16 +3971,16 @@ def download_cases_excel(
     mes_actuacion: Optional[str] = Query(default=None),
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
+    company_id: Optional[int] = Query(default=None),
 ):
-    # Multi-tenancy filter
-    is_jurico = "jurico" in current_user.username.lower() or current_user.id == 2 or current_user.username.lower() == "juricob"
-    
     q = db.query(Case).filter(Case.juzgado.isnot(None))
 
-    if is_jurico:
-        q = q.filter(or_(Case.user_id == current_user.id, Case.user_id == 2))
-    elif not current_user.is_admin:
-        q = q.filter(and_(Case.user_id != 2, Case.user_id.isnot(None)))
+    # Multi-tenancy filter: SaaS Isolation
+    if current_user.is_admin and not current_user.company_id:
+        if company_id is not None:
+            q = q.filter(Case.company_id == company_id)
+    else:
+        q = q.filter(Case.company_id == current_user.company_id)
 
     if solo_no_leidos:
         q = q.filter(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash)
@@ -3784,23 +4009,63 @@ def download_cases_excel(
         except:
             pass
 
-    cases = q.order_by(desc(Case.ultima_actuacion)).all()
+    # Eager load company and user to avoid N+1 query overhead
+    cases = (
+        q.options(joinedload(Case.company), joinedload(Case.user))
+        .order_by(desc(Case.ultima_actuacion))
+        .all()
+    )
 
-    data = [
-        {
+    case_ids = [c.id for c in cases]
+    latest_event_map = {}
+    if case_ids:
+        # Load latest events (actuaciones) for these cases in a single query to avoid N+1
+        events = (
+            db.query(CaseEvent.case_id, CaseEvent.event_date, CaseEvent.title, CaseEvent.detail)
+            .filter(CaseEvent.case_id.in_(case_ids))
+            .order_by(CaseEvent.case_id, desc(CaseEvent.event_date), desc(CaseEvent.id))
+            .all()
+        )
+        for ev in events:
+            if ev.case_id not in latest_event_map:
+                latest_event_map[ev.case_id] = ev
+
+    data = []
+    for c in cases:
+        ev = latest_event_map.get(c.id)
+        if ev:
+            title_str = (ev.title or "").strip()
+            detail_str = (ev.detail or "").strip()
+            
+            # Choose the longest / most complete text
+            if len(detail_str) >= len(title_str):
+                last_event_desc = detail_str or title_str
+            else:
+                last_event_desc = title_str or detail_str
+                
+            if not last_event_desc:
+                last_event_desc = "Sin actuaciones registradas"
+        else:
+            last_event_desc = "Sin actuaciones registradas"
+
+        data.append({
             "Radicado": c.radicado,
             "Demandante": c.demandante or "",
             "Demandado": c.demandado or "",
             "Cédula": c.cedula or "",
             "Abogado": c.abogado or "",
             "Juzgado": c.juzgado or "",
+            "Despacho": c.despacho or c.juzgado or "",
             "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
             "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+            "Fecha de última actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+            "Descripción última actuación": last_event_desc,
             "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
             "Estado": "No leído" if is_unread_case(c) else "Leído",
-        }
-        for c in cases
-    ]
+            "Fecha de creación": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
+            "Empresa": c.company.nombre if c.company else "",
+            "Usuario asignado": c.user.username if c.user else "",
+        })
 
     df = pd.DataFrame(data)
     output = BytesIO()
@@ -4019,20 +4284,19 @@ async def validate_selected(data: ValidateSelectedRequest, db: Session = Depends
 # =========================
 # CASE BY RADICADO
 # =========================
-@app.get("/cases/{case_id}")
-async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
-    c = db.query(Case).filter(Case.id == case_id).first()
-    if not c:
-        raise HTTPException(404, "Caso no encontrado")
-        
+def serialize_case(c: Case):
     return {
         "id": c.id,
+        "company_id": c.company_id,
         "radicado": c.radicado,
         "id_proceso": c.id_proceso,
         "demandante": c.demandante,
         "demandado": c.demandado,
         "juzgado": c.juzgado,
         "alias": c.alias,
+        "cedula": c.cedula,
+        "abogado": c.abogado,
+        "telefono": c.telefono,
         "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
         "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
         "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
@@ -4042,7 +4306,188 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
         "has_documents": c.has_documents,
         "sync_pub_status": c.sync_pub_status,
         "sync_pub_progress": c.sync_pub_progress,
+        "is_active": c.is_active,
+        
+        # Fallback search columns
+        "despacho": c.despacho or c.juzgado,
+        "clase_proceso": c.clase_proceso,
+        "tipo_proceso": c.tipo_proceso,
+        "estado": c.estado,
+        "ponente_juez": c.ponente_juez,
+        "departamento": c.departamento,
+        "municipio": c.municipio,
+        "ubicacion": c.ubicacion,
+        "fuente_encontrado": c.fuente_encontrado,
+        "url_fuente": c.url_fuente,
+        "metodo_busqueda": c.metodo_busqueda,
+        "confianza_busqueda": c.confianza_busqueda,
+        "encontrado_en_fuente_alternativa": c.encontrado_en_fuente_alternativa or False,
+        "requiere_revision": c.requiere_revision or False,
     }
+
+# =========================
+# CASE SEARCH & FALLBACKS (FASE 1)
+# =========================
+
+@app.post("/api/cases/search")
+@app.post("/cases/search")
+async def search_case_endpoint(
+    req: CaseSearchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.service.fallback_search import search_radicado_with_fallbacks
+    
+    company_id = req.company_id
+    if current_user.is_superadmin or (current_user.is_admin and not current_user.company_id):
+        if not company_id:
+            raise HTTPException(400, "Selecciona una empresa para asociar el radicado.")
+        from backend.models import Company
+        comp = db.query(Company).filter(Company.id == company_id).first()
+        if not comp:
+            raise HTTPException(444, "La empresa especificada no existe")
+    else:
+        company_id = current_user.company_id
+        
+    if not company_id:
+        raise HTTPException(400, "Empresa no especificada.")
+        
+    result = await search_radicado_with_fallbacks(
+        radicado=req.radicado,
+        company_id=company_id,
+        db=db,
+        current_user=current_user,
+        force=req.force
+    )
+    
+    if result["status"] in ["found", "found_alternative"] and result.get("case") is not None:
+        result["case"] = serialize_case(result["case"])
+        
+    return result
+
+@app.get("/api/cases/{radicado}")
+@app.get("/cases/{radicado}")
+async def get_case_by_radicado_unified(
+    radicado: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    r = clean_str(radicado)
+    if not r:
+        raise HTTPException(400, "Radicado o ID no especificado")
+        
+    q = db.query(Case)
+    if not (current_user.is_superadmin or (current_user.is_admin and not current_user.company_id)):
+        q = q.filter(Case.company_id == current_user.company_id)
+        
+    is_id = False
+    if r.isdigit() and len(r) < 10:
+        is_id = True
+        
+    if is_id:
+        c = q.filter(Case.id == int(r)).first()
+    else:
+        c = q.filter(Case.radicado == r).first()
+        
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+        
+    try:
+        from backend.service.publicaciones import auto_queue_publicaciones_for_case
+        auto_queue_publicaciones_for_case(db, c)
+    except Exception as e:
+        print(f"[get_case_by_radicado_unified] Error auto-queueing: {e}")
+        
+    return serialize_case(c)
+
+@app.get("/api/cases/{radicado}/fuentes")
+@app.get("/cases/{radicado}/fuentes")
+async def get_case_sources_history_endpoint(
+    radicado: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.models import CaseSearchSourceResult
+    r = clean_str(radicado)
+    if not r:
+        raise HTTPException(400, "Radicado no especificado")
+        
+    q = db.query(CaseSearchSourceResult).filter(CaseSearchSourceResult.radicado == r)
+    if not (current_user.is_superadmin or (current_user.is_admin and not current_user.company_id)):
+        q = q.filter(CaseSearchSourceResult.company_id == current_user.company_id)
+        
+    results = q.order_by(CaseSearchSourceResult.created_at.desc()).all()
+    
+    return [
+        {
+            "id": res.id,
+            "case_id": res.case_id,
+            "company_id": res.company_id,
+            "radicado": res.radicado,
+            "fuente": res.fuente,
+            "tipo_fuente": res.tipo_fuente,
+            "url": res.url,
+            "encontrado": res.encontrado,
+            "confianza": res.confianza,
+            "estado": res.estado,
+            "mensaje": res.mensaje,
+            "datos_extraidos_json": json.loads(res.datos_extraidos_json) if res.datos_extraidos_json else None,
+            "raw_response": json.loads(res.raw_response) if (res.raw_response and res.raw_response.startswith("{")) else res.raw_response,
+            "error_type": res.error_type,
+            "http_status": res.http_status,
+            "duration_ms": res.duration_ms,
+            "source_order": res.source_order,
+            "force": res.force,
+            "requiere_revision": res.requiere_revision,
+            "created_by": res.created_by,
+            "created_at": res.created_at.isoformat() if res.created_at else None,
+        }
+        for res in results
+    ]
+
+@app.post("/api/cases/{radicado}/buscar-nuevamente")
+@app.post("/cases/{radicado}/buscar-nuevamente")
+async def buscar_nuevamente_endpoint_route(
+    radicado: str,
+    req: Optional[BuscarNuevamenteRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.service.fallback_search import search_radicado_with_fallbacks
+    
+    company_id = req.company_id if req else None
+    if current_user.is_superadmin or (current_user.is_admin and not current_user.company_id):
+        if not company_id:
+            raise HTTPException(400, "Selecciona una empresa para asociar el radicado.")
+    else:
+        company_id = current_user.company_id
+        
+    result = await search_radicado_with_fallbacks(
+        radicado=radicado,
+        company_id=company_id,
+        db=db,
+        current_user=current_user,
+        force=True
+    )
+    
+    if result["status"] in ["found", "found_alternative"] and result.get("case") is not None:
+        result["case"] = serialize_case(result["case"])
+        
+    return result
+
+@app.get("/cases/{case_id}")
+async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+        
+    try:
+        from backend.service.publicaciones import auto_queue_publicaciones_for_case
+        auto_queue_publicaciones_for_case(db, c)
+    except Exception as e:
+        print(f"[get_case_by_id] Error auto-queueing publications: {e}")
+        
+    return serialize_case(c)
 
 @app.get("/api/cases/id/{case_id}")
 @app.get("/cases/id/{case_id}")
@@ -4629,6 +5074,13 @@ async def sync_case_events_background(case_id: int):
         
         c.last_check_at = now_colombia()
         db.commit()
+
+        try:
+            from backend.service.publicaciones import auto_queue_publicaciones_for_case
+            auto_queue_publicaciones_for_case(db, c)
+        except Exception as pub_queue_err:
+            print(f"[BG-SYNC] Error auto-queueing publications for {c.radicado}: {pub_queue_err}")
+
         if new_count > 0:
             print(f"[BG-SYNC] {new_count} nuevas actuaciones encontradas para {c.radicado}")
     except Exception as e:
@@ -5190,28 +5642,32 @@ async def get_case_publications(
     current_user: User = Depends(get_current_user)
 ):
     q_case = db.query(Case).filter(Case.radicado == radicado)
-    if not current_user.is_admin and current_user.company_id:
+    if current_user.company_id is not None:
         q_case = q_case.filter(Case.company_id == current_user.company_id)
     
     case = q_case.first()
-    
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
         
+    # Enforce company isolation for publications
     q_pubs = db.query(CasePublication).filter(CasePublication.case_id == case.id)
-    if not is_superadmin(current_user):
-        q_pubs = q_pubs.filter(CasePublication.estado_validacion == "validado")
+    if case.company_id is not None:
+        q_pubs = q_pubs.filter(CasePublication.company_id == case.company_id)
+        
     pubs = q_pubs.order_by(desc(CasePublication.fecha_publicacion)).all()
     
     # Auto-encolar búsquedas si faltan (liviano, sin scraping web)
-    from backend.service.publicaciones import auto_queue_publicaciones
-    auto_queue_publicaciones(db, radicado, force=False, source_trigger="view_case")
+    from backend.service.publicaciones import auto_queue_publicaciones_for_case
+    auto_queue_publicaciones_for_case(db, case, force=False)
     
-    # Consultar estado de la cola
+    # Consultar estado de la cola (respetando company_id)
     from backend.models import CasePublicationSearch
-    busquedas_db = db.query(CasePublicationSearch).filter(CasePublicationSearch.radicado == radicado).all()
+    busquedas_db = db.query(CasePublicationSearch).filter(
+        CasePublicationSearch.company_id == case.company_id,
+        CasePublicationSearch.radicado == radicado
+    ).all()
     
-    # Estado consolidado para compatibilidad
+    # Estado consolidado
     global_status = "completado"
     if any(b.estado in ["pendiente", "procesando"] for b in busquedas_db):
         global_status = "procesando"
@@ -5220,42 +5676,48 @@ async def get_case_publications(
     elif not pubs and any(b.estado == "sin_resultado" for b in busquedas_db):
         global_status = "sin_resultado"
         
+    def serialize_pub(p):
+        return {
+            "id": p.id,
+            "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
+            "tipo_publicacion": p.tipo_publicacion,
+            "descripcion": p.descripcion,
+            "documento_url": p.documento_url,
+            "source_url": p.source_url,
+            "source_id": p.source_id,
+            "fecha_estado_electronico": p.fecha_estado_electronico.isoformat() if p.fecha_estado_electronico else None,
+            "numero_estado": p.numero_estado,
+            "match_fuerte": p.match_fuerte,
+            "match_type": p.match_type,
+            "motivo_match": p.motivo_match,
+            "url_fuente_principal": p.url_fuente_principal,
+            "tipo_fuente_principal": p.tipo_fuente_principal,
+            "documentos_complementarios": p.documentos_complementarios,
+            "url_resumen_publicacion": p.url_resumen_publicacion,
+            "url_cuadro": p.url_cuadro,
+            "url_providencia": p.url_providencia,
+            "observacion": p.observacion,
+            "estado_validacion": getattr(p, "estado_validacion", "requiere_revision") or "requiere_revision",
+            "match_score": getattr(p, "match_score", 0),
+            "texto_bloque_match": getattr(p, "texto_bloque_match", ""),
+            "motivo_descarte": getattr(p, "motivo_descarte", ""),
+            "fuente_principal_validada": getattr(p, "fuente_principal_validada", False),
+            "requiere_revision": getattr(p, "requiere_revision", True),
+            "elementos_detectados": getattr(p, "elementos_detectados", ""),
+            "documento_nombre": getattr(p, "documento_nombre", ""),
+            "extraction_quality": getattr(p, "extraction_quality", "")
+        }
+
+    serialized_pubs = [serialize_pub(p) for p in pubs if getattr(p, "estado_validacion", "requiere_revision") != "descartado"]
+    validadas = [p for p in serialized_pubs if p["estado_validacion"] == "validado"]
+    req_revision = [p for p in serialized_pubs if p["estado_validacion"] == "requiere_revision"]
+    
     return {
         "radicado": radicado,
-        "items": [
-            {
-                "id": p.id,
-                "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
-                "tipo_publicacion": p.tipo_publicacion,
-                "descripcion": p.descripcion,
-                "documento_url": p.documento_url,
-                "source_url": p.source_url,
-                "source_id": p.source_id,
-                "fecha_estado_electronico": p.fecha_estado_electronico.isoformat() if p.fecha_estado_electronico else None,
-                "numero_estado": p.numero_estado,
-                "match_fuerte": p.match_fuerte,
-                "match_type": p.match_type,
-                "motivo_match": p.motivo_match,
-                "url_fuente_principal": p.url_fuente_principal,
-                "tipo_fuente_principal": p.tipo_fuente_principal,
-                "documentos_complementarios": p.documentos_complementarios,
-                "url_resumen_publicacion": p.url_resumen_publicacion,
-                "url_cuadro": p.url_cuadro,
-                "url_providencia": p.url_providencia,
-                "observacion": p.observacion,
-                # Campos de validación estricta
-                "estado_validacion": getattr(p, "estado_validacion", "requiere_revision") or "requiere_revision",
-                "match_score": getattr(p, "match_score", 0),
-                "texto_bloque_match": getattr(p, "texto_bloque_match", ""),
-                "motivo_descarte": getattr(p, "motivo_descarte", ""),
-                "fuente_principal_validada": getattr(p, "fuente_principal_validada", False),
-                "requiere_revision": getattr(p, "requiere_revision", True),
-                "elementos_detectados": getattr(p, "elementos_detectados", ""),
-                "documento_nombre": getattr(p, "documento_nombre", ""),
-                "extraction_quality": getattr(p, "extraction_quality", "")
-            }
-            for p in pubs if getattr(p, "estado_validacion", "requiere_revision") != "descartado"
-        ],
+        "company_id": case.company_id,
+        "publicaciones": validadas,
+        "requiere_revision": req_revision,
+        "items": serialized_pubs, # Para compatibilidad
         "busquedas": [
             {
                 "mes_busqueda": b.mes_busqueda,
@@ -5279,7 +5741,7 @@ async def get_case_publications_by_id(
     current_user: User = Depends(get_current_user)
 ):
     q_case = db.query(Case).filter(Case.id == case_id)
-    if not current_user.is_admin and current_user.company_id:
+    if current_user.company_id is not None:
         q_case = q_case.filter(Case.company_id == current_user.company_id)
         
     case = q_case.first()
@@ -5386,17 +5848,51 @@ async def sync_case_publications(radicado: str, background_tasks: BackgroundTask
     background_tasks.add_task(run_sync_publications_task, case.radicado, True)
     return {"ok": True, "message": "Sincronización iniciada en segundo plano"}
 
-@app.post("/api/cases/id/{case_id}/refresh-publicaciones")
-@app.post("/cases/id/{case_id}/refresh-publicaciones")
-async def refresh_publications_by_id(case_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case: return {"ok": False, "error": "Caso no encontrado"}
-    
-    from backend.service.publicaciones import auto_queue_publicaciones
-    queued = auto_queue_publicaciones(db, case.radicado, force=True, source_trigger="manual_refresh")
+@app.post("/api/cases/{radicado}/refresh-publicaciones")
+@app.post("/cases/{radicado}/refresh-publicaciones")
+async def refresh_publications_by_radicado(
+    radicado: str,
+    force: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    q_case = db.query(Case).filter(Case.radicado == radicado)
+    if current_user.company_id is not None:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        
+    case = q_case.first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    from backend.service.publicaciones import auto_queue_publicaciones_for_case
+    queued = auto_queue_publicaciones_for_case(db, case, force=force)
     
     if queued > 0:
-        return {"ok": True, "message": f"Sincronización forzada iniciada para {queued} mes(es)."}
+        return {"ok": True, "message": f"Sincronización manual/forzada encolada para {queued} mes(es)."}
+    else:
+        return {"ok": True, "message": "El caso no tiene actuaciones relevantes para buscar publicaciones."}
+
+@app.post("/api/cases/id/{case_id}/refresh-publicaciones")
+@app.post("/cases/id/{case_id}/refresh-publicaciones")
+async def refresh_publications_by_id(
+    case_id: int,
+    force: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    q_case = db.query(Case).filter(Case.id == case_id)
+    if current_user.company_id is not None:
+        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        
+    case = q_case.first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    from backend.service.publicaciones import auto_queue_publicaciones_for_case
+    queued = auto_queue_publicaciones_for_case(db, case, force=force)
+    
+    if queued > 0:
+        return {"ok": True, "message": f"Sincronización manual/forzada encolada para {queued} mes(es)."}
     else:
         return {"ok": True, "message": "El caso no tiene actuaciones relevantes para buscar publicaciones."}
 

@@ -147,6 +147,21 @@ export type CaseByRadicadoResponse = {
   unread?: boolean;
   has_documents?: boolean;
   note?: string | null;
+  
+  despacho?: string | null;
+  clase_proceso?: string | null;
+  tipo_proceso?: string | null;
+  estado?: string | null;
+  ponente_juez?: string | null;
+  departamento?: string | null;
+  municipio?: string | null;
+  ubicacion?: string | null;
+  fuente_encontrado?: string | null;
+  url_fuente?: string | null;
+  metodo_busqueda?: string | null;
+  confianza_busqueda?: number | null;
+  encontrado_en_fuente_alternativa?: boolean;
+  requiere_revision?: boolean;
 };
 
 export function getCaseByRadicado(radicado: string) {
@@ -292,6 +307,21 @@ export type CaseRow = {
   cedula?: string | null;
   abogado?: string | null;
   has_tasks?: boolean;
+  
+  despacho?: string | null;
+  clase_proceso?: string | null;
+  tipo_proceso?: string | null;
+  estado?: string | null;
+  ponente_juez?: string | null;
+  departamento?: string | null;
+  municipio?: string | null;
+  ubicacion?: string | null;
+  fuente_encontrado?: string | null;
+  url_fuente?: string | null;
+  metodo_busqueda?: string | null;
+  confianza_busqueda?: number | null;
+  encontrado_en_fuente_alternativa?: boolean;
+  requiere_revision?: boolean;
 };
 
 export type CasesResponse = {
@@ -353,6 +383,7 @@ export function downloadCasesExcel(params: {
   mes_actuacion?: string;
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
+  company_id?: number;
 }) {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
   const qs = new URLSearchParams();
@@ -363,6 +394,7 @@ export function downloadCasesExcel(params: {
   if (params.mes_actuacion) qs.set("mes_actuacion", params.mes_actuacion);
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
+  if (params.company_id !== undefined) qs.set("company_id", String(params.company_id));
   const q = qs.toString();
   const token = getToken();
   const downloadUrl = `${cleanBaseUrl}/cases/download?${q}${token ? `&token=${token}` : ""}`;
@@ -1121,5 +1153,25 @@ export function updateCaseIdProceso(caseId: number, idProceso: string) {
   return apiFetch<any>(`/cases/${caseId}/id-proceso`, {
     method: "PATCH",
     body: JSON.stringify({ id_proceso: idProceso }),
+  });
+}
+
+export function searchCaseFallback(radicado: string, companyId?: number, force?: boolean) {
+  return apiFetch<any>("/cases/search", {
+    method: "POST",
+    body: JSON.stringify({ radicado, company_id: companyId, force }),
+  });
+}
+
+export function getCaseSourcesHistory(radicado: string) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<any[]>(`/cases/${r}/fuentes`);
+}
+
+export function buscarNuevamente(radicado: string, companyId?: number) {
+  const r = encodeURIComponent(radicado.trim());
+  return apiFetch<any>(`/cases/${r}/buscar-nuevamente`, {
+    method: "POST",
+    body: JSON.stringify({ company_id: companyId }),
   });
 }

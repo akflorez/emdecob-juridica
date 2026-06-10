@@ -15,6 +15,40 @@ def normalize_case(source_name: str, raw_data: dict) -> dict:
         "metadata": raw_data.get("metadata", {})
     }
 
+def normalize_case_result(source_result: dict, source_name: str = None) -> dict:
+    """
+    Normalizes case details from any source into a unified structure.
+    """
+    raw_data = source_result.get("data", {}) if "data" in source_result else source_result
+    
+    # Calculate match/confidence
+    radicado = raw_data.get("radicado", "")
+    confianza = raw_data.get("confianza_busqueda", raw_data.get("confianza", 90))
+    encontrado_en_alt = raw_data.get("encontrado_en_fuente_alternativa", True)
+    req_revision = raw_data.get("requiere_revision", False)
+    
+    return {
+        "radicado": radicado,
+        "despacho": raw_data.get("despacho") or raw_data.get("juzgado") or "No especificado",
+        "departamento": raw_data.get("departamento") or "No especificado",
+        "municipio": raw_data.get("municipio") or "No especificado",
+        "clase_proceso": raw_data.get("clase_proceso") or "No especificado",
+        "tipo_proceso": raw_data.get("tipo_proceso") or "No especificado",
+        "fecha_radicacion": raw_data.get("fecha_radicacion"),
+        "fecha_ultima_actuacion": raw_data.get("fecha_ultima_actuacion") or raw_data.get("ultima_actuacion"),
+        "demandante": raw_data.get("demandante") or "No especificado",
+        "demandado": raw_data.get("demandado") or "No especificado",
+        "estado": raw_data.get("estado") or "activo",
+        "ubicacion": raw_data.get("ubicacion") or "No especificado",
+        "ponente_juez": raw_data.get("ponente_juez") or raw_data.get("juez") or "No especificado",
+        "origen_fuente": source_name or raw_data.get("origen_fuente") or "fuente_alternativa",
+        "url_fuente": raw_data.get("url_fuente") or source_result.get("url") or "",
+        "fuente_principal": raw_data.get("fuente_principal") or "Rama Judicial (Alternativa)",
+        "confianza_busqueda": confianza,
+        "encontrado_en_fuente_alternativa": encontrado_en_alt,
+        "requiere_revision": req_revision
+    }
+
 def normalize_event(source_name: str, raw_event: dict) -> dict:
     """Standardizes case events/actuaciones."""
     return {

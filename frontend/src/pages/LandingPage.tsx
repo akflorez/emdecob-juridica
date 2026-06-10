@@ -231,9 +231,8 @@ export default function LandingPage() {
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
         {/* Lado izquierdo */}
         <div className="lg:col-span-6 space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00B873]/10 border border-[#00B873]/25 text-xs font-semibold text-[#00B873] mb-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00B873] animate-pulse"></span>
-            Plataforma Premium de Gestión Judicial
+          <div className="text-2xl font-bold tracking-wider text-[#00B873] uppercase mb-1">
+            JURICOB
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.1]">
             Gestión judicial inteligente en una sola plataforma
@@ -251,13 +250,13 @@ export default function LandingPage() {
               </Button>
               <Button 
                 onClick={() => scrollToSection('contacto')} 
-                className="border border-slate-700 hover:border-slate-500 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
+                className="border border-white/30 hover:border-white hover:bg-white/10 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
               >
                 Solicitar demo
               </Button>
               <Button 
                 onClick={() => navigate('/register-company')} 
-                className="border border-slate-700 hover:border-slate-500 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
+                className="border border-white/30 hover:border-white hover:bg-white/10 text-white px-6 py-4 rounded-lg text-sm font-semibold bg-transparent transition-all h-auto"
               >
                 Crear cuenta
               </Button>
@@ -274,7 +273,7 @@ export default function LandingPage() {
                 const Icon = item.icon;
                 return (
                   <div key={idx} className="flex flex-col gap-2 items-center sm:items-start text-center sm:text-left group">
-                    <div className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-[#00B873] bg-[#061B2E]/50 group-hover:border-[#00B873]/50 transition-colors">
+                    <div className="w-10 h-10 rounded-full border border-[#00B873]/30 flex items-center justify-center text-[#00B873] bg-transparent group-hover:border-[#00B873] group-hover:bg-[#00B873]/10 transition-all duration-300">
                       <Icon className="w-4 h-4" />
                     </div>
                     <span className="text-xs font-semibold text-slate-300 max-w-[120px]">{item.t}</span>
@@ -286,11 +285,11 @@ export default function LandingPage() {
 
         {/* Lado derecho: Image Mockup */}
         <div className="lg:col-span-6 flex justify-center lg:justify-end w-full">
-          <div className="relative w-full max-w-[720px] rounded-3xl overflow-hidden shadow-[0_25px_60px_rgba(0,184,115,0.18)] border border-slate-800 transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_25px_60px_rgba(0,184,115,0.28)]">
+          <div className="relative w-full max-w-[720px] transition-all duration-500 hover:scale-[1.02]">
             <img 
               src="/juricob-hero-mockup.png" 
               alt="JURICOB Dashboard and Mobile View Mockup" 
-              className="w-full h-auto object-cover"
+              className="w-full h-auto object-contain drop-shadow-[0_20px_50px_rgba(0,184,115,0.25)]"
             />
           </div>
         </div>
@@ -403,8 +402,8 @@ export default function LandingPage() {
               const Icon = card.icon;
               return (
                 <div key={idx} className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#00B873]/30 hover:-translate-y-1.5 transition-all duration-300 flex flex-col items-center text-center group cursor-default">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-[#00B873] flex items-center justify-center mb-6 group-hover:bg-[#00B873] group-hover:text-white transition-all duration-300 group-hover:scale-105">
-                    <Icon className="w-7 h-7" />
+                  <div className="text-[#00B873] flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110">
+                    <Icon className="w-10 h-10 stroke-[1.5]" />
                   </div>
                   <h3 className="text-base font-bold text-[#031827] mb-3">{card.t}</h3>
                   <p className="text-slate-500 text-sm font-light leading-relaxed">{card.d}</p>
@@ -425,7 +424,7 @@ export default function LandingPage() {
           </h2>
         </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-6 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-8 text-center">
             {[
               { t: "Información centralizada", icon: Database },
               { t: "Reducción de falsos positivos", icon: ShieldCheck },
@@ -438,11 +437,11 @@ export default function LandingPage() {
             ].map((b, idx) => {
               const Icon = b.icon;
               return (
-                <div key={idx} className="flex flex-col items-center gap-3 p-5 bg-white/5 rounded-2xl border border-white/10 hover:border-[#00B873]/50 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
-                  <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-[#00B873] bg-white/5">
-                    <Icon className="w-5 h-5" />
+                <div key={idx} className="flex flex-col items-center gap-4 group cursor-default">
+                  <div className="w-14 h-14 rounded-full border border-[#00B873]/30 flex items-center justify-center text-[#00B873] bg-transparent group-hover:border-[#00B873] group-hover:bg-[#00B873]/10 transition-all duration-300 group-hover:scale-105">
+                    <Icon className="w-6 h-6 stroke-[1.5]" />
                   </div>
-                  <span className="text-xs font-semibold text-slate-200">{b.t}</span>
+                  <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors leading-relaxed max-w-[120px]">{b.t}</span>
                 </div>
               );
             })}
@@ -460,53 +459,76 @@ export default function LandingPage() {
           </h2>
         </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {/* Plan Básico */}
-            <div className="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-slate-200 hover:-translate-y-1 transition-all duration-300 relative">
+            <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-slate-300 hover:-translate-y-1.5 transition-all duration-300 relative">
               <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#00B873] flex items-center justify-center">
-                    <FileText className="w-5 h-5" />
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full border border-[#00B873]/30 text-[#00B873] flex items-center justify-center shrink-0">
+                    <FileText className="w-6 h-6 stroke-[1.5]" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Plan Básico</h3>
-                    <p className="text-xs text-slate-400 font-light">Consulta y seguimiento de procesos judiciales.</p>
+                    <h3 className="text-xl font-bold text-slate-900">Plan Básico</h3>
+                    <p className="text-xs text-slate-400 font-light mt-0.5">Consulta y seguimiento de procesos judiciales.</p>
                   </div>
                 </div>
                 <div className="h-px bg-slate-100"></div>
-                <ul className="space-y-3 text-sm text-slate-600">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta de procesos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Búsqueda de radicados</li>
+                <ul className="space-y-3.5 text-sm text-slate-600">
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Consulta de procesos</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Actuaciones básicas</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg transition-colors">
                 Solicitar cotización
               </Button>
             </div>
 
-            {/* Plan Premium */}
-            <div className="p-8 bg-[#061B2E] border-2 border-[#00B873] rounded-3xl shadow-[0_15px_35px_rgba(0,184,115,0.15)] flex flex-col justify-between text-white hover:-translate-y-1 transition-all duration-300 relative">
-              <div className="absolute top-0 right-0 bg-[#00B873] text-white text-[9px] font-bold tracking-widest px-4 py-1.5 uppercase rounded-bl-2xl shadow-md">Popular</div>
+            {/* Plan Profesional */}
+            <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-slate-300 hover:-translate-y-1.5 transition-all duration-300 relative">
               <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/10 text-[#00B873] flex items-center justify-center">
-                    <Star className="w-5 h-5 fill-[#00B873]" />
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full border border-[#00B873]/30 text-[#00B873] flex items-center justify-center shrink-0">
+                    <Star className="w-6 h-6 stroke-[1.5]" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">Plan Premium</h3>
-                    <p className="text-xs text-slate-300 font-light">Publicaciones procesales, actuaciones avanzadas, alertas, tareas y usuarios por empresa.</p>
+                    <h3 className="text-xl font-bold text-slate-900">Plan Profesional</h3>
+                    <p className="text-xs text-slate-400 font-light mt-0.5">Publicaciones procesales, alertas, tareas y usuarios por empresa.</p>
                   </div>
                 </div>
-                <div className="h-px bg-slate-800"></div>
-                <ul className="space-y-3 text-sm text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Consulta de procesos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Búsqueda de radicados</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Gestión de tareas</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
+                <div className="h-px bg-slate-100"></div>
+                <ul className="space-y-3.5 text-sm text-slate-600">
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Estados electrónicos</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Alertas y vencimientos</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Gestión de tareas</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Usuarios por empresa</li>
                 </ul>
               </div>
-              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#00B873] hover:bg-[#00A86B] text-white py-3 h-auto font-semibold rounded-lg shadow-md shadow-[#00B873]/15">
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg transition-colors">
+                Solicitar cotización
+              </Button>
+            </div>
+
+            {/* Plan Empresarial */}
+            <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-slate-300 hover:-translate-y-1.5 transition-all duration-300 relative">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full border border-[#00B873]/30 text-[#00B873] flex items-center justify-center shrink-0">
+                    <Building2 className="w-6 h-6 stroke-[1.5]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">Plan Empresarial</h3>
+                    <p className="text-xs text-slate-400 font-light mt-0.5">Multiempresa, SuperAdmin, facturación, auditoría y analítica.</p>
+                  </div>
+                </div>
+                <div className="h-px bg-slate-100"></div>
+                <ul className="space-y-3.5 text-sm text-slate-600">
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Todo en Plan Profesional</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Administración multiempresa</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Panel SuperAdmin SaaS</li>
+                  <li className="flex items-center gap-2.5"><Check className="w-4.5 h-4.5 text-[#00B873] shrink-0" /> Facturación y auditoría avanzada</li>
+                </ul>
+              </div>
+              <Button onClick={() => scrollToSection('contacto')} className="w-full mt-8 bg-[#031827] hover:bg-[#082A3A] text-white py-3 h-auto font-semibold rounded-lg transition-colors">
                 Solicitar cotización
               </Button>
             </div>
@@ -599,7 +621,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <span className="text-xs text-slate-400 block font-semibold uppercase">CORREO ELECTRÓNICO</span>
-                    <span className="font-semibold text-sm text-slate-700 font-mono">direccionejecutiva@emdecob.com</span>
+                    <span className="font-semibold text-sm text-slate-700 font-mono">direccionanalitica@emdecob.com</span>
                   </div>
                 </div>
 
@@ -609,7 +631,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <span className="text-xs text-slate-400 block font-semibold uppercase">TELÉFONO</span>
-                    <span className="font-semibold text-sm text-slate-700 font-mono">314 892 3929</span>
+                    <span className="font-semibold text-sm text-slate-700 font-mono">314 247 2622</span>
                   </div>
                 </div>
 
@@ -641,28 +663,67 @@ export default function LandingPage() {
       </section>
 
       {/* 9. FOOTER */}
-      <footer className="bg-[#031827] text-white py-12 border-t border-slate-800">
+      <footer className="bg-[#031827] text-white py-16 border-t border-slate-800/85">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-8 border-b border-slate-800 pb-8 mb-8">
-            <div className="flex items-center gap-3">
-              <img 
-                src="/juricob-shield.png" 
-                alt="JURICOB Shield Logo" 
-                className="w-12 h-12 object-contain"
-              />
-              <div className="flex flex-col">
-                <span className="font-sans text-lg tracking-widest font-bold leading-none">JURICOB</span>
-                <span className="text-[8px] text-[#00B873] uppercase tracking-widest block mt-1 leading-none font-bold">PORTAL JURÍDICO</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 border-b border-slate-800/80 pb-12 mb-8">
+            {/* Column 1: Logo & Text */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <img 
+                  src="/juricob-shield.png" 
+                  alt="JURICOB Shield Logo" 
+                  className="w-12 h-12 object-contain"
+                />
+                <div className="flex flex-col">
+                  <span className="font-sans text-lg tracking-widest font-bold leading-none">JURICOB</span>
+                  <span className="text-[8px] text-[#00B873] uppercase tracking-widest block mt-1 leading-none font-bold">PORTAL JURÍDICO</span>
+                </div>
               </div>
+              <p className="text-slate-400 text-sm font-light leading-relaxed max-w-[240px]">
+                Conectamos la ley, la información y la gestión judicial en una sola plataforma.
+              </p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-400">
-              <button onClick={() => scrollToSection('inicio')} className="hover:text-white transition-colors">Inicio</button>
-              <button onClick={() => scrollToSection('plataforma')} className="hover:text-white transition-colors">Plataforma</button>
-              <button onClick={() => scrollToSection('funcionalidades')} className="hover:text-white transition-colors">Funcionalidades</button>
-              <button onClick={() => scrollToSection('beneficios')} className="hover:text-white transition-colors">Beneficios</button>
-              <button onClick={() => scrollToSection('planes')} className="hover:text-white transition-colors">Planes</button>
-              <button onClick={() => scrollToSection('contacto')} className="hover:text-white transition-colors">Contacto</button>
+            {/* Column 2: Enlaces Rápidos */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Enlaces rápidos</h4>
+              <ul className="space-y-2.5 text-sm text-slate-400">
+                <li><button onClick={() => scrollToSection('inicio')} className="hover:text-white transition-colors">Inicio</button></li>
+                <li><button onClick={() => scrollToSection('plataforma')} className="hover:text-white transition-colors">Plataforma</button></li>
+                <li><button onClick={() => scrollToSection('funcionalidades')} className="hover:text-white transition-colors">Funcionalidades</button></li>
+              </ul>
+            </div>
+
+            {/* Column 3: Beneficios */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Beneficios</h4>
+              <ul className="space-y-2.5 text-sm text-slate-400">
+                <li><button onClick={() => scrollToSection('beneficios')} className="hover:text-white transition-colors">Beneficios</button></li>
+                <li><button onClick={() => scrollToSection('planes')} className="hover:text-white transition-colors">Planes</button></li>
+                <li><button onClick={() => scrollToSection('contacto')} className="hover:text-white transition-colors">Contacto</button></li>
+              </ul>
+            </div>
+
+            {/* Column 4: Recursos */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Recursos</h4>
+              <ul className="space-y-2.5 text-sm text-slate-400">
+                <li><a href="#privacy" className="hover:text-white transition-colors">Política de privacidad</a></li>
+                <li><a href="#terms" className="hover:text-white transition-colors">Términos y condiciones</a></li>
+                <li><a href="#support" className="hover:text-white transition-colors">Soporte</a></li>
+              </ul>
+            </div>
+
+            {/* Column 5: Desarrollado por EMDECOB */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Desarrollado por EMDECOB</h4>
+              <div className="flex items-center gap-2.5 mt-2">
+                <svg className="w-8 h-8" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="20" cy="20" r="18" stroke="#00B873" strokeWidth="2.5" fill="none" />
+                  <path d="M14 13C14 12.4477 14.4477 12 15 12H25C25.5523 12 26 12.4477 26 13V15C26 15.5523 25.5523 16 25 16H18V18H23C23.5523 18 24 18.4477 24 19V21C24 21.5523 23.5523 22 23 22H18V24H25C25.5523 24 26 24.4477 26 25V27C26 27.5523 25.5523 28 25 28H15C14.4477 28 14 27.5523 14 27V13Z" fill="white" />
+                </svg>
+                <span className="font-bold text-white text-base tracking-widest font-sans uppercase">EMDECOB</span>
+              </div>
             </div>
           </div>
 

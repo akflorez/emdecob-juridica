@@ -44,7 +44,7 @@ const App = () => (
               <Route path="/register-company" element={<LoginPage initialView="register" />} />
               <Route path="/register" element={<Navigate to="/register-company" replace />} />
               <Route path="/forgot-password" element={<LoginPage initialView="forgot_password" />} />
-              <Route path="/reset-password" element={<Navigate to="/forgot-password" replace />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
               
               {/* Rutas protegidas */}

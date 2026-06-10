@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, FileText, Loader2, Filter, AlertCircle, 
   Download, User, Users, Building2, Hash, Paperclip, ChevronDown,
-  FileDown, RefreshCw, ArrowRight, UserCheck, Edit3, ChevronRight
+  FileDown, RefreshCw, ArrowRight, UserCheck, Edit3, ChevronRight,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,8 @@ import {
   updateCaseLawyer,
   getDocumentosActuacion,
   createTask,
+  getCaseSourcesHistory,
+  buscarNuevamente,
   type User,
   type Task as TaskType,
   apiFetch
@@ -219,12 +222,61 @@ export default function CasoDetailPage() {
   const fetchMultisourceChecks = async (caseId: number) => {
     setIsLoadingMultisource(true);
     try {
-      const res = await apiFetch<any[]>(`/api/cases/${caseId}/multisource-checks`);
-      setMultisourceChecks(res || []);
+      if (caseData?.radicado) {
+        const res = await getCaseSourcesHistory(caseData.radicado);
+        setMultisourceChecks(res || []);
+      } else {
+        const res = await apiFetch<any[]>(`/api/cases/${caseId}/multisource-checks`);
+        setMultisourceChecks(res || []);
+      }
     } catch (e) {
       console.error("Error fetching multisource checks:", e);
     } finally {
       setIsLoadingMultisource(false);
+    }
+  };
+
+  const [isRefreshingFallback, setIsRefreshingFallback] = useState(false);
+
+  const handleBuscarNuevamente = async () => {
+    if (!caseData?.radicado) return;
+    setIsRefreshingFallback(true);
+    toast({
+      title: "Búsqueda con fallback iniciada",
+      description: "Consultando Rama Judicial principal y fuentes alternativas..."
+    });
+    try {
+      const res = await buscarNuevamente(caseData.radicado, caseData.company_id);
+      if (res && res.status === "error") {
+        toast({
+          title: "Error al buscar",
+          description: res.message || "Ocurrió un error en el motor de búsqueda",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Búsqueda finalizada",
+          description: res.message || "Se completó la verificación con fuentes oficiales."
+        });
+        // Reload case details
+        if (id) {
+          getCaseById(Number(id)).then(setCaseData).catch(console.error);
+        } else if (radicado) {
+          getCaseByRadicado(radicado).then(res => {
+            if (res && res.length > 0) setCaseData(res[0]);
+          }).catch(console.error);
+        }
+        // Refresh sources history
+        fetchMultisourceChecks(caseData.id);
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e.message || "Error al realizar la búsqueda con fallbacks",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshingFallback(false);
     }
   };
 
@@ -611,11 +663,35 @@ export default function CasoDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Detalle del Proceso</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold tracking-tight">Detalle del Proceso</h1>
+              {caseData.encontrado_en_fuente_alternativa && (
+                <span className={`text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                  caseData.requiere_revision 
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' 
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
+                }`}>
+                  <AlertCircle className="h-3 w-3" />
+                  Alternativo
+                </span>
+              )}
+            </div>
             <p className="font-mono text-primary text-sm mt-1">{caseData.radicado}</p>
           </div>
         </div>
         <div className="flex gap-2">
+          {caseData.encontrado_en_fuente_alternativa && (
+            <Button 
+              onClick={handleBuscarNuevamente} 
+              disabled={isRefreshingFallback} 
+              variant="outline" 
+              size="sm" 
+              className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingFallback ? 'animate-spin' : ''}`} />
+              Buscar nuevamente
+            </Button>
+          )}
           <Button onClick={handleRefresh} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualizar
@@ -628,6 +704,44 @@ export default function CasoDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Alerta de Fuente Alternativa / Requiere Revisión */}
+      {caseData.encontrado_en_fuente_alternativa && (
+        <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
+          caseData.requiere_revision 
+            ? 'bg-amber-500/10 border-amber-500/30 text-amber-800' 
+            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`h-5 w-5 mt-0.5 flex-shrink-0 ${caseData.requiere_revision ? 'text-amber-600' : 'text-emerald-600'}`} />
+            <div>
+              <p className="font-bold text-sm">
+                Encontrado en fuente alternativa: {caseData.fuente_encontrado || 'Publicaciones Procesales'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {caseData.requiere_revision 
+                  ? 'Este caso requiere revisión. Los datos provienen de una fuente externa y podrían ser parciales (Confianza: ' + (caseData.confianza_busqueda || 'N/A') + '%).'
+                  : 'Los datos coinciden plenamente con el radicado buscado (Confianza: ' + (caseData.confianza_busqueda || 'N/A') + '%).'
+                }
+              </p>
+            </div>
+          </div>
+          {caseData.url_fuente && (
+            <Button 
+              size="sm" 
+              onClick={() => window.open(caseData.url_fuente, "_blank")} 
+              className={`font-semibold shrink-0 gap-1.5 ${
+                caseData.requiere_revision 
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white' 
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Abrir fuente oficial
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Información General */}
       <Card>

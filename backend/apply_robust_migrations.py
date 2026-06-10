@@ -11,7 +11,7 @@ from backend.models import (
     Case, CaseEvent, InvalidRadicado, User, CasePublication, SearchJob,
     IntegrationConfig, Workspace, WorkspaceMember, Folder, ProjectList, Task,
     TaskComment, TaskChecklistItem, TaskAttachment, Tag, task_tags,
-    CasePublicationSearch
+    CasePublicationSearch, CaseSearchSourceResult, PasswordResetToken
 )
 
 def run_migrations():
@@ -54,6 +54,33 @@ def run_migrations():
                 conn.execute(text("ALTER TABLE cases ADD CONSTRAINT fk_cases_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"))
             except:
                 pass
+
+        columns_to_add_cases = [
+            ("despacho", "VARCHAR(255)"),
+            ("clase_proceso", "VARCHAR(255)"),
+            ("tipo_proceso", "VARCHAR(255)"),
+            ("estado", "VARCHAR(255)"),
+            ("ponente_juez", "VARCHAR(255)"),
+            ("departamento", "VARCHAR(255)"),
+            ("municipio", "VARCHAR(255)"),
+            ("ubicacion", "VARCHAR(255)"),
+            ("fuente_encontrado", "VARCHAR(255)"),
+            ("url_fuente", "VARCHAR(500)"),
+            ("metodo_busqueda", "VARCHAR(255)"),
+            ("confianza_busqueda", "INTEGER"),
+            ("encontrado_en_fuente_alternativa", "BOOLEAN DEFAULT FALSE"),
+            ("requiere_revision", "BOOLEAN DEFAULT FALSE")
+        ]
+        for col_name, col_type in columns_to_add_cases:
+            if col_name not in columns_cases:
+                print(f"[MIGRATION] cases: agregando '{col_name}'...")
+                conn.execute(text(f"ALTER TABLE cases ADD COLUMN {col_name} {col_type}"))
+
+        try:
+            print("[MIGRATION] Creando indice idx_cases_company_radicado...")
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cases_company_radicado ON cases(company_id, radicado)"))
+        except Exception as idx_err:
+            print(f"[MIGRATION] Error al crear indice idx_cases_company_radicado: {idx_err}")
 
     # --- Tabla 'case_events' ---
     columns_events = [c['name'] for c in inspector.get_columns('case_events')]
@@ -146,6 +173,13 @@ def run_migrations():
                     conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email)"))
                 except:
                     pass
+
+        with engine.begin() as conn:
+            try:
+                print("[MIGRATION] Creando indice idx_case_search_source_results_company_radicado...")
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_case_search_source_results_company_radicado ON case_search_source_results(company_id, radicado)"))
+            except Exception as idx_err:
+                print(f"[MIGRATION] Error al crear indice idx_case_search_source_results_company_radicado: {idx_err}")
 
     print("[MIGRATION] Sincronizacion finalizada satisfactoriamente.")
 

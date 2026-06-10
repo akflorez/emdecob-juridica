@@ -190,6 +190,222 @@ def test_multisource_check_endpoints():
     response = client.get("/api/cases/100/multisource-checks")
     assert response.status_code == 200
 
+def test_download_cases_excel():
+    app.dependency_overrides[get_current_user] = override_get_current_user_normal
+    
+    # Insert events for case 100
+    db = TestingSessionLocal()
+    from backend.models import CaseEvent
+    
+    # Event 1 (older)
+    ev1 = CaseEvent(
+        case_id=100,
+        company_id=1,
+        event_date="2024-05-01",
+        title="Auto older",
+        detail="Older detail description",
+        event_hash="hash1"
+    )
+    # Event 2 (newer)
+    ev2 = CaseEvent(
+        case_id=100,
+        company_id=1,
+        event_date="2024-05-10",
+        title="Auto newer",
+        detail="Newer detail description that is longer than title",
+        event_hash="hash2"
+    )
+    db.add(ev1)
+    db.add(ev2)
+    db.commit()
+    db.close()
+    
+    response = client.get("/cases/download")
+    assert response.status_code == 200
+    assert "attachment" in response.headers["Content-Disposition"]
+    
+    import pandas as pd
+    from io import BytesIO
+    df = pd.read_excel(BytesIO(response.content))
+    
+    assert "Descripción última actuación" in df.columns
+    assert "Fecha de última actuación" in df.columns
+    assert "Empresa" in df.columns
+    assert "Usuario asignado" in df.columns
+    
+    row = df[df["Radicado"] == "11001400300720180080000"].iloc[0]
+    assert row["Descripción última actuación"] == "Newer detail description that is longer than title"
+    assert row["Empresa"] == "EMDECOB LTDA"
+
+
+def test_password_recovery_flow():
+    from backend.models import User, Company, PasswordResetToken
+    from datetime import datetime, timedelta
+    
+    db = TestingSessionLocal()
+    
+    # 1. Create mock company & users
+    active_company = Company(id=10, nombre="Active Company", estado="activo")
+    inactive_company = Company(id=20, nombre="Inactive Company", estado="inactivo")
+    db.add(active_company)
+    db.add(inactive_company)
+    db.flush()
+    
+    # Active user
+    u_active = User(
+        id=101,
+        company_id=10,
+        username="active_rec",
+        email="active@emdecob.com",
+        hashed_password="old_password",
+        is_active=True
+    )
+    # Inactive user
+    u_inactive = User(
+        id=102,
+        company_id=10,
+        username="inactive_rec",
+        email="inactive@emdecob.com",
+        hashed_password="old_password",
+        is_active=False
+    )
+    # User of inactive company
+    u_in_comp = User(
+        id=103,
+        company_id=20,
+        username="in_comp_rec",
+        email="in_comp@emdecob.com",
+        hashed_password="old_password",
+        is_active=True
+    )
+    db.add(u_active)
+    db.add(u_inactive)
+    db.add(u_in_comp)
+    db.commit()
+    db.close()
+    
+    # Test 1: Non-existent email -> returns generic response, no token in DB
+    resp = client.post("/auth/forgot-password", json={"email": "non_existent@emdecob.com"})
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    
+    db = TestingSessionLocal()
+    assert db.query(PasswordResetToken).count() == 0
+    db.close()
+    
+    # Test 2: Inactive user -> returns generic response, no token in DB
+    resp = client.post("/auth/forgot-password", json={"email": "inactive@emdecob.com"})
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    
+    db = TestingSessionLocal()
+    assert db.query(PasswordResetToken).count() == 0
+    db.close()
+    
+    # Test 3: Inactive company user -> returns generic response, no token in DB
+    resp = client.post("/auth/forgot-password", json={"email": "in_comp@emdecob.com"})
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    
+    db = TestingSessionLocal()
+    assert db.query(PasswordResetToken).count() == 0
+    db.close()
+    
+    # Test 4: Active user -> returns generic response, creates token in DB
+    from backend.main import RATE_LIMIT_STORE
+    RATE_LIMIT_STORE.clear()
+    
+    resp = client.post("/auth/forgot-password", json={"email": "active@emdecob.com"})
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    
+    db = TestingSessionLocal()
+    tokens = db.query(PasswordResetToken).all()
+    assert len(tokens) == 1
+    assert tokens[0].user_id == 101
+    assert tokens[0].used_at is None
+    db.close()
+    
+    # Test 5: Reset password with password mismatch -> 400
+    resp = client.post("/auth/reset-password", json={
+        "token": "dummy_raw_token",
+        "new_password": "NewPassword123!",
+        "confirm_password": "DifferentPassword123!"
+    })
+    assert resp.status_code == 400
+    assert "no coinciden" in resp.json()["detail"]
+    
+    # Test 6: Reset password with weak password (too short) -> 400
+    resp = client.post("/auth/reset-password", json={
+        "token": "dummy_raw_token",
+        "new_password": "Pw1",
+        "confirm_password": "Pw1"
+    })
+    assert resp.status_code == 400
+    assert "8 caracteres" in resp.json()["detail"]
+    
+    # Test 7: Reset password with weak password (no number/letter) -> 400
+    resp = client.post("/auth/reset-password", json={
+        "token": "dummy_raw_token",
+        "new_password": "onlyletters",
+        "confirm_password": "onlyletters"
+    })
+    assert resp.status_code == 400
+    assert "letra y un número" in resp.json()["detail"]
+    
+    # Test 8: Reset password with invalid token -> 400
+    resp = client.post("/auth/reset-password", json={
+        "token": "invalid_raw_token",
+        "new_password": "NewPassword123!",
+        "confirm_password": "NewPassword123!"
+    })
+    assert resp.status_code == 400
+    assert "expiró o ya fue usado" in resp.json()["detail"]
+    
+    # Test 9: Reset password with expired token -> 400
+    db = TestingSessionLocal()
+    # Expire the token
+    db.query(PasswordResetToken).filter(PasswordResetToken.user_id == 101).update({
+        PasswordResetToken.expires_at: datetime.utcnow() - timedelta(minutes=1)
+    })
+    db.commit()
+    db.close()
+    
+    # Generate new valid token
+    RATE_LIMIT_STORE.clear()
+    resp = client.post("/auth/forgot-password", json={"email": "active@emdecob.com"})
+    assert resp.status_code == 200
+    
+    import hashlib
+    raw_tok = "thisisasecuretoken1234567890abcde"
+    h = hashlib.sha256(raw_tok.encode()).hexdigest()
+    
+    db = TestingSessionLocal()
+    db.query(PasswordResetToken).filter(PasswordResetToken.used_at.is_(None)).update({
+        PasswordResetToken.token_hash: h
+    })
+    db.commit()
+    db.close()
+    
+    # Test 10: Valid token -> updates password successfully, marks used
+    resp = client.post("/auth/reset-password", json={
+        "token": raw_tok,
+        "new_password": "NewPassword123!",
+        "confirm_password": "NewPassword123!"
+    })
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    
+    # Test 11: Re-use same token -> 400
+    resp = client.post("/auth/reset-password", json={
+        "token": raw_tok,
+        "new_password": "AnotherNewPassword123!",
+        "confirm_password": "AnotherNewPassword123!"
+    })
+    assert resp.status_code == 400
+    assert "expiró o ya fue usado" in resp.json()["detail"]
+
+
 # Cleanup test file after execution
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_temp_db_file():

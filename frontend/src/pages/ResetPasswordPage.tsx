@@ -19,21 +19,35 @@ export default function ResetPasswordPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!token) {
-      toast({
-        title: "Enlace inválido",
-        description: "El enlace de recuperación no es válido o está incompleto.",
-        variant: "destructive"
-      });
-      navigate('/login');
-    }
-  }, [token, navigate, toast]);
+  if (!token) {
+    return (
+      <div className="min-h-screen w-full bg-[#021C33] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl text-center">
+          <div className="w-16 h-16 rounded-full border border-red-400 flex items-center justify-center bg-red-50 mx-auto mb-6">
+            <Lock className="w-8 h-8 text-red-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#021C33] mb-4">Enlace Inválido</h1>
+          <p className="text-sm text-slate-500 mb-8 font-semibold">El enlace de recuperación no es válido.</p>
+          <Button onClick={() => navigate('/login')} className="w-full h-14 bg-[#021C33] hover:bg-[#032d52] text-white rounded-2xl font-bold text-lg shadow-xl transition-all">
+            Volver al Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || !confirmPassword) {
       setError('Por favor complete ambos campos');
+      return;
+    }
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      setError('La contraseña debe contener al menos una letra y un número');
       return;
     }
     if (password !== confirmPassword) {
@@ -55,11 +69,13 @@ export default function ResetPasswordPage() {
       });
       navigate('/login');
     } catch (e: any) {
-      setError(e.message || 'Error al actualizar contraseña');
+      // If backend returns token used/expired error, display it clearly
+      setError(e.message || 'El enlace expiró o ya fue usado. Solicita uno nuevo.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="min-h-screen w-full bg-[#021C33] flex items-center justify-center p-4">
