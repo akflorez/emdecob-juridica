@@ -901,8 +901,35 @@ async def run_publicaciones_worker_loop():
             ).order_by(desc(CasePublicationSearch.prioridad), CasePublicationSearch.created_at).limit(BATCH_SIZE).all()
 
             if not candidatos:
-                await asyncio.sleep(5.0)
-                continue
+                # Barrido incremental de seguridad para casos activos sin búsquedas registradas
+                from sqlalchemy import exists, and_
+                from backend.service.publicaciones import auto_queue_publicaciones_for_case
+                
+                no_search_cases = db.query(Case).filter(
+                    Case.is_active == True,
+                    Case.juzgado.isnot(None),
+                    ~exists().where(
+                        and_(
+                            CasePublicationSearch.company_id == Case.company_id,
+                            CasePublicationSearch.radicado == Case.radicado
+                        )
+                    )
+                ).limit(10).all()
+                
+                if no_search_cases:
+                    print(f"[pub-worker] Detectados {len(no_search_cases)} casos activos sin búsquedas de publicaciones. Encolando...")
+                    for nc in no_search_cases:
+                        auto_queue_publicaciones_for_case(db, nc)
+                    db.commit()
+                    # Re-consultar candidatos
+                    candidatos = db.query(CasePublicationSearch).filter(
+                        CasePublicationSearch.estado == "pendiente",
+                        or_(CasePublicationSearch.next_retry_at.is_(None), CasePublicationSearch.next_retry_at <= now_colombia())
+                    ).order_by(desc(CasePublicationSearch.prioridad), CasePublicationSearch.created_at).limit(BATCH_SIZE).all()
+                
+                if not candidatos:
+                    await asyncio.sleep(5.0)
+                    continue
 
             for candidato in candidatos:
                 # Intento de lock optimista
@@ -4474,11 +4501,7 @@ async def get_case_by_radicado_unified(
     if not c:
         raise HTTPException(404, "Caso no encontrado")
         
-    try:
-        from backend.service.publicaciones import auto_queue_publicaciones_for_case
-        auto_queue_publicaciones_for_case(db, c)
-    except Exception as e:
-        print(f"[get_case_by_radicado_unified] Error auto-queueing: {e}")
+    # Sincronización automática de publicaciones removida en consulta visual
         
     return serialize_case(c)
 
@@ -4563,11 +4586,7 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
     if not c:
         raise HTTPException(404, "Caso no encontrado")
         
-    try:
-        from backend.service.publicaciones import auto_queue_publicaciones_for_case
-        auto_queue_publicaciones_for_case(db, c)
-    except Exception as e:
-        print(f"[get_case_by_id] Error auto-queueing publications: {e}")
+    # Sincronización automática de publicaciones removida en consulta visual
         
     return serialize_case(c)
 
@@ -5738,9 +5757,7 @@ async def get_case_publications(
         
     pubs = q_pubs.order_by(desc(CasePublication.fecha_publicacion)).all()
     
-    # Auto-encolar búsquedas si faltan (liviano, sin scraping web)
-    from backend.service.publicaciones import auto_queue_publicaciones_for_case
-    auto_queue_publicaciones_for_case(db, case, force=False)
+    # Auto-encolar búsquedas deshabilitado en consulta visual para que el frontend solo lea de la base de datos
     
     # Consultar estado de la cola (respetando company_id)
     from backend.models import CasePublicationSearch

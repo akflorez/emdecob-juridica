@@ -34,6 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -96,6 +97,8 @@ const MONTH_OPTIONS = generateMonthOptions();
 const POLL_INTERVAL = 30_000; // 30 segundos
 
 export default function CasosPage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.is_superadmin || (user?.is_admin && !user?.company_id) || user?.role === 'SUPERADMIN';
   const [activeTab, setActiveTab] = useState<FilterTab>("todos");
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
@@ -697,24 +700,26 @@ export default function CasosPage() {
             {showStats ? "Contraer Indicadores" : "Expandir Indicadores"}
           </Button>
 
-          <Button
-            onClick={handleSyncAllPublicaciones}
-            disabled={false}
-            variant="outline"
-            size="sm"
-            className={`border-emerald-500/50 hover:bg-emerald-500/10 dark:text-emerald-400 ${
-              bulkSyncProgress?.running
-                ? 'text-emerald-600 border-emerald-500'
-                : 'text-emerald-700'
-            }`}
-          >
-            {(isSyncingPublications || bulkSyncProgress?.running)
-              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              : <RefreshCw className="h-4 w-4 mr-2" />}
-            {bulkSyncProgress?.running
-              ? `Publicaciones: ${bulkSyncProgress.reviewed}/${bulkSyncProgress.total}`
-              : 'Sincronizar publicaciones'}
-          </Button>
+          {isSuperAdmin && !import.meta.env.PROD && (
+            <Button
+              onClick={handleSyncAllPublicaciones}
+              disabled={false}
+              variant="outline"
+              size="sm"
+              className={`border-emerald-500/50 hover:bg-emerald-500/10 dark:text-emerald-400 ${
+                bulkSyncProgress?.running
+                  ? 'text-emerald-600 border-emerald-500'
+                  : 'text-emerald-700'
+              }`}
+            >
+              {(isSyncingPublications || bulkSyncProgress?.running)
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <RefreshCw className="h-4 w-4 mr-2" />}
+              {bulkSyncProgress?.running
+                ? `Publicaciones: ${bulkSyncProgress.reviewed}/${bulkSyncProgress.total}`
+                : 'Sincronizar publicaciones'}
+            </Button>
+          )}
           <Button onClick={handleRefreshAll} disabled={isRefreshing} variant="default" size="sm">
             {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Actualizar todo

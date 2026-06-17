@@ -325,7 +325,7 @@ export function PublicacionesPanel({
   return (
     <div className="space-y-4">
       {/* BANNER DE BÚSQUEDA ACTIVA */}
-      {isSearching && (
+      {isSearching && isSuperAdmin && !import.meta.env.PROD && (
         <Card className="bg-blue-500/5 border-blue-500/20 animate-in fade-in slide-in-from-top-2 duration-500">
           <CardContent className="pt-4 pb-4 flex items-center gap-3">
             <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
@@ -338,7 +338,7 @@ export function PublicacionesPanel({
       )}
 
       {/* BANNER DE SINCRONIZACIÓN MASIVA ACTIVA */}
-      {activeJob && (
+      {activeJob && isSuperAdmin && !import.meta.env.PROD && (
         <Card className="bg-primary/5 border-primary/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-500">
           <CardContent className="pt-4 pb-4 space-y-3">
             <div className="flex items-center gap-3">
@@ -376,7 +376,7 @@ export function PublicacionesPanel({
       )}
 
       {/* SECCIÓN DE BÚSQUEDAS EN COLA */}
-      {busquedas.length > 0 && (
+      {busquedas.length > 0 && isSuperAdmin && !import.meta.env.PROD && (
         <Card className="bg-muted/30 border-primary/20 animate-in fade-in slide-in-from-top-2 duration-500">
           <CardContent className="pt-4 pb-4">
             <div className="flex justify-between items-center mb-2">
@@ -419,33 +419,35 @@ export function PublicacionesPanel({
             Documentos y estados detectados automáticamente para este radicado.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          {!activeJob && companyId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleStartMassSync(false)}
-              disabled={isStartingJob}
-              className="border-primary/50 text-primary hover:bg-primary/5"
+        {isSuperAdmin && !import.meta.env.PROD && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            {!activeJob && companyId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleStartMassSync(false)}
+                disabled={isStartingJob}
+                className="border-primary/50 text-primary hover:bg-primary/5"
+              >
+                {isStartingJob ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Sincronizar publicaciones de todos los radicados
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh} 
+              disabled={isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando'}
             >
-              {isStartingJob ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Sincronizar publicaciones de todos los radicados
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'animate-spin' : ''}`} />
+              {isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'Buscando...' : 'Sincronizar ahora'}
             </Button>
-          )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh} 
-            disabled={isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando'}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'animate-spin' : ''}`} />
-            {isRefreshing || syncStatus === 'pendiente' || syncStatus === 'procesando' ? 'Buscando...' : 'Sincronizar ahora'}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       {(() => {
@@ -459,18 +461,12 @@ export function PublicacionesPanel({
         const hasActive = activeSearches.length > 0;
         const hasError = errorSearches.length > 0;
 
-        let emptyTitle = 'Sin publicaciones detectadas';
+        let emptyTitle = 'No hay publicaciones registradas para este radicado';
         let emptyMessage = 'No se encontraron publicaciones en el portal para este radicado.';
         
         if (hasActive) {
-          emptyTitle = 'Buscando publicaciones procesales...';
-          emptyMessage = 'El worker está procesando las búsquedas y aparecerán aquí automáticamente.';
-        } else if (hasError) {
-          emptyTitle = 'Búsqueda incompleta';
-          emptyMessage = 'No fue posible completar la búsqueda de algunos meses debido a un error técnico.';
-        } else {
-          emptyTitle = 'Sin publicaciones';
-          emptyMessage = 'No se encontraron publicaciones en el portal para este radicado.';
+          emptyTitle = 'Actualización de publicaciones pendiente';
+          emptyMessage = 'Las publicaciones se están procesando en segundo plano y aparecerán automáticamente.';
         }
 
         const renderTable = (pubsList: CasePublication[], showTechnicalDetails: boolean = false) => (
@@ -678,7 +674,7 @@ export function PublicacionesPanel({
                   <p className="text-muted-foreground max-w-sm">
                     {emptyMessage}
                   </p>
-                  {!hasActive && (
+                  {!hasActive && isSuperAdmin && !import.meta.env.PROD && (
                     <Button variant="outline" onClick={handleRefresh} className="mt-4">
                       Volver a intentar búsqueda
                     </Button>
