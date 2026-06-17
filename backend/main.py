@@ -823,7 +823,7 @@ async def _pending_validation_loop():
                                 inv.intentos += 1
                                 inv.updated_at = now_colombia()
                             else:
-                                db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                                db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
                             print(f"    [pending-loop] No encontrado (reintentar): {c.radicado}")
                         db.flush()
                     except Exception as e:
@@ -1209,6 +1209,18 @@ async def lifespan(app: FastAPI):
             except Exception as e: print(f'[AUTO-MIGRATE ERROR] {e}')
             try: conn.execute(text("ALTER TABLE invalid_radicados ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;"))
             except Exception as e: print(f'[AUTO-MIGRATE ERROR] {e}')
+            # Backfill: asignar company_id a registros existentes tomándolo del case correspondiente
+            try:
+                conn.execute(text("""
+                    UPDATE invalid_radicados ir
+                    SET company_id = c.company_id
+                    FROM cases c
+                    WHERE ir.radicado = c.radicado
+                      AND ir.company_id IS NULL
+                      AND c.company_id IS NOT NULL
+                """))
+                print('[AUTO-MIGRATE] Backfill company_id en invalid_radicados completado')
+            except Exception as e: print(f'[AUTO-MIGRATE ERROR] backfill invalid_radicados: {e}')
             try: conn.execute(text("ALTER TABLE notification_config ADD COLUMN IF NOT EXISTS id INTEGER;"))
             except Exception as e: print(f'[AUTO-MIGRATE ERROR] {e}')
             try: conn.execute(text("ALTER TABLE notification_config ADD COLUMN IF NOT EXISTS smtp_host VARCHAR(255) DEFAULT 'smtp.gmail.com';"))
@@ -3462,7 +3474,7 @@ async def run_auto_refresh_now():
                             inv.intentos += 1
                             inv.updated_at = now_colombia()
                         else:
-                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
                         pending_result["not_found"] += 1
                     db.flush()
                 except Exception as e:
@@ -3677,8 +3689,11 @@ def list_invalid_radicados(
     page_size: int = Query(default=50, ge=1, le=500),
 ):
     q = db.query(InvalidRadicado)
-    if not current_user.is_admin:
-        q = q.filter(InvalidRadicado.user_id == current_user.id)
+    # Filtrar por empresa (igual que el dashboard de stats)
+    if not (current_user.is_admin and not current_user.company_id):
+        # Usuarios y admins con empresa ven solo los de su empresa
+        if hasattr(InvalidRadicado, 'company_id') and current_user.company_id:
+            q = q.filter(InvalidRadicado.company_id == current_user.company_id)
 
     if search:
         s = f"%{search.strip()}%"
@@ -4333,7 +4348,7 @@ async def validate_batch(
                             inv.intentos += 1
                             inv.updated_at = now_colombia()
                         else:
-                            _db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                            _db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
                     _db.flush()
                 except Exception as e:
                     print(f"[validate-batch] Error en {c.radicado}: {e}")
@@ -4382,7 +4397,7 @@ async def validate_selected(data: ValidateSelectedRequest, db: Session = Depends
                     inv.intentos += 1
                     inv.updated_at = now_colombia()
                 else:
-                    db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                    db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
         except Exception:
             pass
 
@@ -5399,7 +5414,7 @@ async def _background_validate_pendientes():
                             inv.intentos += 1
                             inv.updated_at = now_colombia()
                         else:
-                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1))
+                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
                     db.flush()
                 except Exception as e:
                     print(f"    [bg-validate] Error en {c.radicado}: {e}")
