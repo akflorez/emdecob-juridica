@@ -292,29 +292,28 @@ export function PublicacionesPanel({
       </div>
 
       {(() => {
-        // Solo publicaciones validadas se muestran al cliente.
-        // requiere_revision y descartado son estados internos de auditoría.
-        const validadas = publications.filter(p => p.estado_validacion === 'validado');
+        const validadas = publications.filter(p => 
+          ['validado', 'validado_automatico', 'validado_por_fuente_oficial'].includes(p.estado_validacion || '')
+        );
         const requierenRevision = publications.filter(p => p.estado_validacion === 'requiere_revision');
 
-        if (publications.length === 0 && busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length === 0) {
-          return (
-            <Card className="border-dashed">
-              <CardContent className="py-12 flex flex-col items-center justify-center text-center">
-                <div className="bg-muted p-3 rounded-full mb-4">
-                  <FileDown className="h-10 w-10 text-muted-foreground" />
-                </div>
-                <h4 className="font-semibold text-lg">Sin publicaciones detectadas</h4>
-                <p className="text-muted-foreground max-w-sm">
-                  No hemos encontrado publicaciones en el portal para este radicado. 
-                  Intenta sincronizar manualmente si crees que debería haber alguna.
-                </p>
-                <Button variant="link" onClick={handleRefresh} className="mt-2">
-                  Volver a intentar búsqueda
-                </Button>
-              </CardContent>
-            </Card>
-          );
+        const activeSearches = busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado));
+        const errorSearches = busquedas.filter(b => b.estado === 'error');
+        const hasActive = activeSearches.length > 0;
+        const hasError = errorSearches.length > 0;
+
+        let emptyTitle = 'Sin publicaciones detectadas';
+        let emptyMessage = 'No se encontraron publicaciones en el portal para este radicado.';
+        
+        if (hasActive) {
+          emptyTitle = 'Buscando publicaciones procesales...';
+          emptyMessage = 'El worker está procesando las búsquedas y aparecerán aquí automáticamente.';
+        } else if (hasError) {
+          emptyTitle = 'Búsqueda incompleta';
+          emptyMessage = 'No fue posible completar la búsqueda de algunos meses debido a un error técnico.';
+        } else {
+          emptyTitle = 'Sin publicaciones';
+          emptyMessage = 'No se encontraron publicaciones en el portal para este radicado.';
         }
 
         const renderTable = (pubsList: CasePublication[], showTechnicalDetails: boolean = false) => (
@@ -331,7 +330,6 @@ export function PublicacionesPanel({
               <TableBody>
                 {pubsList.map((pub) => (
                   <TableRow key={pub.id} className="hover:bg-muted/30 transition-colors">
-
                     {/* FECHA */}
                     <TableCell className="align-top space-y-1.5 py-4">
                       {pub.fecha_estado_electronico && (
@@ -371,13 +369,13 @@ export function PublicacionesPanel({
                       <TableCell className="align-top py-4 text-xs space-y-2">
                         <div className="flex flex-wrap gap-1.5 items-center">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            pub.estado_validacion === 'validado'
+                            ['validado', 'validado_automatico', 'validado_por_fuente_oficial'].includes(pub.estado_validacion || '')
                               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                               : pub.estado_validacion === 'requiere_revision'
                               ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                               : 'bg-destructive/10 text-destructive border-destructive/20'
                           }`}>
-                            {pub.estado_validacion === 'validado' ? 'Validado' : pub.estado_validacion === 'requiere_revision' ? 'Revisión' : 'Descartado'} 
+                            {['validado', 'validado_automatico', 'validado_por_fuente_oficial'].includes(pub.estado_validacion || '') ? 'Validado' : pub.estado_validacion === 'requiere_revision' ? 'Revisión' : 'Descartado'} 
                             (Score: {pub.match_score})
                           </span>
                           {pub.match_type && (
@@ -457,7 +455,7 @@ export function PublicacionesPanel({
                         <span className="text-xs text-muted-foreground italic">Sin documento</span>
                       )}
 
-                      {/* Documentos Complementarios (solo los que contienen el radicado) */}
+                      {/* Documentos Complementarios */}
                       {(() => {
                         const comps = parseComplementarios(pub.documentos_complementarios).filter(doc => doc.contiene_radicado);
                         if (comps.length === 0) return null;
@@ -505,12 +503,31 @@ export function PublicacionesPanel({
         return (
           <div className="mt-4 space-y-4">
             {/* PUBLICACIONES VALIDADAS */}
-            {validadas.length > 0 ? renderTable(validadas, isSuperAdmin) : (
-              <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
-                {busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length > 0
-                  ? 'Buscando publicaciones procesales en segundo plano...'
-                  : 'No se encontraron publicaciones en el portal para este radicado.'}
-              </div>
+            {validadas.length > 0 ? (
+              renderTable(validadas, isSuperAdmin)
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="py-12 flex flex-col items-center justify-center text-center">
+                  <div className="bg-muted p-3 rounded-full mb-4">
+                    {hasActive ? (
+                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    ) : hasError ? (
+                      <AlertCircle className="h-10 w-10 text-destructive" />
+                    ) : (
+                      <FileDown className="h-10 w-10 text-muted-foreground" />
+                    )}
+                  </div>
+                  <h4 className="font-semibold text-lg">{emptyTitle}</h4>
+                  <p className="text-muted-foreground max-w-sm">
+                    {emptyMessage}
+                  </p>
+                  {!hasActive && (
+                    <Button variant="outline" onClick={handleRefresh} className="mt-4">
+                      Volver a intentar búsqueda
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {/* PUBLICACIONES QUE REQUIEREN REVISIÓN (Solo visible para SuperAdmin) */}

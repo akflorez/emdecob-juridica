@@ -924,7 +924,7 @@ async def run_publicaciones_worker_loop():
                 
                 # Refrescar instancia
                 db.refresh(candidato)
-                print(f"[pub-worker] Procesando ID={candidato.id} Radicado={candidato.radicado} Mes={candidato.mes_busqueda}")
+                print(f"[PUBLICACIONES][WORKER_PICKED] company_id={candidato.company_id} radicado={candidato.radicado} mes_busqueda={candidato.mes_busqueda} search_id={candidato.id}")
                 
                 try:
                     fecha_act_str = candidato.fecha_actuacion.strftime("%Y-%m-%d")
@@ -946,14 +946,22 @@ async def run_publicaciones_worker_loop():
                         demandante=demandante,
                         demandado=demandado,
                         year=year, 
-                        month=month
+                        month=month,
+                        company_id=candidato.company_id,
+                        search_id=candidato.id
                     )
                     
+                    has_visible = False
                     if pubs:
                         for pub_data in pubs:
                             pub_data["radicado"] = candidato.radicado
-                            guardar_publicacion_validada(db, pub_data)
-                            
+                            pub_data["company_id"] = candidato.company_id
+                            pub_data["case_id"] = case_obj.id if case_obj else None
+                            saved_pub = guardar_publicacion_validada(db, pub_data, search_id=candidato.id)
+                            if saved_pub and saved_pub.estado_validacion in ["validado", "validado_automatico", "validado_por_fuente_oficial"]:
+                                has_visible = True
+                                
+                    if has_visible:
                         candidato.estado = "encontrada"
                         candidato.estado_busqueda = "encontrada"
                     else:
@@ -983,7 +991,7 @@ async def run_publicaciones_worker_loop():
                     candidato.locked_by = None
                     db.add(candidato)
                     db.commit()
-                    print(f"[pub-worker] Error ID={candidato.id}: {e}")
+                    print(f"[PUBLICACIONES][ERROR] company_id={candidato.company_id} radicado={candidato.radicado} mes_busqueda={candidato.mes_busqueda} search_id={candidato.id} url=N/A status_code=N/A error={str(e)} traceback={traceback.format_exc()} ultimo_error={candidato.ultimo_error} function=run_publicaciones_worker_loop")
                 
                 # Sleep de protección entre requests a la Rama
                 await asyncio.sleep(SLEEP_MS)
@@ -5709,13 +5717,15 @@ async def get_case_publications(
         CasePublicationSearch.radicado == radicado
     ).all()
     
+    validadas_db = [p for p in pubs if getattr(p, "estado_validacion", "requiere_revision") in ["validado", "validado_automatico", "validado_por_fuente_oficial"]]
+    
     # Estado consolidado
     global_status = "completado"
     if any(b.estado in ["pendiente", "procesando"] for b in busquedas_db):
         global_status = "procesando"
-    elif not pubs and any(b.estado == "error" for b in busquedas_db):
+    elif not validadas_db and any(b.estado == "error" for b in busquedas_db):
         global_status = "error"
-    elif not pubs and any(b.estado == "sin_resultado" for b in busquedas_db):
+    elif not validadas_db and any(b.estado == "sin_resultado" for b in busquedas_db):
         global_status = "sin_resultado"
         
     def serialize_pub(p):
@@ -5750,16 +5760,23 @@ async def get_case_publications(
             "extraction_quality": getattr(p, "extraction_quality", "")
         }
 
+    is_sa = is_global_superadmin(current_user)
     serialized_pubs = [serialize_pub(p) for p in pubs if getattr(p, "estado_validacion", "requiere_revision") != "descartado"]
-    validadas = [p for p in serialized_pubs if p["estado_validacion"] == "validado"]
-    req_revision = [p for p in serialized_pubs if p["estado_validacion"] == "requiere_revision"]
+    validadas = [p for p in serialized_pubs if p["estado_validacion"] in ["validado", "validado_automatico", "validado_por_fuente_oficial"]]
+    
+    if is_sa:
+        req_revision = [p for p in serialized_pubs if p["estado_validacion"] == "requiere_revision"]
+        items_res = serialized_pubs
+    else:
+        req_revision = []
+        items_res = validadas
     
     return {
         "radicado": radicado,
         "company_id": case.company_id,
         "publicaciones": validadas,
         "requiere_revision": req_revision,
-        "items": serialized_pubs, # Para compatibilidad
+        "items": items_res, # Para compatibilidad
         "busquedas": [
             {
                 "mes_busqueda": b.mes_busqueda,
@@ -6038,27 +6055,60 @@ async def force_search_month(body: BuscarMesBody, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Caso no encontrado")
         
     from backend.models import CasePublicationSearch
+    from backend.service.publicaciones import extract_despacho_code
     
+    # Calcular fechas de rango del mes
+    try:
+        year, month = map(int, body.mes.split("-"))
+        import calendar
+        from datetime import date
+        fecha_act = date(year, month, 1)
+        fecha_ini = date(year, month, 1)
+        fecha_fin = date(year, month, calendar.monthrange(year, month)[1])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Formato de mes inválido (debe ser YYYY-MM): {str(e)}")
+
+    company_id = case.company_id
+    if not company_id or not body.radicado or not body.mes or not fecha_ini or not fecha_fin:
+        print(f"[PUBLICACIONES][QUEUE_INVALID_MONTH] company_id={company_id} radicado={body.radicado} mes_busqueda={body.mes} search_id=None")
+        raise HTTPException(status_code=400, detail="Faltan datos obligatorios para registrar la búsqueda")
+
+    despacho_codigo = extract_despacho_code(body.radicado)
+
     # Buscar si ya existe la búsqueda para ese mes
     busqueda = db.query(CasePublicationSearch).filter(
+        CasePublicationSearch.company_id == company_id,
         CasePublicationSearch.radicado == body.radicado,
         CasePublicationSearch.mes_busqueda == body.mes
     ).first()
     
     if busqueda:
+        busqueda.fecha_actuacion = fecha_act
+        busqueda.fecha_inicio_busqueda = fecha_ini
+        busqueda.fecha_fin_busqueda = fecha_fin
+        busqueda.despacho_codigo = despacho_codigo
         busqueda.estado = "pendiente"
+        busqueda.estado_busqueda = "pendiente"
         busqueda.intentos = 0
         busqueda.error = None
         busqueda.ultimo_error = None
         busqueda.prioridad = body.prioridad
         busqueda.locked_at = None
         busqueda.locked_by = None
+        busqueda.next_retry_at = None
+        busqueda.processed_at = None
         busqueda.source_trigger = "manual_override"
         busqueda.force = True
     else:
         busqueda = CasePublicationSearch(
+            company_id=company_id,
             radicado=body.radicado,
+            fecha_actuacion=fecha_act,
+            fecha_inicio_busqueda=fecha_ini,
+            fecha_fin_busqueda=fecha_fin,
+            despacho_codigo=despacho_codigo,
             estado="pendiente",
+            estado_busqueda="pendiente",
             mes_busqueda=body.mes,
             intentos=0,
             prioridad=body.prioridad,
@@ -6068,6 +6118,8 @@ async def force_search_month(body: BuscarMesBody, db: Session = Depends(get_db))
         db.add(busqueda)
         
     db.commit()
+    db.refresh(busqueda)
+    print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={body.radicado} mes_busqueda={body.mes} search_id={busqueda.id}")
     
     return {"ok": True, "message": f"Búsqueda del mes {body.mes} encolada exitosamente para el radicado {body.radicado}.", "estado": "pendiente"}
 
@@ -6379,8 +6431,12 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
             if not force:
                 # Marcar no requiere búsqueda
                 guardar_estado_busqueda(db, {
+                    "company_id": case.company_id,
                     "radicado": case.radicado,
                     "fecha_actuacion": date.today(),
+                    "fecha_inicio_busqueda": date.today(),
+                    "fecha_fin_busqueda": date.today(),
+                    "mes_busqueda": date.today().strftime("%Y-%m"),
                     "estado_busqueda": "no_requiere_busqueda",
                     "debug": "No se encontraron actuaciones relevantes para este radicado."
                 })
@@ -6406,6 +6462,8 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
 
         found_pubs = []
         total_months = len(meses_a_buscar)
+        saved_count = 0
+        seen_ids = set()
         
         for i, (year, month) in enumerate(sorted(meses_a_buscar)):
             prog = 10 + int((i / total_months) * 85)
@@ -6468,16 +6526,19 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                 fecha_actuacion_del_mes = list(seen_dates)[0]
                 
             # Registrar inicio de búsqueda en DB
-            guardar_estado_busqueda(db, {
+            search_record = guardar_estado_busqueda(db, {
+                "company_id": case.company_id,
                 "radicado": case.radicado,
                 "fecha_actuacion": fecha_actuacion_del_mes,
                 "fecha_inicio_busqueda": fecha_inicio,
                 "fecha_fin_busqueda": fecha_fin,
+                "mes_busqueda": f"{year}-{month:02d}",
                 "despacho_codigo": case.radicado[:12],
                 "estado_busqueda": "buscando",
                 "intento_manual": force
             })
             db.commit()
+            search_id = search_record.id if search_record else None
             
             try:
                 # Ejecutar búsqueda para el mes
@@ -6487,25 +6548,46 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                     demandante=case.demandante or "",
                     demandado=case.demandado or "",
                     year=year,
-                    month=month
+                    month=month,
+                    company_id=case.company_id,
+                    search_id=search_id
                 )
                 
-                estado_fin = "encontrada" if results else "sin_resultado"
+                has_visible = False
+                if results:
+                    for p in results:
+                        p["case_id"] = case.id
+                        p["radicado"] = case.radicado
+                        p["company_id"] = case.company_id
+                        if "fecha_publicacion" not in p and "fecha" in p:
+                            p["fecha_publicacion"] = p["fecha"]
+                        
+                        saved_pub = guardar_publicacion_validada(db, p, search_id=search_id)
+                        if saved_pub:
+                            if saved_pub.id not in seen_ids:
+                                seen_ids.add(saved_pub.id)
+                                saved_count += 1
+                            if saved_pub.estado_validacion in ["validado", "validado_automatico", "validado_por_fuente_oficial"]:
+                                has_visible = True
+                                
+                estado_fin = "encontrada" if has_visible else "sin_resultado"
                 guardar_estado_busqueda(db, {
+                    "company_id": case.company_id,
                     "radicado": case.radicado,
                     "fecha_actuacion": fecha_actuacion_del_mes,
                     "fecha_inicio_busqueda": fecha_inicio,
                     "fecha_fin_busqueda": fecha_fin,
+                    "mes_busqueda": f"{year}-{month:02d}",
                     "despacho_codigo": case.radicado[:12],
                     "estado_busqueda": estado_fin,
                     "intento_manual": force
                 })
                 db.commit()
-                
-                if results:
-                    found_pubs.extend(results)
             except Exception as e:
-                print(f"[sync] Error en búsqueda de {year}-{month:02d}: {e}")
+                import traceback
+                tb_str = traceback.format_exc().replace('\n', ' || ')
+                print(f"[PUBLICACIONES][ERROR] company_id={case.company_id} radicado={case.radicado} mes_busqueda={year}-{month:02d} search_id={search_id} url=N/A status_code=N/A error={str(e)} traceback={traceback.format_exc()} ultimo_error={str(e)} function=save_new_publications")
+                
                 guardar_estado_busqueda(db, {
                     "radicado": case.radicado,
                     "fecha_actuacion": fecha_actuacion_del_mes,
@@ -6518,24 +6600,8 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                 })
                 db.commit()
 
-        # 3. Guardar resultados
+        # 3. Guardar resultados (ya guardados)
         update_sync_progress(db, case.id, 96, "Guardando publicaciones encontradas...")
-        saved_count = 0
-        seen_ids = set()
-        for p in found_pubs:
-            sid = p.get("source_id")
-            if not sid or sid in seen_ids:
-                continue
-            seen_ids.add(sid)
-            
-            p["case_id"] = case.id
-            p["radicado"] = case.radicado
-            if "fecha_publicacion" not in p and "fecha" in p:
-                p["fecha_publicacion"] = p["fecha"]
-                
-            guardar_publicacion_validada(db, p)
-            saved_count += 1
-            
         update_sync_progress(db, case.id, 100, f"Completado: {saved_count} publicaciones procesadas.")
         
         await asyncio.sleep(5)

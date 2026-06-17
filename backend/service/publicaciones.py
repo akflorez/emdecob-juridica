@@ -1,5 +1,6 @@
 import httpx
 import asyncio
+import os
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime, date, timedelta
@@ -457,6 +458,82 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                     elementos_detectados=elementos
                 )
 
+    # Búsqueda por proximidad si la coincidencia directa falló
+    if best_score < 70:
+        consecutivo_variants = [consecutivo]
+        if consecutivo.isdigit() and int(consecutivo) > 0:
+            consecutivo_variants.append(str(int(consecutivo)))
+            
+        for cv in consecutivo_variants:
+            if len(cv) < 3: 
+                continue
+                
+            for match in re.finditer(r'\b' + re.escape(cv) + r'\b', text):
+                block = build_context_window(text, match.start(), 1200)
+                block_norm = normalize_text(block).lower()
+                
+                if year in block_norm:
+                    has_despacho = (despacho in block_norm) or (f"{digits[:5]} {digits[5:7]} {digits[7:9]} {digits[9:12]}" in block_norm) or (f"{digits[:5]}-{digits[5:7]}-{digits[7:9]}-{digits[9:12]}" in block_norm)
+                    
+                    has_demandante = parties_match(block, demandante)
+                    has_demandado = parties_match(block, demandado)
+                    
+                    score = 0
+                    motivo = ""
+                    estado = "descartado"
+                    m_type = "ninguno"
+                    
+                    if has_demandante and has_demandado:
+                        score = 95
+                        estado = "validado"
+                        m_type = "interno_ambas_partes"
+                        motivo = f"Consecutivo ({cv}) y año ({year}) con ambas partes en el bloque"
+                    elif (has_demandante or has_demandado) and has_despacho:
+                        score = 92
+                        estado = "validado"
+                        m_type = "interno_despacho_una_parte"
+                        motivo = f"Consecutivo ({cv}) y año ({year}) con despacho y al menos una parte en el bloque"
+                    elif has_despacho and is_filtered_source:
+                        score = 88
+                        estado = "validado"
+                        m_type = "interno_despacho_filtrado"
+                        motivo = f"Consecutivo ({cv}) y año ({year}) con despacho confirmados en fuente oficial"
+                    elif has_demandante or has_demandado:
+                        score = 82
+                        estado = "validado"
+                        m_type = "interno_una_parte"
+                        motivo = f"Consecutivo ({cv}) y año ({year}) con una parte en el bloque (sin despacho)"
+                    elif is_filtered_source:
+                        if len(cv) >= 5:
+                            score = 85
+                            estado = "validado"
+                            m_type = "solo_interno_fuente_filtrada_especifico"
+                            motivo = f"Consecutivo específico ({cv}) y año ({year}) en fuente oficial del despacho."
+                        else:
+                            score = 75
+                            estado = "requiere_revision"
+                            m_type = "solo_interno_fuente_filtrada"
+                            motivo = f"Consecutivo ({cv}) y año ({year}) en fuente oficial. Sin partes ni despacho en el bloque."
+
+                    elementos = {
+                        "internal": f"{year}-{cv}",
+                        "despacho": has_despacho,
+                        "demandante": has_demandante,
+                        "demandado": has_demandado
+                    }
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_result = MatchResult(
+                            is_valid=(estado == "validado"),
+                            match_type=m_type,
+                            reasons=motivo,
+                            score=score,
+                            estado_validacion=estado,
+                            texto_bloque_match=block.strip(),
+                            elementos_detectados=elementos
+                        )
+
     # Extracción pobre en fuente oficial: auditoría interna, no bloquea.
     if best_score < 75 and is_filtered_source:
         if len(text.strip()) < 500:
@@ -477,21 +554,25 @@ def validate_strong_match(text: str, radicado_completo: str, demandante: str = "
 def find_radicado_in_context(text: str, radicado: str, demandante: str = "", demandado: str = "") -> MatchResult:
     return classify_document_match(text, radicado, demandante, demandado, is_filtered_source=False)
 
-def guardar_publicacion_validada(db, data: dict):
+def guardar_publicacion_validada(db, data: dict, search_id: Optional[int] = None):
     from backend.models import CasePublication, Case
     import json
     radicado = data.get("radicado")
     case_id = data.get("case_id")
+    company_id = data.get("company_id")
     
     case = None
     if case_id:
         case = db.query(Case).filter(Case.id == case_id).first()
     elif radicado:
-        case = db.query(Case).filter(Case.radicado == radicado).first()
+        query_case = db.query(Case).filter(Case.radicado == radicado)
+        if company_id is not None:
+            query_case = query_case.filter(Case.company_id == company_id)
+        case = query_case.first()
         
     if not case:
         print("[guardar_publicacion_validada] Error: No se encontro el caso para guardar la publicacion.")
-        print("[PUBLICACIONES][GUARDADO]\nmes=N/A\nguardado=false\nmotivo_no_guardado=No se encontro el caso para guardar la publicacion")
+        print(f"[PUBLICACIONES][ERROR] company_id={company_id} radicado={radicado} mes_busqueda=N/A search_id={search_id} url=N/A status_code=N/A error=No se encontro el caso para guardar la publicacion traceback=None function=guardar_publicacion_validada")
         return None
         
     case_id = case.id
@@ -500,12 +581,24 @@ def guardar_publicacion_validada(db, data: dict):
     fecha_pub = parse_fecha_pub(data.get("fecha_publicacion")) if isinstance(data.get("fecha_publicacion"), str) else data.get("fecha_publicacion")
     fecha_est = parse_fecha_pub(data.get("fecha_estado_electronico")) if isinstance(data.get("fecha_estado_electronico"), str) else data.get("fecha_estado_electronico")
     
+    est_val = data.get("estado_validacion", "requiere_revision")
+    req_rev = data.get("requiere_revision", True)
+    if est_val in ["validado", "validado_automatico", "validado_por_fuente_oficial"]:
+        req_rev = False
+
+    source_id = data.get("source_id")
+    if not source_id:
+        source_url = data.get("url_detalle") or data.get("source_url") or ""
+        if source_url:
+            source_id = hashlib.md5(source_url.encode()).hexdigest()
+        else:
+            unique_str = f"{case_id}_{fecha_pub}_{data.get('url_fuente_principal')}_{data.get('tipo_fuente_principal')}"
+            source_id = hashlib.md5(unique_str.encode()).hexdigest()
+
     # Buscar si ya existe por combinación única
     existing = db.query(CasePublication).filter(
         CasePublication.case_id == case_id,
-        CasePublication.fecha_publicacion == fecha_pub,
-        CasePublication.url_fuente_principal == data.get("url_fuente_principal"),
-        CasePublication.tipo_fuente_principal == data.get("tipo_fuente_principal")
+        CasePublication.source_id == source_id
     ).first()
     
     if existing:
@@ -526,18 +619,18 @@ def guardar_publicacion_validada(db, data: dict):
         existing.match_type = data.get("match_type") or existing.match_type
         existing.motivo_match = data.get("motivo_match") or existing.motivo_match
         existing.observacion = data.get("observacion") or existing.observacion
-        existing.estado_validacion = data.get("estado_validacion") or existing.estado_validacion
+        existing.estado_validacion = est_val
         existing.match_score = data.get("match_score") or existing.match_score
         existing.texto_bloque_match = data.get("texto_bloque_match") or existing.texto_bloque_match
         existing.motivo_descarte = data.get("motivo_descarte") or existing.motivo_descarte
         existing.fuente_principal_validada = data.get("fuente_principal_validada", existing.fuente_principal_validada)
-        existing.requiere_revision = data.get("requiere_revision", existing.requiere_revision)
+        existing.requiere_revision = req_rev
         existing.elementos_detectados = json.dumps(data.get("elementos_detectados", {})) if data.get("elementos_detectados") else existing.elementos_detectados
         existing.documento_nombre = data.get("documento_nombre") or existing.documento_nombre
         existing.extraction_quality = data.get("extraction_quality") or existing.extraction_quality
         db.flush()
         db.commit()
-        print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=Actualizado (ya existia)")
+        print(f"[PUBLICACIONES][PUBLICATION_SAVED] company_id={company_id} radicado={radicado} mes_busqueda={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'} search_id={search_id} pub_id={existing.id}")
         return existing
     else:
         new_pub = CasePublication(
@@ -548,7 +641,7 @@ def guardar_publicacion_validada(db, data: dict):
             descripcion=data.get("descripcion") or data.get("texto_fuente_principal", "")[:500],
             documento_url=data.get("url_fuente_principal") or data.get("documento_url"),
             source_url=data.get("url_detalle") or data.get("source_url"),
-            source_id=data.get("source_id") or hashlib.md5((data.get("url_detalle") or "").encode()).hexdigest(),
+            source_id=source_id,
             url_fuente_principal=data.get("url_fuente_principal"),
             tipo_fuente_principal=data.get("tipo_fuente_principal"),
             texto_fuente_principal=data.get("texto_fuente_principal"),
@@ -563,12 +656,12 @@ def guardar_publicacion_validada(db, data: dict):
             match_type=data.get("match_type"),
             motivo_match=data.get("motivo_match"),
             observacion=data.get("observacion"),
-            estado_validacion=data.get("estado_validacion", "requiere_revision"),
+            estado_validacion=est_val,
             match_score=data.get("match_score", 0),
             texto_bloque_match=data.get("texto_bloque_match"),
             motivo_descarte=data.get("motivo_descarte"),
             fuente_principal_validada=data.get("fuente_principal_validada", False),
-            requiere_revision=data.get("requiere_revision", True),
+            requiere_revision=req_rev,
             elementos_detectados=json.dumps(data.get("elementos_detectados", {})),
             documento_nombre=data.get("documento_nombre"),
             extraction_quality=data.get("extraction_quality")
@@ -576,7 +669,7 @@ def guardar_publicacion_validada(db, data: dict):
         db.add(new_pub)
         db.flush()
         db.commit()
-        print(f"[PUBLICACIONES][GUARDADO]\nmes={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'}\nguardado=true\nmotivo_no_guardado=")
+        print(f"[PUBLICACIONES][PUBLICATION_SAVED] company_id={company_id} radicado={radicado} mes_busqueda={fecha_pub.strftime('%Y-%m') if fecha_pub else 'N/A'} search_id={search_id} pub_id={new_pub.id}")
         return new_pub
 
 
@@ -606,6 +699,18 @@ def guardar_estado_busqueda(db, data: dict):
     mes_busqueda = data.get("mes_busqueda")
     if not mes_busqueda and fecha_ini:
         mes_busqueda = fecha_ini.strftime("%Y-%m")
+        
+    # Auto-resolve company_id if missing
+    if not company_id and radicado:
+        from backend.models import Case
+        case_obj = db.query(Case).filter(Case.radicado == radicado).first()
+        if case_obj:
+            company_id = case_obj.company_id
+            
+    # Enforce strict validation before writing to DB
+    if not company_id or not radicado or not mes_busqueda or not fecha_ini or not fecha_fin:
+        print(f"[PUBLICACIONES][QUEUE_INVALID_MONTH] company_id={company_id} radicado={radicado} mes_busqueda={mes_busqueda} search_id=None")
+        return None
         
     # Buscar si ya existe por company_id + radicado + mes_busqueda
     existing = db.query(CasePublicationSearch).filter(
@@ -691,11 +796,48 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
         
     queued_count = 0
     
+    # Enforce resetting existing searches in error for this case (company_id + radicado) if force
+    if force:
+        try:
+            err_searches = db.query(CasePublicationSearch).filter(
+                CasePublicationSearch.company_id == company_id,
+                CasePublicationSearch.radicado == radicado,
+                CasePublicationSearch.estado == "error"
+            ).all()
+            for es in err_searches:
+                es.estado = "pendiente"
+                es.estado_busqueda = "pendiente"
+                es.intentos = 0
+                es.ultimo_error = None
+                es.error = None
+                es.processed_at = None
+                es.locked_at = None
+                es.locked_by = None
+                es.next_retry_at = None
+                es.force = True
+                db.flush()
+                queued_count += 1
+                print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={es.mes_busqueda} search_id={es.id} (reactivated error search)")
+        except Exception as ex_err:
+            print(f"[auto_queue_publicaciones_for_case] Error resetting error searches: {ex_err}")
+
     for ev in relevant_events:
         meses = get_search_months_for_actuacion(ev.event_date)
         for year, month in meses:
             mes_str = f"{year}-{month:02d}"
             
+            # Validation before any processing
+            fecha_inicio_str = f"{year}-{month:02d}-01"
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
+            
+            fecha_ini_val = parse_fecha_pub(fecha_inicio_str)
+            fecha_fin_val = parse_fecha_pub(fecha_fin_str)
+            
+            if not company_id or not radicado or not mes_str or not fecha_ini_val or not fecha_fin_val:
+                print(f"[PUBLICACIONES][QUEUE_INVALID_MONTH] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} reason=missing_required_fields_in_auto_queue")
+                continue
+
             # Buscar por company_id + radicado + mes_busqueda para evitar duplicidad
             existing = db.query(CasePublicationSearch).filter(
                 CasePublicationSearch.company_id == company_id,
@@ -705,21 +847,25 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
             
             if existing:
                 if force:
-                    existing.estado = "pendiente"
-                    existing.estado_busqueda = "pendiente"
-                    existing.intentos = 0
-                    existing.ultimo_error = None
-                    existing.processed_at = None
-                    existing.locked_at = None
-                    existing.locked_by = None
-                    existing.force = True
-                    db.flush()
-                    queued_count += 1
+                    if existing.estado not in ["pendiente", "procesando"]:
+                        existing.estado = "pendiente"
+                        existing.estado_busqueda = "pendiente"
+                        existing.intentos = 0
+                        existing.ultimo_error = None
+                        existing.error = None
+                        existing.processed_at = None
+                        existing.locked_at = None
+                        existing.locked_by = None
+                        existing.next_retry_at = None
+                        existing.force = True
+                        db.flush()
+                        queued_count += 1
+                        print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id} (forced reset)")
+                    else:
+                        print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id} (already active)")
+                else:
+                    print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id}")
             else:
-                fecha_inicio_str = f"{year}-{month:02d}-01"
-                last_day = calendar.monthrange(year, month)[1]
-                fecha_fin_str = f"{year}-{month:02d}-{last_day:02d}"
-                
                 despacho_codigo = extract_despacho_code(radicado)
                 
                 event_date_val = ev.event_date
@@ -730,8 +876,8 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
                     company_id=company_id,
                     radicado=radicado,
                     fecha_actuacion=event_date_val or date.today(),
-                    fecha_inicio_busqueda=parse_fecha_pub(fecha_inicio_str),
-                    fecha_fin_busqueda=parse_fecha_pub(fecha_fin_str),
+                    fecha_inicio_busqueda=fecha_ini_val,
+                    fecha_fin_busqueda=fecha_fin_val,
                     despacho_codigo=despacho_codigo,
                     estado="pendiente",
                     estado_busqueda="pendiente",
@@ -743,10 +889,11 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
                 db.add(new_search)
                 db.flush()
                 queued_count += 1
+                print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={new_search.id}")
                 
     if queued_count > 0:
         db.commit()
-        print(f"[auto_queue_publicaciones_for_case] Encoladas {queued_count} busquedas para {radicado} (company_id={company_id})")
+        print(f"[auto_queue_publicaciones_for_case] Encoladas/reactivadas {queued_count} busquedas para {radicado} (company_id={company_id})")
         
     return queued_count
 
@@ -1111,7 +1258,9 @@ async def consultar_publicaciones_rango(
     demandante: str = "", 
     demandado: str = "",
     year: Optional[int] = None,
-    month: Optional[int] = None
+    month: Optional[int] = None,
+    company_id: Optional[int] = None,
+    search_id: Optional[int] = None
 ):
     import json
     import calendar
@@ -1141,7 +1290,10 @@ async def consultar_publicaciones_rango(
                 "match_fuerte": True,
                 "match_type": "special_bypass",
                 "motivo_match": "Bypass predefinido",
-                "observacion": "Bypass predefinido"
+                "observacion": "Bypass predefinido",
+                "estado_validacion": "validado_automatico",
+                "match_score": 100,
+                "texto_bloque_match": "Bypass de búsqueda predefinido"
             })
         return results
 
@@ -1164,8 +1316,7 @@ async def consultar_publicaciones_rango(
     id_despacho = rad_digits[:12]
 
     search_url = build_portal_search_url(id_despacho, fecha_inicio_str, fecha_fin_str)
-    print(f"[scraper] Busqueda dirigida para radicado {radicado_completo} | Despacho: {id_despacho} | Rango: {fecha_inicio_str} a {fecha_fin_str}")
-    print(f"[PUBLICACIONES][BUSCANDO_MES]\nmes={year}-{month:02d}\nfechaInicio={fecha_inicio_str}\nfechaFin={fecha_fin_str}\ndespacho={id_despacho}\nurl={search_url}")
+    print(f"[PUBLICACIONES][URL_BUILT] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={search_url}")
 
     proxy_url = os.getenv("RAMA_PROXY_URL")
     kwargs = {"headers": HEADERS, "timeout": 60, "follow_redirects": True, "verify": False}
@@ -1174,24 +1325,16 @@ async def consultar_publicaciones_rango(
     async with httpx.AsyncClient(**kwargs) as client:
         try:
             resp = await client.get(search_url)
+            print(f"[PUBLICACIONES][PORTAL_RESPONSE] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} status_code={resp.status_code} size={len(resp.text)}")
+            
             if resp.status_code != 200:
-                print(f"[scraper] Error consultando portal oficial: HTTP {resp.status_code}")
-                print(f"[PUBLICACIONES][RESULTADO_PORTAL]\nmes={year}-{month:02d}\nstatus_code={resp.status_code}\nhtml_size=0\ncards_count=0")
-                return []
+                raise Exception(f"HTTP status code {resp.status_code} returned by portal search URL: {search_url}")
                 
             raw_cards = parse_result_cards(resp.text)
-            print(f"[PUBLICACIONES][RESULTADO_PORTAL]\nmes={year}-{month:02d}\nstatus_code={resp.status_code}\nhtml_size={len(resp.text)}\ncards_count={len(raw_cards)}")
-            
             filtered_by_despacho = filter_cards_by_despacho(raw_cards, id_despacho)
             candidates = filter_cards_by_category(filtered_by_despacho)
 
-            # Log individual cards
-            for card in raw_cards:
-                is_accepted = card in candidates
-                # motivo = "" if is_accepted else "Descartado por despacho o categoria"
-                # print(f"[PUBLICACIONES][CARD]\nmes={year}-{month:02d}\ncategoria={card.get('categoria')}\nfecha_publicacion={card.get('fecha_publicacion')}\ndespacho_detectado={card.get('despacho')}\nurl_detalle={card.get('detail_url')}\naceptada={'true' if is_accepted else 'false'}\nmotivo_descarte={motivo}")
-
-            print(f"[scraper] Candidatos validos encontrados: {len(candidates)}")
+            print(f"[PUBLICACIONES][DOCS_FOUND] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} count={len(candidates)}")
             
             sem = asyncio.Semaphore(5)
 
@@ -1207,7 +1350,7 @@ async def consultar_publicaciones_rango(
                         print(f"[scraper] Obteniendo detalle de: {cand['detail_url']}")
                         detail_resp = await client.get(cand["detail_url"])
                         if detail_resp.status_code != 200:
-                            return None
+                            raise Exception(f"HTTP status code {detail_resp.status_code} on detail URL: {cand['detail_url']}")
                             
                         detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
                         
@@ -1226,7 +1369,6 @@ async def consultar_publicaciones_rango(
 
                         # Fuentes principales usando el helper
                         fuentes = detect_main_sources(detail_resp.text)
-                        print(f"[PUBLICACIONES][DETALLE]\nmes={year}-{month:02d}\nurl_detalle={cand['detail_url']}\nfuentes_detectadas_count={len(fuentes)}\nfuentes={[f['url'] for f in fuentes]}")
                         
                         match_principal = None
                         fuente_validada_url = None
@@ -1236,14 +1378,11 @@ async def consultar_publicaciones_rango(
                         for source in fuentes:
                             s_url = source["url"]
                             s_tipo = source["tipo"]
-                            print(f"[scraper] Descargando y validando fuente principal ({s_tipo}): {s_url}")
                             doc_text = await extract_text_content(s_url, client)
-                            print(f"[PUBLICACIONES][FUENTE]\nmes={year}-{month:02d}\nurl_fuente={s_url}\ntipo_fuente={s_tipo}\ncontent_type=application/octet-stream\ntexto_size={len(doc_text)}")
                             
                             # Pasar is_filtered_source=True porque viene de la busqueda por despacho
                             from backend.service.publicaciones import classify_document_match
                             match = classify_document_match(doc_text, radicado_completo, demandante, demandado, is_filtered_source=True)
-                            print(f"[PUBLICACIONES][MATCH]\nmes={year}-{month:02d}\nscore={match.score}\nestado_validacion={match.estado_validacion}\nmatch_type={match.match_type or 'None'}\nmotivo={match.reasons or 'No match'}")
                             
                             if match_principal is None or match.score > match_principal.score:
                                 match_principal = match
@@ -1254,8 +1393,19 @@ async def consultar_publicaciones_rango(
                             if match.is_valid: # Early exit si encontramos uno perfecto (validado >= 85 pts)
                                 break
                                 
-                        if not match_principal or match_principal.score < 50:
-                            print(f"[scraper] Descartando {cand['title']}: Score muy bajo o sin match ({match_principal.score if match_principal else 0} pts).")
+                        if not match_principal:
+                            print(f"[PUBLICACIONES][DOC_DISCARDED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={cand['detail_url']} score=0 reason=No match result")
+                            return None
+                            
+                        # Determinar estado de validación y registrar log de validación/descarte
+                        if match_principal.is_valid:
+                            estado_val = "validado_automatico" if match_principal.match_type in ["radicado_completo", "radicado_completo_con_guiones", "radicado_completo_con_espacios"] else "validado_por_fuente_oficial"
+                            print(f"[PUBLICACIONES][DOC_VALIDATED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={fuente_validada_url} score={match_principal.score} type={match_principal.match_type}")
+                        else:
+                            estado_val = "descartado" if match_principal.score < 70 else "requiere_revision"
+                            print(f"[PUBLICACIONES][DOC_DISCARDED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={fuente_validada_url} score={match_principal.score} reason={match_principal.reasons}")
+
+                        if match_principal.score < 50:
                             return None
 
                         url_providencia = None
@@ -1297,28 +1447,30 @@ async def consultar_publicaciones_rango(
                             "match_type": match_principal.match_type,
                             "motivo_match": match_principal.reasons,
                             "observacion": observacion,
-                            "estado_validacion": match_principal.estado_validacion,
+                            "estado_validacion": estado_val,
                             "match_score": match_principal.score,
                             "texto_bloque_match": match_principal.texto_bloque_match,
                             "motivo_descarte": match_principal.reasons if not match_principal.is_valid else "",
-                            "requiere_revision": match_principal.estado_validacion == "requiere_revision",
+                            "requiere_revision": estado_val == "requiere_revision",
                             "elementos_detectados": match_principal.elementos_detectados,
                             "extraction_quality": "pobre" if len(texto_principal) < 500 else "buena",
                         }
                     except Exception as ex:
-                        print(f"[scraper] Error en candidato {cand['detail_url']}: {ex}")
-                        return None
+                        import traceback
+                        print(f"[PUBLICACIONES][ERROR] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={cand.get('detail_url', 'N/A')} status_code=N/A error={str(ex)} traceback={traceback.format_exc()} function=process_candidate")
+                        raise ex
 
             tasks = [process_candidate(c) for c in candidates]
             found_results = await asyncio.gather(*tasks, return_exceptions=True)
             for res in found_results:
-                if res and isinstance(res, dict):
+                if isinstance(res, Exception):
+                    raise res
+                elif res and isinstance(res, dict):
                     results.append(res)
-
         except Exception as e:
             import traceback
-            print("[scraper] Error en consulta:")
-            traceback.print_exc()
+            print(f"[PUBLICACIONES][ERROR] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={search_url} status_code=N/A error={str(e)} traceback={traceback.format_exc()} function=consultar_publicaciones_rango")
+            raise e
 
     final = []
     seen = set()
@@ -1327,6 +1479,8 @@ async def consultar_publicaciones_rango(
             final.append(r)
             seen.add(r["source_id"])
     return final
+
+
 
 def parse_fecha_pub(fecha_str: str) -> date | None:
     if not fecha_str: return None
