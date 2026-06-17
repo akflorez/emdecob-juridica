@@ -455,9 +455,28 @@ export function PublicacionesPanel({
         );
 
         return (
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
+            {/* PUBLICACIONES VALIDADAS */}
             {validadas.length > 0 ? renderTable(validadas, false) : (
-              <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">No hay publicaciones validadas.</div>
+              <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
+                {busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length > 0
+                  ? "Buscando publicaciones procesales..."
+                  : "No hay publicaciones validadas aún."}
+              </div>
+            )}
+
+            {/* PUBLICACIONES QUE REQUIEREN REVISIÓN */}
+            {requierenRevision.length > 0 && (
+              <details className="group border rounded-lg overflow-hidden bg-amber-500/5 border-amber-500/20">
+                <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {requierenRevision.length} publicación(es) que requieren revisión manual
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">Clic para ver/ocultar</span>
+                </summary>
+                <div className="border-t border-amber-500/20">
+                  {renderTable(requierenRevision, true)}
+                </div>
+              </details>
             )}
           </div>
         );

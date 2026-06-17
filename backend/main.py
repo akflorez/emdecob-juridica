@@ -931,7 +931,11 @@ async def run_publicaciones_worker_loop():
                     year, month = map(int, candidato.mes_busqueda.split("-"))
                     
                     # Obtener demandante/demandado del caso para validación documental
-                    case_obj = db.query(Case).filter(Case.radicado == candidato.radicado).first()
+                    # Filtrar por company_id para respetar aislamiento multiempresa
+                    case_q = db.query(Case).filter(Case.radicado == candidato.radicado)
+                    if candidato.company_id:
+                        case_q = case_q.filter(Case.company_id == candidato.company_id)
+                    case_obj = case_q.first()
                     demandante = case_obj.demandante if case_obj else ""
                     demandado = case_obj.demandado if case_obj else ""
                     

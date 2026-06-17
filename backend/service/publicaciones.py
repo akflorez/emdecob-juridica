@@ -409,22 +409,25 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                 m_type = "interno_despacho_una_parte"
                 motivo = f"Número interno ({iv}), despacho y al menos una parte en el bloque"
             elif has_despacho and is_filtered_source:
-                # El documento viene de la búsqueda oficial del despacho, y encontramos el número interno + nombre del despacho, pero SIN partes
-                score = 80
+                # El documento viene de la búsqueda oficial del despacho, y encontramos
+                # el número interno + despacho pero SIN partes identificables.
+                # Se muestra como requiere_revision para que el abogado lo confirme.
+                score = 78
                 estado = "requiere_revision"
                 m_type = "interno_despacho_sin_partes"
-                motivo = f"Número interno ({iv}) y despacho en el bloque, pero sin coincidencia de partes (posible listado múltiple)"
+                motivo = f"Número interno ({iv}) y despacho en el bloque, sin coincidencia de partes (posible listado múltiple)"
             elif has_demandante or has_demandado:
                 score = 85
                 estado = "requiere_revision"
                 m_type = "interno_una_parte"
                 motivo = f"Número interno ({iv}) y una parte en el bloque (sin despacho evidente)"
             elif is_filtered_source:
-                # Solo el interno en fuente oficial
-                score = 70
-                estado = "descartado"
+                # Solo el número interno en fuente oficial: mostrar como requiere_revision
+                # para que el abogado lo revise manualmente. NO descartar silenciosamente.
+                score = 75
+                estado = "requiere_revision"
                 m_type = "solo_interno_fuente_filtrada"
-                motivo = "Coincidencia débil o componentes dispersos"
+                motivo = f"Número interno ({iv}) encontrado en fuente oficial del despacho. Sin partes identificadas, requiere revisión visual."
                 
             elementos = {
                 "internal": iv,
@@ -457,11 +460,12 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
         best_result.is_valid = False
         best_result.reasons += " (Relegado a revisión manual por falta de bloque de evidencia de texto)"
 
-    # Regla Final: Si best score < 75, forzar descartado
-    if best_result.score < 75 and best_result.estado_validacion != "requiere_revision":
+    # Regla Final: Si best score < 70 y no fue clasificado explícitamente, forzar descartado
+    # NOTA: score=75 corresponde a 'solo_interno_fuente_filtrada' → requiere_revision, NO descartar
+    if best_result.score < 70:
         best_result.estado_validacion = "descartado"
         best_result.is_valid = False
-        best_result.reasons = "Coincidencia débil o componentes dispersos"
+        best_result.reasons = "Coincidencia muy débil o sin componentes identificables"
 
     return best_result
 
