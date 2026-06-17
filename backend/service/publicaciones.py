@@ -397,9 +397,8 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
             estado = "descartado"
             m_type = "ninguno"
             
-            # REGLAS DE PUNTUACIÓN
-            # La búsqueda ya está filtrada por despacho → la fuente oficial es confiable.
-            # Prioridad: partes > despacho > número interno en fuente oficial.
+            # REGLAS DE PUNTUACIÓN AUTOMÁTICA Y AUDITORÍA
+            # Si el documento viene de búsqueda oficial y tiene coincidencia robusta, se valida automáticamente.
             if has_demandante and has_demandado:
                 score = 95
                 estado = "validado"
@@ -418,16 +417,26 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                 m_type = "interno_despacho_filtrado"
                 motivo = f"Número interno ({iv}) y despacho confirmados en fuente oficial del despacho"
             elif has_demandante or has_demandado:
+                # Coincidencia de número interno y al menos una parte es suficiente evidencia
                 score = 82
-                estado = "requiere_revision"
+                estado = "validado"
                 m_type = "interno_una_parte"
                 motivo = f"Número interno ({iv}) y una parte en el bloque (sin despacho evidente)"
             elif is_filtered_source:
-                # Solo número interno en fuente oficial: auditoría interna.
-                score = 75
-                estado = "requiere_revision"
-                m_type = "solo_interno_fuente_filtrada"
-                motivo = f"Número interno ({iv}) en fuente oficial. Sin partes ni despacho identificados."
+                # Solo número interno en fuente oficial:
+                # Si el número interno es largo/específico (>= 7 dígitos), es válido automáticamente
+                if len(only_digits(iv)) >= 7:
+                    score = 85
+                    estado = "validado"
+                    m_type = "solo_interno_fuente_filtrada_especifico"
+                    motivo = f"Número interno específico ({iv}) encontrado en fuente oficial del despacho."
+                else:
+                    # Consecutivos cortos o ambiguos (ej. 20241) sin partes/despacho en el bloque
+                    # quedan para revisión técnica en SuperAdmin/debug.
+                    score = 75
+                    estado = "requiere_revision"
+                    m_type = "solo_interno_fuente_filtrada"
+                    motivo = f"Número interno ({iv}) en fuente oficial. Sin partes ni despacho identificados en bloque."
                 
             elementos = {
                 "internal": iv,

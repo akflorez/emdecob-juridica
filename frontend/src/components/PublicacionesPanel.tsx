@@ -23,6 +23,7 @@ interface PublicacionesPanelProps {
   // Nuevos campos de progreso
   initialSyncStatus?: string | null;
   initialSyncProgress?: number;
+  isSuperAdmin?: boolean;
 }
 
 export function PublicacionesPanel({ 
@@ -32,7 +33,8 @@ export function PublicacionesPanel({
   onRefresh, 
   isLoading: initialLoading,
   initialSyncStatus,
-  initialSyncProgress = 0
+  initialSyncProgress = 0,
+  isSuperAdmin = false
 }: PublicacionesPanelProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(initialSyncStatus || null);
@@ -138,6 +140,52 @@ export function PublicacionesPanel({
     }
   };
 
+  const handleAprobar = async (pubId: number) => {
+    try {
+      const res = await aceptarPublicacion(pubId);
+      if (res.ok) {
+        toast({
+          title: 'Publicación aprobada',
+          description: 'La publicación ahora es visible para el cliente.',
+        });
+        const updated = publications.map(p => 
+          p.id === pubId ? { ...p, estado_validacion: 'validado' as const, requiere_revision: false } : p
+        );
+        onRefresh(updated);
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error al aprobar',
+        description: e.message || 'No se pudo aprobar la publicación.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDescartarClick = async (pubId: number) => {
+    const motivo = window.prompt("Ingrese el motivo del descarte:", "No corresponde al caso");
+    if (motivo === null) return;
+    
+    try {
+      const res = await descartarPublicacion(pubId, motivo || "Descarte manual");
+      if (res.ok) {
+        toast({
+          title: 'Publicación descartada',
+          description: 'La publicación ha sido descartada internamente.',
+        });
+        const updated = publications.map(p => 
+          p.id === pubId ? { ...p, estado_validacion: 'descartado' as const, requiere_revision: false } : p
+        );
+        onRefresh(updated);
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error al descartar',
+        description: e.message || 'No se pudo descartar la publicación.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return '—';
@@ -247,6 +295,7 @@ export function PublicacionesPanel({
         // Solo publicaciones validadas se muestran al cliente.
         // requiere_revision y descartado son estados internos de auditoría.
         const validadas = publications.filter(p => p.estado_validacion === 'validado');
+        const requierenRevision = publications.filter(p => p.estado_validacion === 'requiere_revision');
 
         if (publications.length === 0 && busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length === 0) {
           return (
@@ -268,13 +317,14 @@ export function PublicacionesPanel({
           );
         }
 
-        const renderTable = (pubsList: CasePublication[]) => (
+        const renderTable = (pubsList: CasePublication[], showTechnicalDetails: boolean = false) => (
           <div className="border rounded-lg overflow-hidden bg-card text-card-foreground">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead className="w-[180px]">Fecha</TableHead>
                   <TableHead>Publicación</TableHead>
+                  {showTechnicalDetails && <TableHead className="w-[280px]">Auditoría Técnica</TableHead>}
                   <TableHead className="w-[260px] text-right">Documentos</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,6 +365,64 @@ export function PublicacionesPanel({
                         {pub.descripcion || 'Publicación encontrada en el portal de la Rama Judicial.'}
                       </p>
                     </TableCell>
+
+                    {/* AUDITORÍA TÉCNICA (Solo visible para SuperAdmin/debug) */}
+                    {showTechnicalDetails && (
+                      <TableCell className="align-top py-4 text-xs space-y-2">
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            pub.estado_validacion === 'validado'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                              : pub.estado_validacion === 'requiere_revision'
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                              : 'bg-destructive/10 text-destructive border-destructive/20'
+                          }`}>
+                            {pub.estado_validacion === 'validado' ? 'Validado' : pub.estado_validacion === 'requiere_revision' ? 'Revisión' : 'Descartado'} 
+                            (Score: {pub.match_score})
+                          </span>
+                          {pub.match_type && (
+                            <span className="text-[9px] font-extrabold uppercase bg-muted text-muted-foreground px-1.5 py-0.5 rounded border">
+                              Tipo: {pub.match_type}
+                            </span>
+                          )}
+                        </div>
+
+                        {pub.motivo_match && (
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            <strong>Motivo:</strong> {pub.motivo_match}
+                          </p>
+                        )}
+
+                        {pub.texto_bloque_match && (
+                          <details className="text-[10px] text-muted-foreground">
+                            <summary className="cursor-pointer font-semibold hover:text-primary select-none text-[9px] uppercase tracking-wider">Ver bloque de evidencia</summary>
+                            <div className="mt-1 bg-muted/50 p-1.5 rounded border max-h-24 overflow-y-auto whitespace-pre-wrap font-mono text-[9px]">
+                              "{pub.texto_bloque_match}"
+                            </div>
+                          </details>
+                        )}
+
+                        {pub.estado_validacion === 'requiere_revision' && (
+                          <div className="flex gap-2 pt-1">
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleAprobar(pub.id)}
+                              className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase rounded"
+                            >
+                              Aprobar
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleDescartarClick(pub.id)}
+                              className="h-7 px-2.5 text-[10px] font-bold uppercase rounded border-amber-500/30 text-amber-600 hover:bg-amber-500/5 hover:text-amber-700"
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
 
                     {/* DOCUMENTOS */}
                     <TableCell className="align-top text-right space-y-2 py-4">
@@ -395,13 +503,28 @@ export function PublicacionesPanel({
         );
 
         return (
-          <div className="mt-4">
-            {validadas.length > 0 ? renderTable(validadas) : (
+          <div className="mt-4 space-y-4">
+            {/* PUBLICACIONES VALIDADAS */}
+            {validadas.length > 0 ? renderTable(validadas, isSuperAdmin) : (
               <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
                 {busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length > 0
                   ? 'Buscando publicaciones procesales en segundo plano...'
                   : 'No se encontraron publicaciones en el portal para este radicado.'}
               </div>
+            )}
+
+            {/* PUBLICACIONES QUE REQUIEREN REVISIÓN (Solo visible para SuperAdmin) */}
+            {isSuperAdmin && requierenRevision.length > 0 && (
+              <details className="group border rounded-lg overflow-hidden bg-amber-500/5 border-amber-500/20">
+                <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                  {requierenRevision.length} publicación(es) que requieren revisión manual (Auditoría Técnica)
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">Clic para ver/ocultar</span>
+                </summary>
+                <div className="border-t border-amber-500/20">
+                  {renderTable(requierenRevision, true)}
+                </div>
+              </details>
             )}
           </div>
         );
