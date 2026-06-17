@@ -397,7 +397,9 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
             estado = "descartado"
             m_type = "ninguno"
             
-            # REGLAS ESTRICTAS DE PUNTUACIÓN (>= 90 es validado)
+            # REGLAS DE PUNTUACIÓN
+            # La búsqueda ya está filtrada por despacho → la fuente oficial es confiable.
+            # Prioridad: partes > despacho > número interno en fuente oficial.
             if has_demandante and has_demandado:
                 score = 95
                 estado = "validado"
@@ -409,25 +411,23 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                 m_type = "interno_despacho_una_parte"
                 motivo = f"Número interno ({iv}), despacho y al menos una parte en el bloque"
             elif has_despacho and is_filtered_source:
-                # El documento viene de la búsqueda oficial del despacho, y encontramos
-                # el número interno + despacho pero SIN partes identificables.
-                # Se muestra como requiere_revision para que el abogado lo confirme.
-                score = 78
-                estado = "requiere_revision"
-                m_type = "interno_despacho_sin_partes"
-                motivo = f"Número interno ({iv}) y despacho en el bloque, sin coincidencia de partes (posible listado múltiple)"
+                # Despacho + número interno en fuente oficial = evidencia suficiente.
+                # La búsqueda ya estaba filtrada por el código del despacho.
+                score = 88
+                estado = "validado"
+                m_type = "interno_despacho_filtrado"
+                motivo = f"Número interno ({iv}) y despacho confirmados en fuente oficial del despacho"
             elif has_demandante or has_demandado:
-                score = 85
+                score = 82
                 estado = "requiere_revision"
                 m_type = "interno_una_parte"
                 motivo = f"Número interno ({iv}) y una parte en el bloque (sin despacho evidente)"
             elif is_filtered_source:
-                # Solo el número interno en fuente oficial: mostrar como requiere_revision
-                # para que el abogado lo revise manualmente. NO descartar silenciosamente.
+                # Solo número interno en fuente oficial: auditoría interna.
                 score = 75
                 estado = "requiere_revision"
                 m_type = "solo_interno_fuente_filtrada"
-                motivo = f"Número interno ({iv}) encontrado en fuente oficial del despacho. Sin partes identificadas, requiere revisión visual."
+                motivo = f"Número interno ({iv}) en fuente oficial. Sin partes ni despacho identificados."
                 
             elementos = {
                 "internal": iv,
@@ -448,24 +448,16 @@ def classify_document_match(text: str, radicado: str, demandante: str = "", dema
                     elementos_detectados=elementos
                 )
 
-    # Considerar casos de extracción pobre
+    # Extracción pobre en fuente oficial: auditoría interna, no bloquea.
     if best_score < 75 and is_filtered_source:
-        # Si extrajimos muy poco texto (ej. imagen escaneada no ocrizada) pero venía de fuente oficial
         if len(text.strip()) < 500:
-            return MatchResult(False, "extraccion_pobre", "Extracción de texto pobre en fuente oficial. Requiere revisión visual.", 50, "requiere_revision", text.strip()[:200], {})
+            return MatchResult(False, "extraccion_pobre", "Texto extraído insuficiente (posible imagen no OCR).", 50, "requiere_revision", text.strip()[:200], {})
 
-    # Regla: Si es validado pero no tiene texto de evidencia, se degrada a requiere_revision
-    if best_result.estado_validacion == "validado" and not best_result.texto_bloque_match:
-        best_result.estado_validacion = "requiere_revision"
-        best_result.is_valid = False
-        best_result.reasons += " (Relegado a revisión manual por falta de bloque de evidencia de texto)"
-
-    # Regla Final: Si best score < 70 y no fue clasificado explícitamente, forzar descartado
-    # NOTA: score=75 corresponde a 'solo_interno_fuente_filtrada' → requiere_revision, NO descartar
+    # Regla Final: score < 70 → descartado internamente
     if best_result.score < 70:
         best_result.estado_validacion = "descartado"
         best_result.is_valid = False
-        best_result.reasons = "Coincidencia muy débil o sin componentes identificables"
+        best_result.reasons = "Coincidencia insuficiente para confirmar el radicado"
 
     return best_result
 

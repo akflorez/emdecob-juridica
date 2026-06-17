@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   FileDown, Download, Calendar, ExternalLink, 
-  RefreshCw, Loader2, AlertCircle, FileText, CheckCircle2, HelpCircle
+  RefreshCw, Loader2, AlertCircle, FileText, CheckCircle2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -244,9 +244,9 @@ export function PublicacionesPanel({
       </div>
 
       {(() => {
+        // Solo publicaciones validadas se muestran al cliente.
+        // requiere_revision y descartado son estados internos de auditoría.
         const validadas = publications.filter(p => p.estado_validacion === 'validado');
-        const requierenRevision = publications.filter(p => p.estado_validacion === 'requiere_revision');
-        const descartadas = publications.filter(p => p.estado_validacion === 'descartado');
 
         if (publications.length === 0 && busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length === 0) {
           return (
@@ -268,22 +268,21 @@ export function PublicacionesPanel({
           );
         }
 
-        const renderTable = (pubsList: CasePublication[], isRevisionTab: boolean) => (
+        const renderTable = (pubsList: CasePublication[]) => (
           <div className="border rounded-lg overflow-hidden bg-card text-card-foreground">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead className="w-[170px]">Fecha / Estado</TableHead>
-                  <TableHead className="w-[200px]">Validación / Análisis</TableHead>
-                  <TableHead>Detalle de Publicación</TableHead>
-                  <TableHead className="w-[280px] text-right">Documentos y Fuente</TableHead>
+                  <TableHead className="w-[180px]">Fecha</TableHead>
+                  <TableHead>Publicación</TableHead>
+                  <TableHead className="w-[260px] text-right">Documentos</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pubsList.map((pub) => (
                   <TableRow key={pub.id} className="hover:bg-muted/30 transition-colors">
 
-                    {/* FECHA / ESTADO */}
+                    {/* FECHA */}
                     <TableCell className="align-top space-y-1.5 py-4">
                       {pub.fecha_estado_electronico && (
                         <div className="flex items-center gap-1.5 text-xs">
@@ -293,7 +292,7 @@ export function PublicacionesPanel({
                       )}
                       {pub.fecha_publicacion && (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span className="text-[10px] uppercase font-bold bg-muted px-1.5 py-0.5 rounded shrink-0 font-medium">Pub.</span>
+                          <span className="text-[10px] uppercase font-bold bg-muted px-1.5 py-0.5 rounded shrink-0">Pub.</span>
                           <span>{formatDate(pub.fecha_publicacion)}</span>
                         </div>
                       )}
@@ -306,181 +305,108 @@ export function PublicacionesPanel({
                       )}
                     </TableCell>
 
-                    {/* VALIDACIÓN / ANÁLISIS */}
-                    <TableCell className="align-top space-y-2 py-4">
-                      {pub.estado_validacion === 'validado' ? (
-                        (pub.match_score === 0 && pub.motivo_match?.includes('Registro previo')) ? (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
-                            <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            Validado (Legacy)
-                          </div>
-                        ) : pub.validado_manual ? (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 border border-emerald-600/30">
-                            <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            Validado Manual
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            Validado (Score: {pub.match_score})
-                          </div>
-                        )
-                      ) : pub.estado_validacion === 'requiere_revision' ? (
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                          <AlertCircle className="h-3 w-3 shrink-0" />
-                          Revisión (Score: {pub.match_score})
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">
-                          <HelpCircle className="h-3 w-3 shrink-0" />
-                          Descartado {pub.descartado_manual && "Manual"}
-                        </div>
-                      )}
-                      
-                      {pub.match_type && (
-                        <div className="text-xs">
-                          <span className="font-bold text-muted-foreground text-[9px] uppercase bg-muted px-1.5 py-0.5 rounded">
-                            Tipo: {pub.match_type}
-                          </span>
-                        </div>
-                      )}
-
-                      {(pub.motivo_match || pub.observacion || pub.observacion_revision) && (
-                        <p className="text-[10px] text-muted-foreground leading-tight mt-1 max-w-[200px]">
-                          {pub.motivo_match} {pub.observacion} {pub.observacion_revision && <span className="block mt-1 font-medium text-foreground">Obs: {pub.observacion_revision}</span>}
-                        </p>
-                      )}
-
-                      {pub.texto_bloque_match && (
-                        <div className="mt-2 bg-muted/40 border p-1.5 rounded-md text-[10px] text-muted-foreground break-words max-w-[220px] max-h-24 overflow-y-auto">
-                          <span className="font-semibold block mb-0.5 text-[9px] uppercase tracking-wider">Bloque de Evidencia:</span>
-                          "{pub.texto_bloque_match}"
-                        </div>
-                      )}
-                    </TableCell>
-
-                    {/* DETALLE DE PUBLICACIÓN */}
+                    {/* TIPO / DESCRIPCIÓN */}
                     <TableCell className="align-top py-4 text-sm">
-                      <div className="font-semibold text-foreground mb-1">
-                        {pub.tipo_publicacion || 'Publicación'}
+                      <div className="font-semibold text-foreground mb-1 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        {pub.tipo_publicacion || 'Publicación Procesal'}
                       </div>
                       <p className="text-muted-foreground text-xs leading-relaxed max-w-md">
-                        {pub.descripcion || 'Sin descripción disponible'}
+                        {pub.descripcion || 'Publicación encontrada en el portal de la Rama Judicial.'}
                       </p>
                     </TableCell>
 
-                      {/* ACCIONES Y DOCUMENTOS */}
-                      <TableCell className="align-top text-right space-y-2 py-4">
-                        
-                        {/* Descarga Principal */}
-                        {pub.url_fuente_principal ? (
-                          <div>
-                            <a 
-                              href={pub.url_fuente_principal} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              {pub.tipo_fuente_principal === 'resumen_publicacion' ? 'Ver Resumen Estado' : 
-                               pub.tipo_fuente_principal === 'cuadro_consultar_aqui' ? 'Ver Cuadro' : 
-                               pub.tipo_fuente_principal === 'documento_estado' ? 'Ver Documento Estado' : 
-                               'Ver Doc Principal'}
-                            </a>
-                          </div>
-                        ) : pub.documento_url ? (
-                          <div>
-                            <a 
-                              href={pub.documento_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              Ver Documento
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">Sin documento principal</span>
-                        )}
+                    {/* DOCUMENTOS */}
+                    <TableCell className="align-top text-right space-y-2 py-4">
+                      {pub.url_fuente_principal ? (
+                        <div>
+                          <a 
+                            href={pub.url_fuente_principal} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {pub.tipo_fuente_principal === 'resumen_publicacion' ? 'Ver Resumen Estado' : 
+                             pub.tipo_fuente_principal === 'cuadro_consultar_aqui' ? 'Ver Cuadro' : 
+                             pub.tipo_fuente_principal === 'documento_estado' ? 'Ver Documento Estado' : 
+                             'Ver Documento'}
+                          </a>
+                        </div>
+                      ) : pub.documento_url ? (
+                        <div>
+                          <a 
+                            href={pub.documento_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-md transition-colors"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Ver Documento
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Sin documento</span>
+                      )}
 
-                        {/* Documentos Complementarios */}
-                        {(() => {
-                          const comps = parseComplementarios(pub.documentos_complementarios).filter(doc => doc.contiene_radicado);
-                          if (comps.length === 0) return null;
-                          return (
-                            <div className="mt-2 space-y-1 text-left flex flex-col items-end border-t pt-2 border-dashed">
-                              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Doc. Complementarios</span>
-                              {comps.map((doc, idx) => (
-                                <a 
-                                  key={idx} 
-                                  href={doc.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:underline transition-colors max-w-[260px] truncate"
-                                  title={doc.nombre}
-                                >
-                                  {doc.contiene_radicado ? (
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-                                  ) : (
-                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0 mx-0.5 animate-pulse" />
-                                  )}
-                                  <span className="truncate">{doc.nombre || `Doc Complementario ${idx + 1}`}</span>
-                                </a>
-                              ))}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Enlace original */}
-                        {pub.source_url && (
-                          <div className="pt-1.5">
-                            <a 
-                              href={pub.source_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              <ExternalLink className="h-2.5 w-2.5" />
-                              Ver en Portal Judicial
-                            </a>
+                      {/* Documentos Complementarios (solo los que contienen el radicado) */}
+                      {(() => {
+                        const comps = parseComplementarios(pub.documentos_complementarios).filter(doc => doc.contiene_radicado);
+                        if (comps.length === 0) return null;
+                        return (
+                          <div className="mt-2 space-y-1 text-left flex flex-col items-end border-t pt-2 border-dashed">
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Doc. Complementarios</span>
+                            {comps.map((doc, idx) => (
+                              <a 
+                                key={idx} 
+                                href={doc.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:underline transition-colors max-w-[240px] truncate"
+                                title={doc.nombre}
+                              >
+                                <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                                <span className="truncate">{doc.nombre || `Documento ${idx + 1}`}</span>
+                              </a>
+                            ))}
                           </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                        );
+                      })()}
+
+                      {pub.source_url && (
+                        <div className="pt-1.5">
+                          <a 
+                            href={pub.source_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            Ver en Portal Judicial
+                          </a>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         );
 
         return (
-          <div className="mt-4 space-y-4">
-            {/* PUBLICACIONES VALIDADAS */}
-            {validadas.length > 0 ? renderTable(validadas, false) : (
+          <div className="mt-4">
+            {validadas.length > 0 ? renderTable(validadas) : (
               <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
                 {busquedas.filter(b => ['pendiente', 'procesando'].includes(b.estado)).length > 0
-                  ? "Buscando publicaciones procesales..."
-                  : "No hay publicaciones validadas aún."}
+                  ? 'Buscando publicaciones procesales en segundo plano...'
+                  : 'No se encontraron publicaciones en el portal para este radicado.'}
               </div>
-            )}
-
-            {/* PUBLICACIONES QUE REQUIEREN REVISIÓN */}
-            {requierenRevision.length > 0 && (
-              <details className="group border rounded-lg overflow-hidden bg-amber-500/5 border-amber-500/20">
-                <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {requierenRevision.length} publicación(es) que requieren revisión manual
-                  <span className="ml-auto text-xs font-normal text-muted-foreground">Clic para ver/ocultar</span>
-                </summary>
-                <div className="border-t border-amber-500/20">
-                  {renderTable(requierenRevision, true)}
-                </div>
-              </details>
             )}
           </div>
         );
       })()}
+
 
       <div className="bg-blue-500/5 border border-blue-500/20 p-4 rounded-lg flex gap-3">
         <AlertCircle className="h-5 w-5 text-blue-500 shrink-0" />
