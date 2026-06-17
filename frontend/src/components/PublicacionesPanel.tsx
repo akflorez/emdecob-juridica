@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { CasePublication, refreshCasePublications, refreshCasePublicationsById, getCaseByRadicado, getCaseById, getCasePublications, getCasePublicationsById, descartarPublicacion, aceptarPublicacion } from '@/services/api';
+import { CasePublication, refreshCasePublications, refreshCasePublicationsById, getCaseByRadicado, getCaseById, getCasePublications, getCasePublicationsById, descartarPublicacion, aceptarPublicacion, apiFetch } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface PublicacionesPanelProps {
@@ -41,6 +41,10 @@ export function PublicacionesPanel({
   const [syncProgress, setSyncProgress] = useState<number>(initialSyncProgress);
   const { toast } = useToast();
 
+  const [companyId, setCompanyId] = useState<number | null>(null);
+  const [activeJob, setActiveJob] = useState<any | null>(null);
+  const [isStartingJob, setIsStartingJob] = useState(false);
+
   useEffect(() => {
     setSyncStatus(initialSyncStatus || null);
   }, [initialSyncStatus]);
@@ -49,13 +53,12 @@ export function PublicacionesPanel({
     setSyncProgress(initialSyncProgress);
   }, [initialSyncProgress]);
 
-  
   const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
 
   const [busquedas, setBusquedas] = useState<any[]>([]);
 
-  // Fetch inicial para obtener las búsquedas actuales y estado global
+  // Fetch inicial para obtener las búsquedas actuales, estado global y ID de la empresa
   useEffect(() => {
     const fetchInitialStatus = async () => {
       try {
@@ -68,6 +71,7 @@ export function PublicacionesPanel({
           const status = result.estado_busqueda || result.sync_pub_status;
           if (status) setSyncStatus(status);
           if (result.items) onRefresh(result.items);
+          if (result.company_id) setCompanyId(result.company_id);
         }
       } catch (e) {
         console.error("Error fetching initial status:", e);
@@ -75,6 +79,105 @@ export function PublicacionesPanel({
     };
     if (radicado) fetchInitialStatus();
   }, [radicado, caseId]);
+
+  // Verificar Job de Sincronización Masiva al cargar companyId
+  const checkActiveJob = async (id: number) => {
+    try {
+      const companyParam = `?company_id=${id}`;
+      const result = await apiFetch<{ job: any }>(`/publicaciones/sincronizacion-masiva/active${companyParam}`);
+      if (result && result.job) {
+        setActiveJob(result.job);
+      } else {
+        setActiveJob(null);
+      }
+    } catch (e) {
+      console.error("Error checking active mass sync job:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (companyId) {
+      checkActiveJob(companyId);
+    }
+  }, [companyId]);
+
+  // Polling para el Job masivo activo
+  useEffect(() => {
+    let interval: any;
+    if (activeJob && (activeJob.estado === 'pendiente' || activeJob.estado === 'procesando')) {
+      interval = setInterval(async () => {
+        try {
+          const jobStatus = await apiFetch<any>(`/publicaciones/sincronizacion-masiva/${activeJob.id}`);
+          if (jobStatus) {
+            setActiveJob(jobStatus);
+            if (jobStatus.estado !== 'pendiente' && jobStatus.estado !== 'procesando') {
+              toast({
+                title: 'Sincronización masiva finalizada',
+                description: `Se procesaron ${jobStatus.total_casos} casos y se crearon ${jobStatus.busquedas_creadas} búsquedas.`,
+              });
+              // Refrescar estado del caso actual
+              const result = caseId 
+                ? await getCasePublicationsById(caseId)
+                : await getCasePublications(radicado);
+              if (result && !Array.isArray(result)) {
+                setBusquedas(result.busquedas || []);
+                const status = result.estado_busqueda || result.sync_pub_status;
+                if (status) setSyncStatus(status);
+                if (result.items) onRefresh(result.items);
+              }
+              // Ocultar card de progreso después de 5 segundos
+              setTimeout(() => {
+                setActiveJob(null);
+              }, 5000);
+            }
+          }
+        } catch (e) {
+          console.error("Error polling active mass sync job:", e);
+        }
+      }, 5000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [activeJob, radicado, caseId, onRefresh]);
+
+  const handleStartMassSync = async (force: boolean = false) => {
+    if (!companyId) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo determinar el ID de la empresa para sincronizar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsStartingJob(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; job_id: number; message: string }>('/publicaciones/sincronizacion-masiva', {
+        method: 'POST',
+        body: JSON.stringify({
+          company_id: companyId,
+          force: force
+        })
+      });
+      if (res.ok) {
+        toast({
+          title: 'Sincronización masiva iniciada',
+          description: 'Estamos preparando las búsquedas de publicaciones para todos los radicados.',
+        });
+        // Obtener estado inicial del job
+        const jobStatus = await apiFetch<any>(`/publicaciones/sincronizacion-masiva/${res.job_id}`);
+        if (jobStatus) {
+          setActiveJob(jobStatus);
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error al iniciar sincronización',
+        description: error.message || 'Ya existe un proceso activo o no se pudo conectar con el servidor.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsStartingJob(false);
+    }
+  };
 
   // Polling cada 8 segundos si hay búsquedas activas (pendientes o en procesamiento)
   useEffect(() => {
@@ -234,6 +337,44 @@ export function PublicacionesPanel({
         </Card>
       )}
 
+      {/* BANNER DE SINCRONIZACIÓN MASIVA ACTIVA */}
+      {activeJob && (
+        <Card className="bg-primary/5 border-primary/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-500">
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="h-5 w-5 animate-spin text-primary shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  Sincronización Masiva de la Empresa ({activeJob.estado === 'pendiente' ? 'Preparando...' : 'Procesando...'})
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Estamos preparando las búsquedas de publicaciones. Las publicaciones aparecerán automáticamente a medida que el sistema las procese.
+                </p>
+              </div>
+              <span className="text-xs font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full shrink-0">
+                {activeJob.porcentaje}%
+              </span>
+            </div>
+            
+            <Progress value={activeJob.porcentaje} className="h-2 w-full" />
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1 text-xs text-muted-foreground">
+              <div>
+                <span className="font-semibold text-foreground">Casos procesados:</span> {activeJob.casos_procesados} / {activeJob.total_casos}
+              </div>
+              <div>
+                <span className="font-semibold text-foreground">Búsquedas creadas:</span> {activeJob.busquedas_creadas}
+              </div>
+              {activeJob.radicado_actual && (
+                <div className="col-span-2 truncate">
+                  <span className="font-semibold text-foreground">Radicado actual:</span> <span className="font-mono">{activeJob.radicado_actual}</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* SECCIÓN DE BÚSQUEDAS EN COLA */}
       {busquedas.length > 0 && (
         <Card className="bg-muted/30 border-primary/20 animate-in fade-in slide-in-from-top-2 duration-500">
@@ -278,7 +419,23 @@ export function PublicacionesPanel({
             Documentos y estados detectados automáticamente para este radicado.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          {!activeJob && companyId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleStartMassSync(false)}
+              disabled={isStartingJob}
+              className="border-primary/50 text-primary hover:bg-primary/5"
+            >
+              {isStartingJob ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sincronizar publicaciones de todos los radicados
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 

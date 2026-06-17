@@ -768,7 +768,7 @@ def guardar_estado_busqueda(db, data: dict):
         db.commit()
         return new_search
 
-def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) -> int:
+def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False, job_id=None, casos_procesados=None, busquedas_creadas=None) -> int:
     from backend.models import Case, CaseEvent, CasePublicationSearch
     import calendar
     from datetime import date
@@ -796,13 +796,18 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
         
     queued_count = 0
     
-    # Enforce resetting existing searches in error for this case (company_id + radicado) if force
+    # Parametros para log estructurado
+    job_str = job_id if job_id is not None else "None"
+    cp_str = casos_procesados if casos_procesados is not None else "None"
+    bc_str = busquedas_creadas if busquedas_creadas is not None else "None"
+    
+    # Enforce resetting existing searches in error/no-results for this case (company_id + radicado) if force
     if force:
         try:
             err_searches = db.query(CasePublicationSearch).filter(
                 CasePublicationSearch.company_id == company_id,
                 CasePublicationSearch.radicado == radicado,
-                CasePublicationSearch.estado == "error"
+                CasePublicationSearch.estado.in_(["error", "sin_resultado"])
             ).all()
             for es in err_searches:
                 es.estado = "pendiente"
@@ -817,7 +822,10 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
                 es.force = True
                 db.flush()
                 queued_count += 1
-                print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={es.mes_busqueda} search_id={es.id} (reactivated error search)")
+                
+                # Dynamic update of temporary creations count
+                current_bc = (busquedas_creadas or 0) + queued_count
+                print(f"[PUBLICACIONES][QUEUE_CREATED] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={es.mes_busqueda} search_id={es.id} (reactivated error search)")
         except Exception as ex_err:
             print(f"[auto_queue_publicaciones_for_case] Error resetting error searches: {ex_err}")
 
@@ -835,7 +843,8 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
             fecha_fin_val = parse_fecha_pub(fecha_fin_str)
             
             if not company_id or not radicado or not mes_str or not fecha_ini_val or not fecha_fin_val:
-                print(f"[PUBLICACIONES][QUEUE_INVALID_MONTH] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} reason=missing_required_fields_in_auto_queue")
+                current_bc = (busquedas_creadas or 0) + queued_count
+                print(f"[PUBLICACIONES][QUEUE_INVALID_MONTH] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={mes_str} search_id=None")
                 continue
 
             # Buscar por company_id + radicado + mes_busqueda para evitar duplicidad
@@ -860,11 +869,15 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
                         existing.force = True
                         db.flush()
                         queued_count += 1
-                        print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id} (forced reset)")
+                        
+                        current_bc = (busquedas_creadas or 0) + queued_count
+                        print(f"[PUBLICACIONES][QUEUE_CREATED] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={mes_str} search_id={existing.id} (forced reset)")
                     else:
-                        print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id} (already active)")
+                        current_bc = (busquedas_creadas or 0) + queued_count
+                        print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={mes_str} search_id={existing.id} (already active)")
                 else:
-                    print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={existing.id}")
+                    current_bc = (busquedas_creadas or 0) + queued_count
+                    print(f"[PUBLICACIONES][QUEUE_SKIPPED_EXISTS] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={mes_str} search_id={existing.id}")
             else:
                 despacho_codigo = extract_despacho_code(radicado)
                 
@@ -889,7 +902,9 @@ def auto_queue_publicaciones_for_case(db, case, current_user=None, force=False) 
                 db.add(new_search)
                 db.flush()
                 queued_count += 1
-                print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={radicado} mes_busqueda={mes_str} search_id={new_search.id}")
+                
+                current_bc = (busquedas_creadas or 0) + queued_count
+                print(f"[PUBLICACIONES][QUEUE_CREATED] job_id={job_str} company_id={company_id} radicado={radicado} casos_procesados={cp_str} busquedas_creadas={current_bc} mes_busqueda={mes_str} search_id={new_search.id}")
                 
     if queued_count > 0:
         db.commit()
@@ -903,6 +918,118 @@ def auto_queue_publicaciones(db, radicado: str, force: bool = False, source_trig
     if not case:
         return 0
     return auto_queue_publicaciones_for_case(db, case, force=force)
+
+async def auto_queue_publicaciones_masivo(db, company_id: int, force: bool = False, limit: Optional[int] = None, job_id: Optional[int] = None):
+    from backend.models import Case
+    from sqlalchemy import text
+    import os
+    
+    # 1. Fetch active cases
+    query = db.query(Case).filter(Case.company_id == company_id, Case.is_active == True)
+    if limit:
+        query = query.limit(limit)
+    cases = query.all()
+    total_cases = len(cases)
+    
+    # 2. Performance parameters
+    batch_size = int(os.getenv("PUBLICACIONES_MASS_SYNC_BATCH_SIZE", "20"))
+    sleep_ms = float(os.getenv("PUBLICACIONES_MASS_SYNC_SLEEP_MS", "500"))
+    sleep_sec = sleep_ms / 1000.0
+    
+    casos_procesados = 0
+    busquedas_creadas = 0
+    con_actuaciones_relevantes = 0
+    sin_actuaciones_relevantes = 0
+    con_error = 0
+    
+    # Update job state to processing
+    if job_id:
+        db.execute(text("""
+            UPDATE publicaciones_sync_jobs 
+            SET estado = 'procesando', total_casos = :total_casos, fecha_inicio = :now_time, updated_at = :now_time
+            WHERE id = :job_id
+        """), {"total_casos": total_cases, "job_id": job_id, "now_time": datetime.now()})
+        db.commit()
+        
+    print(f"[PUBLICACIONES][MASS_SYNC_STARTED] job_id={job_id} company_id={company_id} radicado=None casos_procesados=0 busquedas_creadas=0")
+    
+    for index, case in enumerate(cases):
+        radicado = case.radicado
+        print(f"[PUBLICACIONES][MASS_SYNC_CASE_PROCESSING] job_id={job_id} company_id={company_id} radicado={radicado} casos_procesados={casos_procesados} busquedas_creadas={busquedas_creadas}")
+        
+        try:
+            # Enqueue searches for case
+            queued = auto_queue_publicaciones_for_case(
+                db, 
+                case, 
+                force=force, 
+                job_id=job_id, 
+                casos_procesados=casos_procesados, 
+                busquedas_creadas=busquedas_creadas
+            )
+            
+            casos_procesados += 1
+            if queued > 0:
+                busquedas_creadas += queued
+                con_actuaciones_relevantes += 1
+            else:
+                sin_actuaciones_relevantes += 1
+                
+            print(f"[PUBLICACIONES][MASS_SYNC_CASE_DONE] job_id={job_id} company_id={company_id} radicado={radicado} casos_procesados={casos_procesados} busquedas_creadas={busquedas_creadas}")
+            
+        except Exception as ex:
+            con_error += 1
+            casos_procesados += 1
+            print(f"[PUBLICACIONES][MASS_SYNC_ERROR] job_id={job_id} company_id={company_id} radicado={radicado} casos_procesados={casos_procesados} busquedas_creadas={busquedas_creadas} error={str(ex)}")
+            
+            if job_id:
+                db.execute(text("""
+                    UPDATE publicaciones_sync_jobs
+                    SET ultimo_error = :err, con_error = :con_error, updated_at = :now_time
+                    WHERE id = :job_id
+                """), {"err": str(ex)[:500], "con_error": con_error, "job_id": job_id, "now_time": datetime.now()})
+                db.commit()
+                
+        # Batch updates
+        if (index + 1) % batch_size == 0 or (index + 1) == total_cases:
+            porcentaje = int(((index + 1) / total_cases) * 100) if total_cases > 0 else 100
+            if job_id:
+                db.execute(text("""
+                    UPDATE publicaciones_sync_jobs 
+                    SET casos_procesados = :casos_procesados,
+                        busquedas_creadas = :busquedas_creadas,
+                        con_actuaciones_relevantes = :con_actuaciones_relevantes,
+                        sin_actuaciones_relevantes = :sin_actuaciones_relevantes,
+                        porcentaje = :porcentaje,
+                        radicado_actual = :radicado_actual,
+                        updated_at = :now_time
+                    WHERE id = :job_id
+                """), {
+                    "casos_procesados": casos_procesados,
+                    "busquedas_creadas": busquedas_creadas,
+                    "con_actuaciones_relevantes": con_actuaciones_relevantes,
+                    "sin_actuaciones_relevantes": sin_actuaciones_relevantes,
+                    "porcentaje": porcentaje,
+                    "radicado_actual": radicado,
+                    "job_id": job_id,
+                    "now_time": datetime.now()
+                })
+                db.commit()
+                
+            # Sleep to prevent high CPU / load
+            await asyncio.sleep(sleep_sec)
+            
+    estado_final = "finalizado_con_errores" if con_error > 0 else "finalizado"
+    if job_id:
+        db.execute(text("""
+            UPDATE publicaciones_sync_jobs 
+            SET estado = :estado, fecha_fin = :now_time, porcentaje = 100, updated_at = :now_time
+            WHERE id = :job_id
+        """), {"estado": estado_final, "job_id": job_id, "now_time": datetime.now()})
+        db.commit()
+        
+    print(f"[PUBLICACIONES][MASS_SYNC_FINISHED] job_id={job_id} company_id={company_id} radicado=None  casos_procesados={casos_procesados} busquedas_creadas={busquedas_creadas}")
+    return total_cases, busquedas_creadas
 
 
 def parse_result_cards(html: str) -> list:

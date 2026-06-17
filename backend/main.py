@@ -1013,9 +1013,41 @@ async def run_publicaciones_worker_loop():
 async def lifespan(app: FastAPI):
     global auto_refresh_task, auto_refresh_running, auto_refresh_stats
 
-    print("[START] Iniciando EMDECOB Consultas...")
     # Garantizar que las tablas existan
     Base.metadata.create_all(bind=engine)
+    
+    # Crear tabla de control de sincronización masiva de forma segura
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS publicaciones_sync_jobs (
+                    id SERIAL PRIMARY KEY,
+                    company_id INTEGER,
+                    estado VARCHAR(50) DEFAULT 'pendiente',
+                    total_casos INTEGER DEFAULT 0,
+                    casos_procesados INTEGER DEFAULT 0,
+                    busquedas_creadas INTEGER DEFAULT 0,
+                    busquedas_omitidas INTEGER DEFAULT 0,
+                    con_actuaciones_relevantes INTEGER DEFAULT 0,
+                    sin_actuaciones_relevantes INTEGER DEFAULT 0,
+                    con_error INTEGER DEFAULT 0,
+                    porcentaje INTEGER DEFAULT 0,
+                    radicado_actual VARCHAR(100),
+                    force BOOLEAN DEFAULT FALSE,
+                    solo_pendientes BOOLEAN DEFAULT TRUE,
+                    iniciado_por VARCHAR(200),
+                    fecha_inicio TIMESTAMP,
+                    fecha_fin TIMESTAMP,
+                    ultimo_error TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """))
+            conn.commit()
+            print("[lifespan] Tabla publicaciones_sync_jobs garantizada en DB.")
+    except Exception as e:
+        print(f"[lifespan] Error al garantizar la tabla publicaciones_sync_jobs: {e}")
     
     # Reparación manual de columnas faltantes para evitar errores 500
     try:
@@ -6122,6 +6154,148 @@ async def force_search_month(body: BuscarMesBody, db: Session = Depends(get_db))
     print(f"[PUBLICACIONES][QUEUE_CREATED] company_id={company_id} radicado={body.radicado} mes_busqueda={body.mes} search_id={busqueda.id}")
     
     return {"ok": True, "message": f"Búsqueda del mes {body.mes} encolada exitosamente para el radicado {body.radicado}.", "estado": "pendiente"}
+
+
+class MassSyncBody(BaseModel):
+    company_id: Optional[int] = None
+    force: Optional[bool] = False
+    limit: Optional[int] = None
+
+
+@app.post("/api/publicaciones/sincronizacion-masiva")
+@app.post("/publicaciones/sincronizacion-masiva")
+async def start_mass_sync_publications(
+    body: MassSyncBody,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if is_global_superadmin(current_user):
+        if not body.company_id:
+            raise HTTPException(status_code=400, detail="Debe especificar un company_id seleccionado.")
+        target_company_id = body.company_id
+    else:
+        if current_user.company_id is None:
+            raise HTTPException(status_code=400, detail="El usuario no tiene una empresa asociada.")
+        target_company_id = current_user.company_id
+
+    active_job = db.execute(text("""
+        SELECT id FROM publicaciones_sync_jobs
+        WHERE company_id = :company_id AND estado IN ('pendiente', 'procesando')
+        LIMIT 1
+    """), {"company_id": target_company_id}).mappings().first()
+
+    if active_job:
+        raise HTTPException(status_code=400, detail="Ya existe una sincronización masiva en proceso para esta empresa.")
+
+    result = db.execute(text("""
+        INSERT INTO publicaciones_sync_jobs (company_id, estado, force, iniciado_por, total_casos, fecha_inicio, updated_at)
+        VALUES (:company_id, 'pendiente', :force, :iniciado_por, 0, :now, :now)
+        RETURNING id
+    """), {
+        "company_id": target_company_id,
+        "force": body.force,
+        "iniciado_por": current_user.username or str(current_user.id),
+        "now": datetime.now()
+    })
+    db.commit()
+    job_id = result.scalar()
+
+    async def run_mass_sync():
+        db_session = SessionLocal()
+        try:
+            from backend.service.publicaciones import auto_queue_publicaciones_masivo
+            await auto_queue_publicaciones_masivo(
+                db=db_session,
+                company_id=target_company_id,
+                force=body.force,
+                limit=body.limit,
+                job_id=job_id
+            )
+        except Exception as e:
+            print(f"[MASS_SYNC_BG_TASK] Error running mass sync for job {job_id}: {e}")
+            try:
+                db_session.execute(text("""
+                    UPDATE publicaciones_sync_jobs
+                    SET estado = 'error', ultimo_error = :err, updated_at = :now
+                    WHERE id = :job_id
+                """), {"err": str(e)[:500], "job_id": job_id, "now": datetime.now()})
+                db_session.commit()
+            except Exception as ex2:
+                print(f"[MASS_SYNC_BG_TASK] Error updating job state to error: {ex2}")
+        finally:
+            db_session.close()
+
+    background_tasks.add_task(run_mass_sync)
+    return {"ok": True, "job_id": job_id, "message": "Sincronización masiva iniciada."}
+
+
+@app.get("/api/publicaciones/sincronizacion-masiva/active")
+@app.get("/publicaciones/sincronizacion-masiva/active")
+async def get_active_mass_sync_job(
+    company_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if is_global_superadmin(current_user):
+        if not company_id:
+            raise HTTPException(status_code=400, detail="Debe especificar un company_id seleccionado.")
+        target_company_id = company_id
+    else:
+        if current_user.company_id is None:
+            raise HTTPException(status_code=400, detail="El usuario no tiene una empresa asociada.")
+        target_company_id = current_user.company_id
+
+    job = db.execute(text("""
+        SELECT id, company_id, estado, total_casos, casos_procesados, busquedas_creadas, busquedas_omitidas,
+               con_actuaciones_relevantes, sin_actuaciones_relevantes, con_error, porcentaje, radicado_actual,
+               force, iniciado_por, fecha_inicio, fecha_fin, ultimo_error, created_at, updated_at
+        FROM publicaciones_sync_jobs
+        WHERE company_id = :company_id AND estado IN ('pendiente', 'procesando')
+        ORDER BY id DESC
+        LIMIT 1
+    """), {"company_id": target_company_id}).mappings().first()
+
+    if not job:
+        return {"job": None}
+
+    job_dict = dict(job)
+    serialized_job = {
+        k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
+        for k, v in job_dict.items()
+    }
+    return {"job": serialized_job}
+
+
+@app.get("/api/publicaciones/sincronizacion-masiva/{job_id}")
+@app.get("/publicaciones/sincronizacion-masiva/{job_id}")
+async def get_mass_sync_job_status(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    job = db.execute(text("""
+        SELECT id, company_id, estado, total_casos, casos_procesados, busquedas_creadas, busquedas_omitidas,
+               con_actuaciones_relevantes, sin_actuaciones_relevantes, con_error, porcentaje, radicado_actual,
+               force, iniciado_por, fecha_inicio, fecha_fin, ultimo_error, created_at, updated_at
+        FROM publicaciones_sync_jobs
+        WHERE id = :job_id
+    """), {"job_id": job_id}).mappings().first()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado.")
+
+    if not is_global_superadmin(current_user):
+        if job["company_id"] != current_user.company_id:
+            raise HTTPException(status_code=403, detail="No tiene permisos para ver esta sincronización.")
+
+    job_dict = dict(job)
+    serialized_job = {
+        k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
+        for k, v in job_dict.items()
+    }
+    return serialized_job
+
 
 class PublicacionesDebugBody(BaseModel):
     radicado: str
