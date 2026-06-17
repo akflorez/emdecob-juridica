@@ -6008,59 +6008,112 @@ _bulk_sync_state = {
 
 @app.get("/api/bulk-sync/publications-status")
 @app.get("/bulk-sync/publications-status")
-async def get_sync_publications_status():
-    """Devuelve el progreso actual de la sincronización masiva."""
+async def get_sync_publications_status(db: Session = Depends(get_db)):
+    """Devuelve el progreso actual de la sincronización masiva leyendo el último job en DB."""
+    job = db.execute(text("""
+        SELECT id, company_id, estado, total_casos, casos_procesados, con_error, porcentaje
+        FROM publicaciones_sync_jobs
+        ORDER BY id DESC
+        LIMIT 1
+    """)).mappings().first()
+    
+    if not job:
+        return {"running": False, "total": 0, "reviewed": 0, "errors": 0, "percent": 0}
+        
+    running = job["estado"] in ["pendiente", "procesando"]
     return {
-        "running": _bulk_sync_state["running"],
-        "total": _bulk_sync_state["total"],
-        "reviewed": _bulk_sync_state["reviewed"],
-        "errors": _bulk_sync_state["errors"],
-        "percent": round((_bulk_sync_state["reviewed"] / _bulk_sync_state["total"]) * 100)
-                   if _bulk_sync_state["total"] > 0 else 0,
+        "running": running,
+        "total": job["total_casos"],
+        "reviewed": job["casos_procesados"],
+        "errors": job["con_error"],
+        "percent": job["porcentaje"]
     }
 
 @app.post("/api/cases/sync-all-publications")
 @app.post("/cases/sync-all-publications")
-async def sync_all_publications(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def sync_all_publications(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Inicia la sincronización masiva de publicaciones procesales para todos los casos válidos.
-    El proceso se ejecuta en segundo plano con baja concurrencia para no saturar el portal.
+    Inicia la sincronización masiva de publicaciones procesales para todos los casos válidos,
+    utilizando el nuevo encolador masivo no bloqueante.
     """
-    # Casos válidos = los que ya tienen juzgado asignado (fueron encontrados en Rama Judicial)
-    cases = db.query(Case).filter(Case.juzgado.isnot(None)).all()
+    if is_global_superadmin(current_user):
+        target_company_id = current_user.company_id
+        if target_company_id is None:
+            first_case = db.query(Case).first()
+            target_company_id = first_case.company_id if first_case else 1
+    else:
+        if current_user.company_id is None:
+            raise HTTPException(status_code=400, detail="El usuario no tiene una empresa asociada.")
+        target_company_id = current_user.company_id
+
+    # Validar si ya existe un job masivo activo
+    active_job = db.execute(text("""
+        SELECT id FROM publicaciones_sync_jobs
+        WHERE company_id = :company_id AND estado IN ('pendiente', 'procesando')
+        LIMIT 1
+    """), {"company_id": target_company_id}).mappings().first()
+
+    if active_job:
+        job_info = db.execute(text("""
+            SELECT total_casos, casos_procesados FROM publicaciones_sync_jobs WHERE id = :id
+        """), {"id": active_job["id"]}).mappings().first()
+        
+        return {
+            "ok": False,
+            "message": f"Ya hay una sincronización en curso ({job_info['casos_procesados']}/{job_info['total_casos']} revisados).",
+            "total": job_info["total_casos"],
+            "reviewed": job_info["casos_procesados"]
+        }
+
+    # Casos válidos = activos de la empresa
+    cases = db.query(Case).filter(Case.company_id == target_company_id, Case.is_active == True).all()
     total = len(cases)
     if total == 0:
         return {"ok": True, "message": "No hay casos válidos para sincronizar.", "total": 0}
 
-    if _bulk_sync_state["running"]:
-        return {
-            "ok": False,
-            "message": f"Ya hay una sincronización en curso ({_bulk_sync_state['reviewed']}/{_bulk_sync_state['total']} revisados).",
-            "total": _bulk_sync_state["total"],
-            "reviewed": _bulk_sync_state["reviewed"],
-        }
+    # Crear el job masivo
+    result = db.execute(text("""
+        INSERT INTO publicaciones_sync_jobs (company_id, estado, force, iniciado_por, total_casos, fecha_inicio, updated_at)
+        VALUES (:company_id, 'pendiente', false, :iniciado_por, :total, :now, :now)
+        RETURNING id
+    """), {
+        "company_id": target_company_id,
+        "iniciado_por": current_user.username or str(current_user.id),
+        "total": total,
+        "now": datetime.now()
+    })
+    db.commit()
+    job_id = result.scalar()
 
-    async def run_bulk_sync():
-        _bulk_sync_state["running"] = True
-        _bulk_sync_state["total"] = total
-        _bulk_sync_state["reviewed"] = 0
-        _bulk_sync_state["errors"] = 0
-        db_bulk = SessionLocal()
+    async def run_mass_sync():
+        db_session = SessionLocal()
         try:
-            radicados = [c.radicado for c in db_bulk.query(Case).filter(Case.juzgado.isnot(None)).all()]
-            for radicado in radicados:
-                try:
-                    await run_sync_publications_task(radicado, force=False)
-                except Exception as e:
-                    _bulk_sync_state["errors"] += 1
-                    print(f"[bulk_sync] Error en {radicado}: {e}")
-                finally:
-                    _bulk_sync_state["reviewed"] += 1
+            from backend.service.publicaciones import auto_queue_publicaciones_masivo
+            await auto_queue_publicaciones_masivo(
+                db=db_session,
+                company_id=target_company_id,
+                force=False,
+                job_id=job_id
+            )
+        except Exception as e:
+            print(f"[MASS_SYNC_BG_TASK] Error running legacy-triggered mass sync: {e}")
+            try:
+                db_session.execute(text("""
+                    UPDATE publicaciones_sync_jobs
+                    SET estado = 'error', ultimo_error = :err, updated_at = :now
+                    WHERE id = :job_id
+                """), {"err": str(e)[:500], "job_id": job_id, "now": datetime.now()})
+                db_session.commit()
+            except Exception as ex2:
+                print(f"[MASS_SYNC_BG_TASK] Error updating job state to error: {ex2}")
         finally:
-            db_bulk.close()
-            _bulk_sync_state["running"] = False
+            db_session.close()
 
-    background_tasks.add_task(run_bulk_sync)
+    background_tasks.add_task(run_mass_sync)
     return {
         "ok": True,
         "message": f"Sincronización masiva iniciada para {total} casos en segundo plano.",
