@@ -4107,7 +4107,14 @@ def download_cases_excel(
         q = q.filter(Case.company_id == current_user.company_id)
 
     if solo_no_leidos:
-        q = q.filter(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash)
+        ayer_list = today_colombia() - timedelta(days=1)
+        q = q.filter(
+            Case.current_hash.isnot(None),
+            or_(
+                and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+                and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_list),
+            )
+        )
 
     if solo_actualizados_hoy:
         q = q.filter(Case.ultima_actuacion == today_colombia())
@@ -4285,7 +4292,14 @@ def mark_read_all(data: MarkReadAllRequest, db: Session = Depends(get_db)):
         q = q.filter(Case.juzgado.like(f"%{data.juzgado.strip()}%"))
 
     if data.solo_no_leidos:
-        q = q.filter(Case.current_hash.isnot(None), Case.last_hash.isnot(None), Case.current_hash != Case.last_hash)
+        ayer_mark = today_colombia() - timedelta(days=1)
+        q = q.filter(
+            Case.current_hash.isnot(None),
+            or_(
+                and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+                and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_mark),
+            )
+        )
 
     cases = q.all()
     updated = 0
