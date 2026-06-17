@@ -4236,13 +4236,19 @@ async def update_case_id_proceso(case_id: int, data: dict, db: Session = Depends
     return {"status": "ok", "id_proceso": id_proceso}
 
 @app.delete("/cases/{case_id}")
-def delete_case(case_id: int, db: Session = Depends(get_db)):
+def delete_case(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
 
+    # Seguridad multi-empresa: solo borrar si el caso pertenece a la empresa del usuario
+    if not (current_user.is_admin and not current_user.company_id):
+        if c.company_id != current_user.company_id:
+            raise HTTPException(403, "No tiene permiso para eliminar este caso")
+
     radicado = c.radicado
     db.query(CaseEvent).filter(CaseEvent.case_id == case_id).delete()
+    db.query(CasePublication).filter(CasePublication.case_id == case_id).delete()
     db.delete(c)
     db.commit()
 
@@ -5559,7 +5565,7 @@ async def import_excel(
 
 
 @app.post("/cases/bulk-delete-excel")
-async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         name = (file.filename or "").lower()
         if not name.endswith((".xlsx", ".xls", ".csv")):
@@ -5588,16 +5594,22 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
                 if not radicado:
                     continue
 
-                # Buscar todos los casos con ese radicado
-                cases = db.query(Case).filter(Case.radicado == radicado).all()
+                # Buscar casos con ese radicado SOLO de la empresa del usuario
+                q_cases = db.query(Case).filter(Case.radicado == radicado)
+                if not (current_user.is_admin and not current_user.company_id):
+                    q_cases = q_cases.filter(Case.company_id == current_user.company_id)
+                cases = q_cases.all()
                 for c in cases:
                     db.query(CaseEvent).filter(CaseEvent.case_id == c.id).delete()
                     db.query(CasePublication).filter(CasePublication.case_id == c.id).delete()
                     db.delete(c)
                     deleted_cases += 1
                 
-                # Tambin limpiar de invalid si est ah
-                db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).delete()
+                # Limpiar de invalid solo los de la empresa del usuario
+                q_inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado)
+                if not (current_user.is_admin and not current_user.company_id):
+                    q_inv = q_inv.filter(InvalidRadicado.company_id == current_user.company_id)
+                q_inv.delete()
 
                 count += 1
                 if count % batch_size == 0:
