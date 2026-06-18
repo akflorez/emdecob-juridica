@@ -534,7 +534,7 @@ export default function CasosPage() {
     formData.append("file", file);
 
     try {
-      const resp = await fetch(`${import.meta.env.VITE_API_BASE}/cases/bulk-update-metadata`, {
+      const resp = await fetch(`${API_BASE}/cases/bulk-update-metadata`, {
         method: "POST",
         body: formData,
       });
