@@ -1102,7 +1102,7 @@ async def lifespan(app: FastAPI):
         run_p0_migrations()
     except Exception as e:
         print(f"[lifespan][CRITICAL] Error en run_p0_migrations: {e}")
-        raise e
+        print("[lifespan][WARNING] Backend will start despite migration error.")
     
     # Crear tabla de control de sincronización masiva de forma segura
     try:

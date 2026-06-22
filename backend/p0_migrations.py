@@ -181,23 +181,9 @@ def run_p0_migrations():
 
         # --- APLICAR CONSTRAINTS / ÍNDICES DE UNICIDAD ---
         if dialect_name == "postgresql":
-            with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
-                print("[P0-MIGRATION] Actualizando restricciones únicas en PostgreSQL...")
-                try:
-                    conn.execute(text("ALTER TABLE invalid_radicados DROP CONSTRAINT IF EXISTS invalid_radicados_radicado_key"))
-                    conn.execute(text("ALTER TABLE invalid_radicados DROP CONSTRAINT IF EXISTS uq_invalid_radicado_company"))
-                    conn.execute(text("ALTER TABLE invalid_radicados ADD CONSTRAINT uq_invalid_radicado_company UNIQUE (company_id, radicado)"))
-                    print("[P0-MIGRATION] Constraint uq_invalid_radicado_company (company_id, radicado) aplicada con éxito.")
-                except Exception as e:
-                    print(f"[P0-MIGRATION] Error aplicando constraint unique a invalid_radicados: {e}")
-                
-                try:
-                    conn.execute(text("ALTER TABLE publicaciones_busquedas DROP CONSTRAINT IF EXISTS uix_pub_search_radicado_mes"))
-                    conn.execute(text("ALTER TABLE publicaciones_busquedas DROP CONSTRAINT IF EXISTS uix_pub_search_company_radicado_mes"))
-                    conn.execute(text("ALTER TABLE publicaciones_busquedas ADD CONSTRAINT uix_pub_search_company_radicado_mes UNIQUE (company_id, radicado, mes_busqueda)"))
-                    print("[P0-MIGRATION] Constraint uix_pub_search_company_radicado_mes aplicada con éxito.")
-                except Exception as e:
-                    print(f"[P0-MIGRATION] Error aplicando constraint unique a publicaciones_busquedas: {e}")
+            print("[P0-MIGRATION] Verificando restricciones únicas en PostgreSQL...")
+            print("[P0-MIGRATION][PENDING_MANUAL_ACTION] Las restricciones UNIQUE para invalid_radicados y publicaciones_busquedas no se aplicarán automáticamente para evitar bloqueos durante el inicio de FastAPI. Deben aplicarse manualmente con scripts/apply_p0_migrations.py.")
+
         else:
             # SQLite: Crear índices únicos para emular la restricción de unicidad
             with engine.connect() as conn:
