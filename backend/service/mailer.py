@@ -18,6 +18,7 @@ def send_smtp_email(
     subject: str,
     body: str,
     from_email: str | None = None,
+    use_tls: bool = True,
 ):
     if not host or not port or not username or not password:
         raise ValueError("SMTP incompleto: host/port/username/password requeridos")
@@ -28,10 +29,19 @@ def send_smtp_email(
     msg["To"] = to_email
     msg.set_content(body)
 
-    # Gmail: 587 + STARTTLS
-    with smtplib.SMTP(host, int(port), timeout=30) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(username, password)
-        smtp.send_message(msg)
+    pwd_normalized = normalize_pass(password) or ""
+
+    if int(port) == 465:
+        with smtplib.SMTP_SSL(host, int(port), timeout=10.0) as smtp:
+            if username and pwd_normalized:
+                smtp.login(username, pwd_normalized)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(host, int(port), timeout=10.0) as smtp:
+            if use_tls:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+            if username and pwd_normalized:
+                smtp.login(username, pwd_normalized)
+            smtp.send_message(msg)

@@ -192,7 +192,7 @@ def get_db():
         db.close()
 
 def get_data_scope(current_user):
-    if current_user.username == 'superadmin':
+    if is_global_superadmin(current_user):
         return {"scope": "all"}
     if current_user.company_id:
         return {"scope": "company", "company_id": current_user.company_id}
@@ -200,7 +200,7 @@ def get_data_scope(current_user):
     raise HTTPException(status_code=403, detail="Usuario sin empresa asignada")
 
 def apply_company_filter(query, model, current_user):
-    if current_user.username == 'superadmin':
+    if is_global_superadmin(current_user):
         return query
     if hasattr(model, "company_id"):
         return query.filter(model.company_id == current_user.company_id)
@@ -277,7 +277,7 @@ from backend.models import (
     Case, CaseEvent, NotificationConfig, NotificationLog, InvalidRadicado, 
     User, CasePublication, SearchJob, Workspace, WorkspaceMember, Folder, 
     ProjectList, Task, TaskComment, TaskChecklistItem, TaskAttachment, IntegrationConfig, Tag,
-    Company, Role, PasswordResetToken, BillingTier
+    Company, Role, PasswordResetToken, BillingTier, ExcelImportJob
 )
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
@@ -805,31 +805,46 @@ async def _pending_validation_loop():
 
             if total > 0:
                 print(f" [pending-loop] {total} casos pendientes  validando lote de {min(BATCH, total)}...")
-                pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(BATCH).all()
+                pendientes = db.query(Case.radicado, Case.company_id).filter(Case.juzgado.is_(None)).limit(BATCH).all()
+                pendientes_list = [(p.radicado, p.company_id) for p in pendientes]
+                
+                # Cerrar sesion de inmediato para no retener conexiones durante las llamadas HTTP externas
+                db.close()
+                db = None
 
-                for i, c in enumerate(pendientes):
+                for i, (radicado, company_id) in enumerate(pendientes_list):
                     try:
                         if i > 0:
                             await asyncio.sleep(DELAY_BETWEEN + random.uniform(0, 0.8))
-                        result = await validar_radicado_completo(c.radicado, db, is_new_import=True)
-                        if result["found"]:
-                            inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                            if inv:
-                                db.delete(inv)
-                            print(f"    [pending-loop] Validado: {c.radicado}")
-                        else:
-                            inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                            if inv:
-                                inv.intentos += 1
-                                inv.updated_at = now_colombia()
+                        
+                        # Abrir sesion corta para validar
+                        db_run = SessionLocal()
+                        try:
+                            result = await validar_radicado_completo(radicado, db_run, is_new_import=True)
+                            if result["found"]:
+                                inv = db_run.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                                if inv:
+                                    db_run.delete(inv)
+                                print(f"    [pending-loop] Validado: {radicado}")
                             else:
-                                db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
-                            print(f"    [pending-loop] No encontrado (reintentar): {c.radicado}")
-                        db.flush()
+                                inv = db_run.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                                if inv:
+                                    inv.intentos += 1
+                                    inv.updated_at = now_colombia()
+                                else:
+                                    db_run.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                                print(f"    [pending-loop] No encontrado (reintentar): {radicado}")
+                            db_run.commit()
+                        except Exception as run_err:
+                            db_run.rollback()
+                            raise run_err
+                        finally:
+                            db_run.close()
                     except Exception as e:
-                        print(f"    [pending-loop] Error en {c.radicado}: {e}")
+                        print(f"    [pending-loop] Error en {radicado}: {e}")
 
-                db.commit()
+                # Re-crear sesion db para el conteo final
+                db = SessionLocal()
                 remaining = db.query(Case).filter(Case.juzgado.is_(None)).count()
                 print(f" [pending-loop] Ciclo completo. Restantes: {remaining}")
             else:
@@ -951,74 +966,112 @@ async def run_publicaciones_worker_loop():
                 
                 # Refrescar instancia
                 db.refresh(candidato)
-                print(f"[PUBLICACIONES][WORKER_PICKED] company_id={candidato.company_id} radicado={candidato.radicado} mes_busqueda={candidato.mes_busqueda} search_id={candidato.id}")
                 
+                # Extraer todos los datos necesarios para la consulta antes de cerrar la session
+                radicado = candidato.radicado
+                company_id = candidato.company_id
+                fecha_actuacion = candidato.fecha_actuacion
+                mes_busqueda = candidato.mes_busqueda
+                intentos = candidato.intentos
+                force = candidato.force
+                
+                fecha_act_str = fecha_actuacion.strftime("%Y-%m-%d")
+                year, month = map(int, mes_busqueda.split("-"))
+                
+                case_q = db.query(Case).filter(Case.radicado == radicado)
+                if company_id:
+                    case_q = case_q.filter(Case.company_id == company_id)
+                case_obj = case_q.first()
+                
+                demandante = case_obj.demandante if case_obj else ""
+                demandado = case_obj.demandado if case_obj else ""
+                case_id = case_obj.id if case_obj else None
+                
+                # CERRAR la sesion activa para no retener conexiones durante la llamada HTTP externa
+                db.close()
+                db = None # Para evitar re-uso accidental
+                
+                print(f"[PUBLICACIONES][WORKER_PICKED] company_id={company_id} radicado={radicado} mes_busqueda={mes_busqueda} search_id={locked_id}")
+                
+                # Realizar llamada externa sin conexion DB
                 try:
-                    fecha_act_str = candidato.fecha_actuacion.strftime("%Y-%m-%d")
-                    year, month = map(int, candidato.mes_busqueda.split("-"))
-                    
-                    # Obtener demandante/demandado del caso para validación documental
-                    # Filtrar por company_id para respetar aislamiento multiempresa
-                    case_q = db.query(Case).filter(Case.radicado == candidato.radicado)
-                    if candidato.company_id:
-                        case_q = case_q.filter(Case.company_id == candidato.company_id)
-                    case_obj = case_q.first()
-                    demandante = case_obj.demandante if case_obj else ""
-                    demandado = case_obj.demandado if case_obj else ""
-                    
-                    # Llamar al scraper real
                     pubs = await consultar_publicaciones_rango(
-                        candidato.radicado, 
+                        radicado, 
                         fecha_act_str, 
                         demandante=demandante,
                         demandado=demandado,
                         year=year, 
                         month=month,
-                        company_id=candidato.company_id,
-                        search_id=candidato.id
+                        company_id=company_id,
+                        search_id=locked_id
                     )
                     
-                    has_visible = False
-                    if pubs:
-                        for pub_data in pubs:
-                            pub_data["radicado"] = candidato.radicado
-                            pub_data["company_id"] = candidato.company_id
-                            pub_data["case_id"] = case_obj.id if case_obj else None
-                            saved_pub = guardar_publicacion_validada(db, pub_data, search_id=candidato.id)
-                            if saved_pub and saved_pub.estado_validacion in ["validado", "validado_automatico", "validado_por_fuente_oficial"]:
-                                has_visible = True
+                    # Abrir nueva conexion corta para guardar resultados
+                    db_save = SessionLocal()
+                    try:
+                        has_visible = False
+                        if pubs:
+                            for pub_data in pubs:
+                                pub_data["radicado"] = radicado
+                                pub_data["company_id"] = company_id
+                                pub_data["case_id"] = case_id
+                                saved_pub = guardar_publicacion_validada(db_save, pub_data, search_id=locked_id)
+                                if saved_pub and saved_pub.estado_validacion in ["validado", "validado_automatico", "validado_por_fuente_oficial"]:
+                                    has_visible = True
+                        
+                        # Refrescar/Recuperar el record en esta sesion
+                        c_rec = db_save.query(CasePublicationSearch).filter(CasePublicationSearch.id == locked_id).first()
+                        if c_rec:
+                            if has_visible:
+                                c_rec.estado = "encontrada"
+                                c_rec.estado_busqueda = "encontrada"
+                            else:
+                                c_rec.estado = "sin_resultado"
+                                c_rec.estado_busqueda = "sin_resultado"
                                 
-                    if has_visible:
-                        candidato.estado = "encontrada"
-                        candidato.estado_busqueda = "encontrada"
-                    else:
-                        candidato.estado = "sin_resultado"
-                        candidato.estado_busqueda = "sin_resultado"
+                            c_rec.processed_at = now_colombia()
+                            c_rec.ultimo_error = None
+                            c_rec.locked_at = None
+                            c_rec.locked_by = None
+                            db_save.commit()
+                    except Exception as save_err:
+                        db_save.rollback()
+                        raise save_err
+                    finally:
+                        db_save.close()
                         
-                    candidato.processed_at = now_colombia()
-                    candidato.ultimo_error = None
-                    db.commit()
-                    
                 except Exception as e:
-                    db.rollback()
                     err_msg = str(e) + "\n" + traceback.format_exc()
-                    candidato.intentos += 1
-                    candidato.ultimo_error = err_msg[:500]
-                    candidato.processed_at = now_colombia()
+                    print(f"[PUBLICACIONES][ERROR] company_id={company_id} radicado={radicado} mes_busqueda={mes_busqueda} search_id={locked_id} error={str(e)}")
                     
-                    if candidato.intentos >= MAX_RETRIES and not candidato.force:
-                        candidato.estado = "error"
-                        candidato.estado_busqueda = "error"
-                    else:
-                        candidato.estado = "pendiente"
-                        candidato.estado_busqueda = "pendiente"
-                        candidato.next_retry_at = now_colombia() + timedelta(minutes=5 * candidato.intentos)
-                        
-                    candidato.locked_at = None
-                    candidato.locked_by = None
-                    db.add(candidato)
-                    db.commit()
-                    print(f"[PUBLICACIONES][ERROR] company_id={candidato.company_id} radicado={candidato.radicado} mes_busqueda={candidato.mes_busqueda} search_id={candidato.id} url=N/A status_code=N/A error={str(e)} traceback={traceback.format_exc()} ultimo_error={candidato.ultimo_error} function=run_publicaciones_worker_loop")
+                    # Abrir nueva conexion corta para guardar el error
+                    db_err = SessionLocal()
+                    try:
+                        c_rec = db_err.query(CasePublicationSearch).filter(CasePublicationSearch.id == locked_id).first()
+                        if c_rec:
+                            c_rec.intentos += 1
+                            c_rec.ultimo_error = err_msg[:500]
+                            c_rec.processed_at = now_colombia()
+                            
+                            if c_rec.intentos >= MAX_RETRIES and not force:
+                                c_rec.estado = "error"
+                                c_rec.estado_busqueda = "error"
+                            else:
+                                c_rec.estado = "pendiente"
+                                c_rec.estado_busqueda = "pendiente"
+                                c_rec.next_retry_at = now_colombia() + timedelta(minutes=5 * c_rec.intentos)
+                                
+                            c_rec.locked_at = None
+                            c_rec.locked_by = None
+                            db_err.commit()
+                    except Exception as err_save_err:
+                        db_err.rollback()
+                        print(f"[pub-worker] Error fatal guardando error: {err_save_err}")
+                    finally:
+                        db_err.close()
+                
+                # Re-crear una sesion db limpia para la siguiente iteracion del bucle / query final
+                db = SessionLocal()
                 
                 # Sleep de protección entre requests a la Rama
                 await asyncio.sleep(SLEEP_MS)
@@ -1042,6 +1095,14 @@ async def lifespan(app: FastAPI):
 
     # Garantizar que las tablas existan
     Base.metadata.create_all(bind=engine)
+    
+    # Ejecutar diagnóstico y migraciones P0 seguras
+    try:
+        from backend.p0_migrations import run_p0_migrations
+        run_p0_migrations()
+    except Exception as e:
+        print(f"[lifespan][CRITICAL] Error en run_p0_migrations: {e}")
+        raise e
     
     # Crear tabla de control de sincronización masiva de forma segura
     try:
@@ -2031,16 +2092,29 @@ def get_current_user(
         raise HTTPException(status_code=400, detail=f"AUTH ERROR: {str(e)} | TRACE: {traceback.format_exc()}")
 
 def is_global_superadmin(user: User) -> bool:
-    if getattr(user, "is_superadmin", False) is True:
+    role = getattr(user, "role", None)
+    is_admin = getattr(user, "is_admin", False)
+    company_id = getattr(user, "company_id", None)
+    
+    if role == "SUPERADMIN":
         return True
-
-    if getattr(user, "role", None) == "SUPERADMIN":
+    if is_admin is True and company_id is None:
         return True
-
-    if getattr(user, "is_admin", False) is True and user.company_id is None:
-        return True
-
     return False
+
+def is_company_admin(user: User) -> bool:
+    if user.company_id is None:
+        return False
+    if getattr(user, "role", None) == "COMPANY_ADMIN":
+        return True
+    if hasattr(user, "roles"):
+        for r in user.roles:
+            if getattr(r, "name", None) == "COMPANY_ADMIN":
+                return True
+    return False
+
+def is_authorized_admin(user: User) -> bool:
+    return is_global_superadmin(user) or is_company_admin(user)
 
 
 def require_superadmin(
@@ -2076,7 +2150,7 @@ def require_admin_or_superadmin(
     request: Request,
     current_user: User = Depends(get_current_user)
 ) -> User:
-    if is_global_superadmin(current_user) or (current_user.is_admin and current_user.company_id is not None):
+    if is_global_superadmin(current_user) or (current_user.is_admin and current_user.company_id is not None) or is_company_admin(current_user):
         return current_user
         
     raise HTTPException(
@@ -2419,6 +2493,7 @@ async def fetch_documentos_rama_directa(id_reg_actuacion: int, llave_proceso: st
 
 
 async def validar_radicado_completo(radicado: str, db: Session, is_new_import: bool = False) -> dict:
+    # 1. HACER TODAS LAS CONSULTAS HTTP PRIMERO (Sin transacciones/bloqueos DB)
     try:
         resp = await consulta_por_radicado(radicado, solo_activos=False, pagina=1)
         items = extract_items(resp)
@@ -2439,6 +2514,20 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
         except:
             det = {}
 
+    acts = []
+    if id_proceso:
+        try:
+            await delay_between_requests(0.1, 0.3)
+            acts_resp = await actuaciones_proceso(int(id_proceso))
+            if isinstance(acts_resp, dict):
+                acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
+            elif isinstance(acts_resp, list):
+                acts = acts_resp
+        except Exception as e:
+            print(f"    Error obteniendo actuaciones via HTTP: {e}")
+            acts = []
+
+    # 2. PROCESAR EN BASE DE DATOS (Transacción rápida al final)
     sujetos = p.get("sujetosProcesales") or ""
     if not sujetos and det:
         sujetos = det.get("sujetosProcesales") or ""
@@ -2478,40 +2567,40 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
 
     db.flush()
 
-    if id_proceso:
-        print(f"[main.py] Obteniendo actuaciones para id_proceso={id_proceso}...")
-        try:
-            await delay_between_requests(0.1, 0.3)
-            acts_resp = await actuaciones_proceso(int(id_proceso))
-            acts = []
-            if isinstance(acts_resp, dict):
-                acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
-            elif isinstance(acts_resp, list):
-                acts = acts_resp
-            
-            print(f"[main.py] Procesando {len(acts)} actuaciones...")
+    if id_proceso and acts:
+        # Optimización N+1 para inserción de actuaciones
+        # Generar hash y mapeo de actuaciones a insertar
+        acts_to_check = []
+        for a in acts:
+            con_docs = bool(a.get("conDocumentos")) if a.get("conDocumentos") is not None else False
+            it = {
+                "id_reg_actuacion": a.get("idRegActuacion"),
+                "cons_actuacion": a.get("consActuacion"),
+                "llave_proceso": a.get("llaveProceso"),
+                "event_date": a.get("fechaActuacion"),
+                "title": (a.get("actuacion") or "").strip(),
+                "detail": a.get("anotacion"),
+                "fecha_inicio": a.get("fechaInicial"),
+                "fecha_fin": a.get("fechaFinal"),
+                "fecha_registro": a.get("fechaRegistro"),
+                "con_documentos": con_docs,
+                "cant": a.get("cant"),
+            }
+            event_hash = sha256_obj(it)
+            acts_to_check.append((it, event_hash, con_docs))
+
+        if acts_to_check:
+            # Consultar en lote todos los hashes para evitar N+1 queries
+            hashes = [item[1] for item in acts_to_check]
+            existing_hashes = set(
+                r[0] for r in db.query(CaseEvent.event_hash)
+                .filter(CaseEvent.case_id == c.id, CaseEvent.event_hash.in_(hashes))
+                .all()
+            )
+
             added_count = 0
-            for a in acts:
-                con_docs = bool(a.get("conDocumentos")) if a.get("conDocumentos") is not None else False
-                it = {
-                    "id_reg_actuacion": a.get("idRegActuacion"),
-                    "cons_actuacion": a.get("consActuacion"),
-                    "llave_proceso": a.get("llaveProceso"),
-                    "event_date": a.get("fechaActuacion"),
-                    "title": (a.get("actuacion") or "").strip(),
-                    "detail": a.get("anotacion"),
-                    "fecha_inicio": a.get("fechaInicial"),
-                    "fecha_fin": a.get("fechaFinal"),
-                    "fecha_registro": a.get("fechaRegistro"),
-                    "con_documentos": con_docs,
-                    "cant": a.get("cant"),
-                }
-                event_hash = sha256_obj(it)
-                exists = db.query(CaseEvent).filter(
-                    CaseEvent.case_id == c.id,
-                    CaseEvent.event_hash == event_hash
-                ).first()
-                if not exists:
+            for it, event_hash, con_docs in acts_to_check:
+                if event_hash not in existing_hashes:
                     db.add(CaseEvent(
                         case_id=c.id,
                         event_date=it.get("event_date"),
@@ -2528,16 +2617,15 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
                 print(f"[main.py] OK: Se agregaron {added_count} actuaciones nuevas a {c.radicado}")
             else:
                 print(f"[main.py] INFO: No hubo actuaciones nuevas (o ya existan) para {c.radicado}")
-        except Exception as e:
-            print(f"    Error actuaciones: {e}")
 
-        # Auto-encolar publicaciones automáticas para este caso
-        try:
-            from backend.service.publicaciones import auto_queue_publicaciones_for_case
-            auto_queue_publicaciones_for_case(db, c)
-        except Exception as pub_queue_err:
-            print(f"    [auto_queue] Error al auto-encolar publicaciones: {pub_queue_err}")
+    # Auto-encolar publicaciones automáticas para este caso
+    try:
+        from backend.service.publicaciones import auto_queue_publicaciones_for_case
+        auto_queue_publicaciones_for_case(db, c)
+    except Exception as pub_queue_err:
+        print(f"    [auto_queue] Error al auto-encolar publicaciones: {pub_queue_err}")
 
+    db.flush()
     return {"found": True, "case": c}
 
 
@@ -2840,7 +2928,7 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     q_invalidos = db.query(InvalidRadicado)
     q_pendientes = db.query(Case).filter(Case.juzgado.is_(None))
 
-    if current_user.is_admin and not current_user.company_id:
+    if is_global_superadmin(current_user):
         # SuperAdmin ve TODO sin filtros
         pass
     else:
@@ -2870,7 +2958,7 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         Case.ultima_actuacion == hoy,
     )
 
-    if not (current_user.is_admin and not current_user.company_id):
+    if not is_global_superadmin(current_user):
         q_no_leidos = q_no_leidos.filter(Case.company_id == current_user.company_id)
         q_hoy = q_hoy.filter(Case.company_id == current_user.company_id)
 
@@ -3051,7 +3139,7 @@ def register_company(data: RegisterCompanyRequest, db: Session = Depends(get_db)
     new_company = Company(
         nombre=data.company_name,
         nit=data.company_nit,
-        estado=True
+        estado="activo"
     )
     db.add(new_company)
     db.flush()
@@ -3068,7 +3156,9 @@ def register_company(data: RegisterCompanyRequest, db: Session = Depends(get_db)
         nombre=data.admin_name,
         hashed_password=_hash_password(data.password),
         is_active=True,
-        is_admin=False,
+        is_admin=True,
+        role="COMPANY_ADMIN",
+        cases_view_scope="COMPANY",
         company_id=new_company.id
     )
     new_user.roles.append(company_admin_role)
@@ -3141,14 +3231,26 @@ def forgot_password(data: ForgotPasswordRequest, request: Request, db: Session =
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip('/')
     reset_link = f"{frontend_url}/reset-password?token={raw_token}"
     
-    # 8. Send email
-    smtp_host = os.environ.get("SMTP_HOST")
-    smtp_port = os.environ.get("SMTP_PORT")
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-    smtp_from_email = os.environ.get("SMTP_FROM_EMAIL", smtp_user or "no-reply@emdecob.com")
+    # 8. Send email - Prioritize database NotificationConfig, fallback to env vars
+    from backend.models import NotificationConfig
+    db_config = db.query(NotificationConfig).filter(NotificationConfig.is_active == True).first()
+    
+    if db_config and db_config.smtp_host:
+        smtp_host = db_config.smtp_host
+        smtp_port = db_config.smtp_port
+        smtp_user = db_config.smtp_user
+        smtp_password = db_config.smtp_pass
+        smtp_from_email = db_config.smtp_from or smtp_user or "no-reply@emdecob.com"
+        use_tls = True # database configs default to TLS/SSL
+    else:
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_port = os.environ.get("SMTP_PORT")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        smtp_from_email = os.environ.get("SMTP_FROM_EMAIL", smtp_user or "no-reply@emdecob.com")
+        use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+
     smtp_from_name = os.environ.get("SMTP_FROM_NAME", "JURICOB")
-    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
     env = os.environ.get("ENVIRONMENT", "development").lower()
     
     if not smtp_host:
@@ -3158,20 +3260,13 @@ def forgot_password(data: ForgotPasswordRequest, request: Request, db: Session =
         return response_msg
         
     try:
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
+        from backend.service.mailer import send_smtp_email
         
         try:
             port = int(smtp_port)
         except (ValueError, TypeError):
             port = 587
             
-        msg = MIMEMultipart()
-        msg['From'] = f"{smtp_from_name} <{smtp_from_email}>" if smtp_from_name else smtp_from_email
-        msg['To'] = user.email
-        msg['Subject'] = "Restablece tu contraseña - JURICOB"
-        
         body = f"""Hola,
 
 Recibimos una solicitud para restablecer la contraseña de tu cuenta en JURICOB.
@@ -3186,25 +3281,22 @@ Por favor, no compartas este enlace con nadie. Si no solicitaste este cambio, pu
 
 Equipo JURICOB"""
         
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-        
-        if use_tls:
-            if port == 465:
-                server = smtplib.SMTP_SSL(smtp_host, port)
-            else:
-                server = smtplib.SMTP(smtp_host, port)
-                server.starttls()
-        else:
-            server = smtplib.SMTP(smtp_host, port)
-            
-        if smtp_user and smtp_password:
-            server.login(smtp_user, smtp_password)
-            
-        server.send_message(msg)
-        server.quit()
+        send_smtp_email(
+            host=smtp_host,
+            port=port,
+            username=smtp_user or "",
+            password=smtp_password or "",
+            to_email=user.email,
+            subject="Restablece tu contraseña - JURICOB",
+            body=body,
+            from_email=f"{smtp_from_name} <{smtp_from_email}>" if smtp_from_name else smtp_from_email,
+            use_tls=use_tls
+        )
         print(f"[forgot-password] Email sent successfully to {user.email}")
     except Exception as smtp_err:
         print(f"[SMTP Error] No se pudo enviar correo de recuperación a {user.email}: {smtp_err}")
+        if env != "production":
+            print(f"[DEV ONLY][SMTP FAIL] Enlace de recuperación: {reset_link}")
         
     return response_msg
 
@@ -3339,8 +3431,11 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.get("/auth/users")
 def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Permitir que cualquier usuario autenticado vea la lista para asignaciones
-    users = db.query(User).order_by(User.created_at).all()
+    # Permitir que cualquier usuario autenticado vea la lista para asignaciones de su propia empresa
+    if is_global_superadmin(current_user):
+        users = db.query(User).order_by(User.created_at).all()
+    else:
+        users = db.query(User).filter(User.company_id == current_user.company_id).order_by(User.created_at).all()
     return [
         {
             "id": u.id,
@@ -3356,7 +3451,7 @@ def list_users(current_user: User = Depends(get_current_user), db: Session = Dep
 
 @app.post("/auth/users")
 def create_user(data: UserCreateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not current_user.is_admin:
+    if not is_authorized_admin(current_user):
         raise HTTPException(403, "Solo administradores pueden crear usuarios")
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
@@ -3365,9 +3460,12 @@ def create_user(data: UserCreateRequest, current_user: User = Depends(get_curren
         username=data.username,
         hashed_password=_hash_password(data.password),
         nombre=data.nombre,
-        is_admin=data.is_admin,
+        is_admin=False,
         is_active=True,
+        company_id=None if is_global_superadmin(current_user) else current_user.company_id
     )
+    if is_global_superadmin(current_user) and data.is_admin:
+        user.is_admin = True
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -3376,32 +3474,39 @@ def create_user(data: UserCreateRequest, current_user: User = Depends(get_curren
 
 @app.put("/auth/users/{user_id}")
 def update_user(user_id: int, data: UserUpdateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not current_user.is_admin and current_user.id != user_id:
+    if not is_authorized_admin(current_user) and current_user.id != user_id:
         raise HTTPException(403, "Sin permisos")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Usuario no encontrado")
+    if not is_global_superadmin(current_user) and user.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos para modificar este usuario")
     if data.nombre is not None:
         user.nombre = data.nombre
     if data.password:
         user.hashed_password = _hash_password(data.password)
-    if data.is_active is not None and current_user.is_admin:
+    if data.is_active is not None and is_authorized_admin(current_user):
         user.is_active = data.is_active
-    if data.is_admin is not None and current_user.is_admin:
-        user.is_admin = data.is_admin
+    if data.is_admin is not None:
+        if is_global_superadmin(current_user):
+            user.is_admin = data.is_admin
+        else:
+            user.is_admin = False
     db.commit()
     return {"ok": True, "username": user.username}
 
 
 @app.delete("/auth/users/{user_id}")
 def delete_user(user_id: int, request: Request = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not current_user.is_admin:
+    if not is_authorized_admin(current_user):
         raise HTTPException(403, "Solo administradores pueden desactivar usuarios")
     if current_user.id == user_id:
         raise HTTPException(400, "No puedes desactivarte a ti mismo")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Usuario no encontrado")
+    if not is_global_superadmin(current_user) and user.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos para modificar este usuario")
         
     # Last active SuperAdmin protection guard
     u_is_sa = is_global_superadmin(user)
@@ -3521,10 +3626,27 @@ async def run_auto_refresh_now():
         raise HTTPException(500, f"Error ejecutando auto-refresh: {str(e)}")
 
 @app.get("/api/documentos/{radicado}/{id_reg_actuacion}")
-async def get_docs_actuacion(radicado: str, id_reg_actuacion: int, db: Session = Depends(get_db)):
+async def get_docs_actuacion(
+    radicado: str, 
+    id_reg_actuacion: int, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     try:
-        # 1. Intentar obtener desde el caché de la base de datos
+        # Enforce company isolation
         event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
+        case = db.query(Case).filter(Case.radicado == radicado).first()
+        if not case and event:
+            case = db.query(Case).filter(Case.id == event.case_id).first()
+            
+        if case:
+            if not is_global_superadmin(current_user) and case.company_id != current_user.company_id:
+                raise HTTPException(403, "No tienes acceso a los documentos de este caso.")
+        else:
+            if not is_global_superadmin(current_user):
+                raise HTTPException(404, "El caso consultado no existe o no pertenece a tu empresa.")
+
+        # 1. Intentar obtener desde el caché de la base de datos
         if event and event.documentos_cache:
             try:
                 cached_data = json.loads(event.documentos_cache)
@@ -3541,6 +3663,8 @@ async def get_docs_actuacion(radicado: str, id_reg_actuacion: int, db: Session =
             db.commit()
             
         return docs
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"Error al cargar documentos: {str(e)}")
 
@@ -3690,7 +3814,7 @@ def list_invalid_radicados(
 ):
     q = db.query(InvalidRadicado)
     # Filtrar por empresa (igual que el dashboard de stats)
-    if not (current_user.is_admin and not current_user.company_id):
+    if not is_global_superadmin(current_user):
         # Usuarios y admins con empresa ven solo los de su empresa
         if hasattr(InvalidRadicado, 'company_id') and current_user.company_id:
             q = q.filter(InvalidRadicado.company_id == current_user.company_id)
@@ -3725,10 +3849,12 @@ def list_invalid_radicados(
     }
 
 @app.delete("/invalid-radicados/{radicado_id}")
-def delete_invalid_radicado(radicado_id: int, db: Session = Depends(get_db)):
+def delete_invalid_radicado(radicado_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(InvalidRadicado).filter(InvalidRadicado.id == radicado_id).first()
     if not item:
         raise HTTPException(404, "Radicado no encontrado")
+    if not is_global_superadmin(current_user) and item.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permiso para eliminar este radicado inválido")
     db.delete(item)
     db.commit()
     return {"ok": True}
@@ -3738,7 +3864,10 @@ def download_invalid_radicados_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    items = db.query(InvalidRadicado).order_by(desc(InvalidRadicado.updated_at)).all()
+    if is_global_superadmin(current_user):
+        items = db.query(InvalidRadicado).order_by(desc(InvalidRadicado.updated_at)).all()
+    else:
+        items = db.query(InvalidRadicado).filter(InvalidRadicado.company_id == current_user.company_id).order_by(desc(InvalidRadicado.updated_at)).all()
 
     data = [
         {
@@ -3773,6 +3902,8 @@ async def retry_invalid_radicado(
     item = db.query(InvalidRadicado).filter(InvalidRadicado.id == radicado_id).first()
     if not item:
         raise HTTPException(404, "Radicado no encontrado")
+    if not is_global_superadmin(current_user) and item.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permiso para reintentar este radicado")
 
     from backend.service.fallback_search import search_radicado_with_fallbacks
     company_id = item.company_id or (current_user.company_id if current_user else None)
@@ -3922,22 +4053,7 @@ def list_abogados(db: Session = Depends(get_db)):
 # =========================
 # CASES LIST
 # =========================
-@app.get("/api/cases/id/{case_id}")
-@app.get("/cases/id/{case_id}")
-def get_case_by_id_endpoint(case_id: int, db: Session = Depends(get_db)):
-    c = db.query(Case).filter(Case.id == case_id).first()
-    if not c:
-        raise HTTPException(404, "Caso no encontrado")
-    return c
-
-@app.get("/api/cases/by-radicado/{radicado}")
-@app.get("/cases/by-radicado/{radicado}")
-def get_case_by_radicado_endpoint(radicado: str, db: Session = Depends(get_db)):
-    r = clean_str(radicado)
-    c = db.query(Case).filter(Case.radicado == r).first()
-    if not c:
-        raise HTTPException(404, "Caso no encontrado")
-    return [c] # El frontend espera una lista para by-radicado
+# Redundant legacy endpoints removed to prevent route shadowing and enforce security/multi-tenancy constraint.
 
 @app.get("/api/cases")
 @app.get("/cases")
@@ -3958,10 +4074,10 @@ def list_cases(
     page_size: int = Query(default=20, ge=1, le=2000),
 ):
     try:
-        q = db.query(Case)
+        q = db.query(Case).options(selectinload(Case.tasks))
 
         # Multi-tenancy filter: SaaS Isolation
-        if current_user.is_admin and not current_user.company_id:
+        if is_global_superadmin(current_user):
             pass # SuperAdmin ve todo
         else:
             q = q.filter(Case.company_id == current_user.company_id)
@@ -4025,7 +4141,7 @@ def list_cases(
             )
         )
 
-        if current_user.is_admin and not current_user.company_id:
+        if is_global_superadmin(current_user):
             pass
         else:
             q_unread = q_unread.filter(Case.company_id == current_user.company_id)
@@ -4067,6 +4183,7 @@ def list_cases(
                 "cedula": c.cedula,
                 "abogado": c.abogado,
                 "has_tasks": len(c.tasks) > 0,
+                "company_id": c.company_id,
             }
 
         return {
@@ -4100,7 +4217,7 @@ def download_cases_excel(
     q = db.query(Case).filter(Case.juzgado.isnot(None))
 
     # Multi-tenancy filter: SaaS Isolation
-    if current_user.is_admin and not current_user.company_id:
+    if is_global_superadmin(current_user):
         if company_id is not None:
             q = q.filter(Case.company_id == company_id)
     else:
@@ -4213,23 +4330,15 @@ def download_cases_excel(
 
 
 # =========================
-# DELETE CASE
+# CASE UPDATES & DELETIONS
 # =========================
-@app.patch("/cases/{case_id}/lawyer")
-async def update_case_lawyer(case_id: int, data: dict, db: Session = Depends(get_db)):
-    c = db.query(Case).filter(Case.id == case_id).first()
-    if not c: raise HTTPException(404)
-    abogado = data.get("lawyer")
-    c.abogado = abogado
-    u = db.query(User).filter(User.nombre == abogado).first()
-    if u: c.user_id = u.id
-    db.commit()
-    return {"status": "ok", "abogado": abogado}
 
 @app.patch("/cases/{case_id}/id-proceso")
-async def update_case_id_proceso(case_id: int, data: dict, db: Session = Depends(get_db)):
+async def update_case_id_proceso(case_id: int, data: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).first()
-    if not c: raise HTTPException(404)
+    if not c: raise HTTPException(404, "Caso no encontrado")
+    if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos sobre este caso")
     id_proceso = data.get("id_proceso")
     c.id_proceso = id_proceso
     db.commit()
@@ -4242,7 +4351,7 @@ def delete_case(case_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(404, "Caso no encontrado")
 
     # Seguridad multi-empresa: solo borrar si el caso pertenece a la empresa del usuario
-    if not (current_user.is_admin and not current_user.company_id):
+    if not is_global_superadmin(current_user):
         if c.company_id != current_user.company_id:
             raise HTTPException(403, "No tiene permiso para eliminar este caso")
 
@@ -4259,21 +4368,27 @@ def delete_case(case_id: int, db: Session = Depends(get_db), current_user: User 
 # MARK READ
 # =========================
 @app.post("/cases/{case_id}/mark-read")
-def mark_case_read(case_id: int, db: Session = Depends(get_db)):
+def mark_case_read(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
+    if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos sobre este caso")
     c.last_hash = c.current_hash or c.last_hash
     db.commit()
     return {"ok": True, "id": c.id}
 
 @app.post("/cases/mark-read-bulk")
-def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db)):
+def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ids = [int(x) for x in (data.case_ids or [])]
     if not ids:
         raise HTTPException(400, "No se enviaron ids")
 
-    cases = db.query(Case).filter(Case.id.in_(ids)).all()
+    if is_global_superadmin(current_user):
+        cases = db.query(Case).filter(Case.id.in_(ids)).all()
+    else:
+        cases = db.query(Case).filter(Case.id.in_(ids), Case.company_id == current_user.company_id).all()
+        
     updated = 0
     for c in cases:
         if is_unread_case(c):
@@ -4284,8 +4399,11 @@ def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db)):
     return {"ok": True, "updated": updated}
 
 @app.post("/cases/mark-read-all")
-def mark_read_all(data: MarkReadAllRequest, db: Session = Depends(get_db)):
+def mark_read_all(data: MarkReadAllRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     q = db.query(Case).filter(Case.juzgado.isnot(None))
+
+    if not is_global_superadmin(current_user):
+        q = q.filter(Case.company_id == current_user.company_id)
 
     if data.solo_actualizados_hoy:
         q = q.filter(Case.ultima_actuacion == today_colombia())
@@ -4616,19 +4734,20 @@ async def buscar_nuevamente_endpoint_route(
     return result
 
 @app.get("/cases/{case_id}")
-async def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
+async def get_case_by_id(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
         
-    # Sincronización automática de publicaciones removida en consulta visual
+    if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes acceso a este caso")
         
     return serialize_case(c)
 
 @app.get("/api/cases/id/{case_id}")
 @app.get("/cases/id/{case_id}")
-async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db)):
-    return await get_case_by_id(case_id, db)
+async def get_case_by_id_prefixed(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await get_case_by_id(case_id, db, current_user)
 
 @app.get("/api/cases/{case_id}/multisource-checks")
 @app.get("/cases/{case_id}/multisource-checks")
@@ -4742,127 +4861,7 @@ async def trigger_case_multisource_check(
     return {"ok": True, "message": "Consulta multifuente encolada en segundo plano."}
 
 
-@app.get("/api/cases/by-radicado/{radicado}")
-@app.get("/cases/by-radicado/{radicado}")
-async def get_case_by_radicado(radicado: str, skip_rama: bool = Query(default=False), db: Session = Depends(get_db)):
-    try:
-        r = clean_str(radicado)
-        if not r:
-            raise HTTPException(400, "Radicado requerido")
-
-        try:
-            if skip_rama:
-                resp = {"codigo": 200, "items": []}
-            else:
-                resp = await consulta_por_radicado(r, solo_activos=False, pagina=1)
-        except RamaError as e:
-            raise HTTPException(502, f"Error Rama Judicial: {str(e)}")
-
-        items = extract_items(resp)
-        if not items and not skip_rama:
-            raise HTTPException(404, "Caso no encontrado en Rama Judicial")
-
-        synced_cases = []
-        
-        for p in items:
-            id_proceso = str(p.get("idProceso") or p.get("IdProceso") or "")
-            
-            det = {}
-            if id_proceso:
-                try:
-                    det = await detalle_proceso(int(id_proceso))
-                except:
-                    det = {}
-
-            # Buscar por id_proceso si existe, si no por radicado solo si es el nico
-            c = None
-            if id_proceso:
-                c = db.query(Case).filter(Case.id_proceso == id_proceso).first()
-            
-            # Si no se encontr por ID nico, buscamos por radicado pero siendo precavidos
-            if not c:
-                # Si hay varios con el mismo radicado sin id_proceso, es ambiguo.
-                # Pero si es una base vieja, quizs solo hay uno.
-                c = db.query(Case).filter(Case.radicado == r, Case.id_proceso == None).first()
-
-            is_new_case = False
-            if not c:
-                c = Case(radicado=r, id_proceso=id_proceso)
-                db.add(c)
-                db.flush()
-                is_new_case = True
-            elif not c.id_proceso and id_proceso:
-                # Actualizar registro legacy con su ID nico
-                c.id_proceso = id_proceso
-
-            sujetos = p.get("sujetosProcesales") or ""
-            d1, d2, abo = parse_sujetos_procesales(sujetos)
-
-            c.demandante = d1 or c.demandante
-            c.demandado = d2 or c.demandado
-            # c.abogado = abo or c.abogado (Removido por peticin del usuario)
-            c.juzgado = extract_juzgado(p, det) or c.juzgado
-
-            fecha_proceso_str, fecha_ult_str = extract_fecha_proceso(p, det)
-            c.fecha_radicacion = parse_fecha(fecha_proceso_str) or c.fecha_radicacion
-            c.ultima_actuacion = parse_fecha(fecha_ult_str) or c.ultima_actuacion
-
-            if is_new_case:
-                new_hash = sha256_obj({"proceso": p, "detalle": det})
-                c.current_hash = new_hash
-                c.last_hash = new_hash
-
-            c.last_check_at = now_colombia()
-            
-            synced_cases.append({
-                "id": c.id,
-                "radicado": c.radicado,
-                "demandante": c.demandante,
-                "demandado": c.demandado,
-                "juzgado": c.juzgado,
-                "alias": c.alias,
-                "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
-                "ultima_actuacion": c.ultima_actuacion.isoformat() if c.ultima_actuacion else None,
-                "last_check_at": c.last_check_at.isoformat() if c.last_check_at else None,
-                "unread": is_unread_case(c),
-                "has_documents": c.has_documents,
-                "sync_pub_status": c.sync_pub_status,
-                "sync_pub_progress": c.sync_pub_progress,
-            })
-
-        # FALLBACK: Si no hay items (porque saltamos rama) buscamos en la DB local
-        if not synced_cases and skip_rama:
-            db_cases = db.query(Case).filter(Case.radicado == r).all()
-            for c_db in db_cases:
-                synced_cases.append({
-                    "id": c_db.id,
-                    "radicado": c_db.radicado,
-                    "demandante": c_db.demandante,
-                    "demandado": c_db.demandado,
-                    "juzgado": c_db.juzgado,
-                    "alias": c_db.alias,
-                    "fecha_radicacion": c_db.fecha_radicacion.isoformat() if c_db.fecha_radicacion else None,
-                    "ultima_actuacion": c_db.ultima_actuacion.isoformat() if c_db.ultima_actuacion else None,
-                    "last_check_at": c_db.last_check_at.isoformat() if c_db.last_check_at else None,
-                    "unread": is_unread_case(c_db),
-                    "has_documents": c_db.has_documents,
-                    "sync_pub_status": c_db.sync_pub_status,
-                    "sync_pub_progress": c_db.sync_pub_progress,
-                })
-
-        if not synced_cases:
-             raise HTTPException(404, "Caso no encontrado")
-
-        db.commit()
-        
-        # Para compatibilidad con el frontend actual si solo hay uno, retornamos ese.
-        # Pero mi plan dice que el frontend debe cambiar para manejar listas.
-        # Por ahora retorno la lista y ajusto el frontend.
-        return synced_cases
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error interno: {str(e)}")
+# Legacy get_case_by_radicado endpoint removed to prevent route shadowing and tenant violations.
 
 
 async def trigger_publications_sync(case: Case, item_act: dict, db_session: Session):
@@ -4912,6 +4911,7 @@ async def trigger_publications_sync(case: Case, item_act: dict, db_session: Sess
     except Exception as e:
         print(f"[sync-pub] Error sincronizando publicaciones: {e}")
 
+@app.get("/api/cases/by-radicado/{radicado}")
 @app.get("/cases/by-radicado/{radicado}")
 async def get_case_by_radicado_endpoint(
     radicado: str, 
@@ -5032,7 +5032,7 @@ async def get_events_by_id(
     current_user: User = Depends(get_current_user)
 ):
     q_case = db.query(Case).filter(Case.id == case_id)
-    if not current_user.is_admin and current_user.company_id:
+    if not is_global_superadmin(current_user):
         q_case = q_case.filter(Case.company_id == current_user.company_id)
         
     c = q_case.first()
@@ -5051,7 +5051,7 @@ async def get_events_by_radicado_unified(
 ):
     r = clean_str(radicado)
     q_case = db.query(Case)
-    if not current_user.is_admin and current_user.company_id:
+    if not is_global_superadmin(current_user):
         q_case = q_case.filter(Case.company_id == current_user.company_id)
         
     # Si es un numero corto, intentarlo como ID por si acaso el frontend se equivoca
@@ -5228,10 +5228,22 @@ async def sync_case_events_background(case_id: int):
 # DOWNLOAD EVENTS EXCEL
 # =========================
 @app.get("/cases/by-radicado/{radicado}/events.xlsx")
-async def download_events_xlsx(radicado: str):
+async def download_events_xlsx(
+    radicado: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     r = clean_str(radicado)
     if not r:
         raise HTTPException(400, "Radicado requerido")
+
+    case = db.query(Case).filter(Case.radicado == r).first()
+    if case:
+        if not is_global_superadmin(current_user) and case.company_id != current_user.company_id:
+            raise HTTPException(403, "No tienes acceso a los eventos de este caso.")
+    else:
+        if not is_global_superadmin(current_user):
+            raise HTTPException(404, "El caso consultado no existe o no pertenece a tu empresa.")
 
     try:
         id_proceso = await obtener_id_proceso(r)
@@ -5276,10 +5288,17 @@ async def download_events_xlsx(radicado: str):
 
 
 @app.get("/cases/id/{case_id}/events.xlsx")
-async def download_events_by_id_xlsx(case_id: int, db: Session = Depends(get_db)):
+async def download_events_by_id_xlsx(
+    case_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     c = db.query(Case).filter(Case.id == case_id).first()
     if not c:
         raise HTTPException(404, "Caso no encontrado")
+
+    if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes acceso a los eventos de este caso.")
 
     id_proceso = c.id_proceso
     if not id_proceso:
@@ -5332,14 +5351,48 @@ async def download_events_by_id_xlsx(case_id: int, db: Session = Depends(get_db)
 # DOWNLOAD MULTIPLE EVENTS
 # =========================
 @app.post("/cases/events/download-multiple")
-async def download_multiple_events_excel(radicados: List[str] = Body(...), db: Session = Depends(get_db)):
+async def download_multiple_events_excel(
+    radicados: List[str] = Body(...), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Enforce multi-tenancy filter
+    cleaned_rads = []
+    case_info = {}
+    for rad in radicados:
+        r = clean_str(rad)
+        if not r:
+            continue
+        c = db.query(Case).filter(Case.radicado == r).first()
+        if c:
+            if is_global_superadmin(current_user) or c.company_id == current_user.company_id:
+                cleaned_rads.append(r)
+                case_info[r] = {
+                    "demandante": c.demandante or "",
+                    "demandado": c.demandado or "",
+                    "juzgado": c.juzgado or ""
+                }
+        else:
+            if is_global_superadmin(current_user):
+                cleaned_rads.append(r)
+                case_info[r] = {
+                    "demandante": "",
+                    "demandado": "",
+                    "juzgado": ""
+                }
+                
+    if not cleaned_rads:
+        raise HTTPException(403, "No tienes acceso a ninguno de los radicados especificados.")
+
+    # Release database connection prior to slow async operations
+    db.close()
+
     try:
         MAX_ROWS = 1_000_000
         all_data = []
 
-        for i, rad in enumerate(radicados):
-            rad = clean_str(rad)
-            if not rad or len(all_data) >= MAX_ROWS:
+        for i, rad in enumerate(cleaned_rads):
+            if len(all_data) >= MAX_ROWS:
                 continue
 
             if i > 0:
@@ -5360,14 +5413,14 @@ async def download_multiple_events_excel(radicados: List[str] = Body(...), db: S
                 if len(all_data) + len(acts) > MAX_ROWS:
                     break
 
-                c = db.query(Case).filter(Case.radicado == rad).first()
+                info = case_info.get(rad) or {"demandante": "", "demandado": "", "juzgado": ""}
 
                 for a in acts:
                     all_data.append({
                         "Radicado": rad,
-                        "Demandante": c.demandante if c else "",
-                        "Demandado": c.demandado if c else "",
-                        "Juzgado": c.juzgado if c else "",
+                        "Demandante": info["demandante"],
+                        "Demandado": info["demandado"],
+                        "Juzgado": info["juzgado"],
                         "FechaActuacion": a.get("fechaActuacion"),
                         "Actuacion": a.get("actuacion"),
                         "Anotacion": a.get("anotacion"),
@@ -5413,33 +5466,45 @@ async def _background_validate_pendientes():
         db = None
         try:
             db = SessionLocal()
-            pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(BATCH).all()
+            pendientes = db.query(Case.radicado, Case.company_id).filter(Case.juzgado.is_(None)).limit(BATCH).all()
             if not pendientes:
                 print(" [bg-validate] Sin pendientes. Fin.")
                 break
 
-            print(f" [bg-validate] Ciclo {cycle+1}: {len(pendientes)} casos...")
-            for i, c in enumerate(pendientes):
+            pendientes_list = [(p.radicado, p.company_id) for p in pendientes]
+            db.close()
+            db = None
+
+            print(f" [bg-validate] Ciclo {cycle+1}: {len(pendientes_list)} casos...")
+            for i, (radicado, company_id) in enumerate(pendientes_list):
                 try:
                     if i > 0:
                         await asyncio.sleep(DELAY + random.uniform(0, 0.8))
-                    result = await validar_radicado_completo(c.radicado, db, is_new_import=True)
-                    if result["found"]:
-                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                        if inv:
-                            db.delete(inv)
-                    else:
-                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                        if inv:
-                            inv.intentos += 1
-                            inv.updated_at = now_colombia()
+                    
+                    db_run = SessionLocal()
+                    try:
+                        result = await validar_radicado_completo(radicado, db_run, is_new_import=True)
+                        if result["found"]:
+                            inv = db_run.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                            if inv:
+                                db_run.delete(inv)
                         else:
-                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
-                    db.flush()
+                            inv = db_run.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                            if inv:
+                                inv.intentos += 1
+                                inv.updated_at = now_colombia()
+                            else:
+                                db_run.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                        db_run.commit()
+                    except Exception as run_err:
+                        db_run.rollback()
+                        raise run_err
+                    finally:
+                        db_run.close()
                 except Exception as e:
-                    print(f"    [bg-validate] Error en {c.radicado}: {e}")
-            db.commit()
+                    print(f"    [bg-validate] Error en {radicado}: {e}")
 
+            db = SessionLocal()
             remaining = db.query(Case).filter(Case.juzgado.is_(None)).count()
             print(f" [bg-validate] Restantes: {remaining}")
             if remaining == 0:
@@ -5457,10 +5522,150 @@ async def _background_validate_pendientes():
 
 
 # =========================
-# IMPORT EXCEL
+# IMPORT EXCEL (ASINCRONO CON SEGUIMIENTO)
 # =========================
+def process_excel_import_task(
+    job_id: int, 
+    content: bytes, 
+    is_csv: bool, 
+    company_id: Optional[int], 
+    user_id: int, 
+    loop: asyncio.AbstractEventLoop
+):
+    db = SessionLocal()
+    job = db.query(ExcelImportJob).filter(ExcelImportJob.id == job_id).first()
+    if not job:
+        db.close()
+        return
+
+    try:
+        job.estado = "procesando"
+        db.commit()
+
+        # Parsear DataFrame
+        if is_csv:
+            df = pd.read_csv(BytesIO(content))
+        else:
+            df = pd.read_excel(BytesIO(content))
+
+        df.columns = [str(c).strip() for c in df.columns]
+        cols_lower = {c.lower(): c for c in df.columns}
+        rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
+        ced_col = next((cols_lower[k] for k in ["cedula", "identificacion", "documento"] if k in cols_lower), None)
+        abo_col = next((cols_lower[k] for k in ["abogado", "apoderado"] if k in cols_lower), None)
+
+        if not rad_col:
+            raise ValueError("Falta la columna 'Radicado' en el archivo.")
+
+        # Limpiar y preparar filas
+        rows_to_process = []
+        for index, row in df.iterrows():
+            radicado = clean_str(row.get(rad_col))
+            if not radicado:
+                continue
+            cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
+            abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
+            
+            if cedula and (cedula.lower() == "nan" or cedula == ""): 
+                cedula = None
+            if abogado and (abogado.lower() == "nan" or abogado == ""): 
+                abogado = None
+                
+            rows_to_process.append((radicado, cedula, abogado))
+
+        job.total_filas = len(rows_to_process)
+        db.commit()
+
+        created = 0
+        updated = 0
+        skipped = 0
+        processed = 0
+        errors = []
+
+        batch_size = 200
+        for i in range(0, len(rows_to_process), batch_size):
+            batch = rows_to_process[i:i+batch_size]
+            
+            try:
+                for radicado, cedula, abogado in batch:
+                    # Tenant isolation en busqueda de caso
+                    q_case = db.query(Case).filter(Case.radicado == radicado)
+                    if company_id:
+                        q_case = q_case.filter(Case.company_id == company_id)
+                    existing_cases = q_case.all()
+                    
+                    if existing_cases:
+                        for c in existing_cases:
+                            c.cedula = cedula or c.cedula
+                            c.abogado = abogado or c.abogado
+                        updated += 1
+                    else:
+                        # Limpiar de invalid_radicados si existia en la misma empresa
+                        q_inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado)
+                        if company_id:
+                            q_inv = q_inv.filter(InvalidRadicado.company_id == company_id)
+                        existing_invalid = q_inv.first()
+                        if existing_invalid:
+                            db.delete(existing_invalid)
+                            db.flush()
+
+                        db.add(Case(
+                            radicado=radicado, 
+                            cedula=cedula, 
+                            abogado=abogado, 
+                            user_id=user_id,
+                            company_id=company_id
+                        ))
+                        created += 1
+                    
+                    processed += 1
+                
+                db.commit()
+            except Exception as batch_err:
+                db.rollback()
+                skipped_batch_size = len(batch)
+                skipped += skipped_batch_size
+                processed += skipped_batch_size
+                batch_err_msg = f"Error en lote {i//batch_size + 1}: {str(batch_err)}"
+                print(f" [import-excel] {batch_err_msg}")
+                errors.append(batch_err_msg)
+            
+            # Actualizar progreso
+            try:
+                job.filas_procesadas = processed
+                job.filas_creadas = created
+                job.filas_actualizadas = updated
+                if errors:
+                    job.errores_parciales = "\n".join(errors)[:4000] # Limitar texto para evitar overflow en DB
+                db.commit()
+            except Exception as prog_err:
+                print(f" [import-excel] Error actualizando progreso del job: {prog_err}")
+                db.rollback()
+
+        # Finalizar
+        job.estado = "finalizado"
+        job.fecha_fin = datetime.utcnow()
+        db.commit()
+
+        if created > 0:
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(_background_validate_pendientes()))
+
+    except Exception as e:
+        print(f" [import-excel] Error critico procesando job {job_id}: {e}")
+        try:
+            job.estado = "error"
+            job.fecha_fin = datetime.utcnow()
+            job.errores_parciales = f"Error critico: {str(e)}"
+            db.commit()
+        except:
+            db.rollback()
+    finally:
+        db.close()
+
+
 @app.post("/cases/import-excel")
 async def import_excel(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -5471,97 +5676,76 @@ async def import_excel(
             raise HTTPException(400, "Sube un archivo .xlsx, .xls o .csv")
 
         content = await file.read()
-        if name.endswith(".csv"):
-            df = pd.read_csv(BytesIO(content))
-        else:
-            df = pd.read_excel(BytesIO(content))
+        is_csv = name.endswith(".csv")
 
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        # Normalizar nombres de columnas para bsqueda insensible a maysculas
-        cols_lower = {c.lower(): c for c in df.columns}
-        
-        rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
-        ced_col = next((cols_lower[k] for k in ["cedula", "identificacion", "documento"] if k in cols_lower), None)
-        abo_col = next((cols_lower[k] for k in ["abogado", "apoderado"] if k in cols_lower), None)
-
-        if not rad_col:
-            raise HTTPException(400, "Falta la columna 'Radicado'")
-
-        created = 0
-        updated = 0
-        skipped = 0
-        count = 0
-
-        # Procesamos en lotes MUY pequeos (20) para evitar errores de tamao de SQL
-        batch_size = 20
-
-        for _, row in df.iterrows():
-            try:
-                radicado = clean_str(row.get(rad_col))
-                if not radicado:
-                    skipped += 1
-                    continue
-                
-                cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
-                abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
-                
-                if cedula and (cedula.lower() == "nan" or cedula == ""): cedula = None
-                if abogado and (abogado.lower() == "nan" or abogado == ""): abogado = None
-
-                # Buscar TODOS los casos con este radicado
-                q_case = db.query(Case).filter(Case.radicado == radicado)
-                if not current_user.is_admin and current_user.company_id:
-                    q_case = q_case.filter(Case.company_id == current_user.company_id)
-                existing_cases = q_case.all()
-                
-                if existing_cases:
-                    for c in existing_cases:
-                        c.cedula = cedula or c.cedula
-                        c.abogado = abogado or c.abogado
-                    updated += 1
-                else:
-                    # Si ya estaba marcado como inválido, lo removemos para que vuelva a intentar validarse
-                    existing_invalid = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
-                    if existing_invalid:
-                        db.delete(existing_invalid)
-                        db.flush()
-
-                    db.add(Case(
-                        radicado=radicado, 
-                        cedula=cedula, 
-                        abogado=abogado, 
-                        user_id=current_user.id,
-                        company_id=current_user.company_id
-                    ))
-                    created += 1
-                
-                count += 1
-                if count % batch_size == 0:
-                    db.commit()
-            except Exception as row_error:
-                print(f" Error procesando fila: {row_error}")
-                db.rollback()
-                skipped += 1
-
+        # Registrar job de importacion
+        job = ExcelImportJob(
+            company_id=current_user.company_id,
+            usuario_username=current_user.username,
+            estado="pendiente",
+            total_filas=0
+        )
+        db.add(job)
         db.commit()
+        db.refresh(job)
 
-        if created > 0:
-            asyncio.create_task(_background_validate_pendientes())
+        loop = asyncio.get_running_loop()
+        # Encolar procesamiento en segundo plano no bloqueante usando asyncio.to_thread
+        background_tasks.add_task(
+            lambda: asyncio.run(
+                asyncio.to_thread(
+                    process_excel_import_task,
+                    job.id,
+                    content,
+                    is_csv,
+                    current_user.company_id,
+                    current_user.id,
+                    loop
+                )
+            )
+        )
 
         return {
             "ok": True,
-            "created": created,
-            "updated": updated,
-            "skipped": skipped,
-            "message": f"Procesados: {created} nuevos, {updated} actualizados."
+            "job_id": job.id,
+            "estado": job.estado,
+            "message": "Importación iniciada en segundo plano."
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         import traceback
         traceback.print_exc()
-        msg = str(e).split('\n')[0] # Solo la primera lnea para no saturar el UI
-        raise HTTPException(500, f"Error en importacin: {msg}")
+        raise HTTPException(500, f"Error iniciando importación: {str(e)}")
+
+
+@app.get("/cases/import-excel/status/{job_id}")
+async def get_import_excel_status(
+    job_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    job = db.query(ExcelImportJob).filter(ExcelImportJob.id == job_id).first()
+    if not job:
+        raise HTTPException(404, "Trabajo de importación no encontrado")
+    
+    if not is_global_superadmin(current_user) and job.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos para ver este trabajo de importación")
+        
+    return {
+        "id": job.id,
+        "company_id": job.company_id,
+        "usuario_username": job.usuario_username,
+        "estado": job.estado,
+        "total_filas": job.total_filas,
+        "filas_procesadas": job.filas_procesadas,
+        "filas_creadas": job.filas_creadas,
+        "filas_actualizadas": job.filas_actualizadas,
+        "errores_parciales": job.errores_parciales,
+        "fecha_inicio": job.fecha_inicio.isoformat() if job.fecha_inicio else None,
+        "fecha_fin": job.fecha_fin.isoformat() if job.fecha_fin else None,
+    }
 
 
 @app.post("/cases/bulk-delete-excel")
@@ -5596,7 +5780,7 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
 
                 # Buscar casos con ese radicado SOLO de la empresa del usuario
                 q_cases = db.query(Case).filter(Case.radicado == radicado)
-                if not (current_user.is_admin and not current_user.company_id):
+                if not is_global_superadmin(current_user):
                     q_cases = q_cases.filter(Case.company_id == current_user.company_id)
                 cases = q_cases.all()
                 for c in cases:
@@ -5607,7 +5791,7 @@ async def bulk_delete_excel(file: UploadFile = File(...), db: Session = Depends(
                 
                 # Limpiar de invalid solo los de la empresa del usuario
                 q_inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado)
-                if not (current_user.is_admin and not current_user.company_id):
+                if not is_global_superadmin(current_user):
                     q_inv = q_inv.filter(InvalidRadicado.company_id == current_user.company_id)
                 q_inv.delete()
 
@@ -5657,20 +5841,41 @@ async def do_auto_refresh_with_lock():
 async def get_event_documents(
     id_reg_actuacion: int,
     llave_proceso: str = Query(..., description="La llave (radicado) del proceso de 23 digitos"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     print(f"\n [DOCS] id_reg_actuacion={id_reg_actuacion} | llave_proceso={llave_proceso}")
 
+    # 1. Cargar CaseEvent por id_reg_actuacion
+    event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
+    if not event:
+        raise HTTPException(status_code=403, detail="Acceso denegado. No se encontró la actuación.")
+
+    # 2. Cargar Case asociado
+    case_obj = db.query(Case).filter(Case.id == event.case_id).first()
+    if not case_obj:
+        raise HTTPException(status_code=403, detail="Acceso denegado. Caso asociado no encontrado.")
+
+    # 3. Validar que el CaseEvent realmente pertenece a ese Case
+    if event.case_id != case_obj.id:
+        raise HTTPException(status_code=403, detail="Acceso denegado. La actuación no coincide con el caso.")
+
+    # 4. Validar que el radicado o llave_proceso coincide con el caso esperado
+    if clean_str(llave_proceso) != case_obj.radicado:
+        raise HTTPException(status_code=403, detail="Acceso denegado. La llave de proceso no coincide.")
+
+    # 5. Validar que el case.company_id coincide con el de current_user si no es SuperAdmin
+    if not is_global_superadmin(current_user) and case_obj.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a los documentos de este caso.")
+
     # 1. Intentar obtener de la base de datos (caché) para velocidad instantánea
-    try:
-        event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
-        if event and event.documentos_cache:
-            print(f" [DOCS] Retornando desde cache para id_reg_actuacion={id_reg_actuacion}")
+    if event.documentos_cache:
+        print(f" [DOCS] Retornando desde cache para id_reg_actuacion={id_reg_actuacion}")
+        try:
             cached_items = json.loads(event.documentos_cache)
             return {"items": cached_items, "total": len(cached_items)}
-    except Exception as e:
-        print(f" [DOCS] Error leyendo cache de BD: {e}")
-        db.rollback()
+        except Exception as e:
+            print(f" [DOCS] Error leyendo cache de BD: {e}")
 
     items = []
 
@@ -5704,11 +5909,9 @@ async def get_event_documents(
 
     # 3. Guardar en la base de datos si obtuvimos resultados
     try:
-        event = db.query(CaseEvent).filter(CaseEvent.id_reg_actuacion == id_reg_actuacion).first()
-        if event:
-            event.documentos_cache = json.dumps(items)
-            db.commit()
-            print(f" [DOCS] Guardado en cache exitosamente ({len(items)} items).")
+        event.documentos_cache = json.dumps(items)
+        db.commit()
+        print(f" [DOCS] Guardado en cache exitosamente ({len(items)} items).")
     except Exception as e:
         db.rollback()
         print(f" [DOCS] Error guardando cache en BD: {e}")
@@ -5721,7 +5924,49 @@ async def get_event_documents(
 # DESCARGA DE DOCUMENTO (PROXY A RAMA JUDICIAL)
 # =========================
 @app.get("/documentos/{id_documento}/descargar")
-async def descargar_documento_endpoint(id_documento: int):
+async def descargar_documento_endpoint(
+    id_documento: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Buscar el CaseEvent y Case asociados que contienen el id_documento en documentos_cache
+    query = db.query(CaseEvent, Case).join(Case, CaseEvent.case_id == Case.id)
+    if not is_global_superadmin(current_user):
+        query = query.filter(Case.company_id == current_user.company_id)
+
+    # Pre-filtrado por LIKE en la BD para evitar cargar toda la tabla, pero validando exactamente en Python
+    candidates = query.filter(CaseEvent.documentos_cache.like(f"%{id_documento}%")).all()
+
+    associated_case = None
+    associated_event = None
+
+    for event, case in candidates:
+        if event.documentos_cache:
+            try:
+                docs = json.loads(event.documentos_cache)
+                for doc in docs:
+                    doc_id = doc.get("idDocumento") or doc.get("idRegistroDocumento") or doc.get("id")
+                    if doc_id is not None:
+                        try:
+                            if int(doc_id) == id_documento:
+                                associated_case = case
+                                associated_event = event
+                                break
+                        except ValueError:
+                            pass
+                if associated_case:
+                    break
+            except Exception:
+                pass
+
+    if not associated_case or not associated_event:
+        raise HTTPException(status_code=403, detail="No se encontró una asociación válida para descargar este documento o no tienes acceso.")
+
+    # Confirmar pertenencia de empresa adicionalmente
+    if not is_global_superadmin(current_user):
+        if associated_case.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="Acceso denegado. Propiedad de empresa no válida.")
+
     url_rama = f"{RAMA_BASE}/Descarga/Documento/{id_documento}"
     print(f" Descargando documento ID={id_documento}  {url_rama}")
 
@@ -5919,6 +6164,9 @@ async def descartar_publicacion(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not is_global_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Acción permitida únicamente para SuperAdmin global.")
+        
     pub = db.query(CasePublication).filter(CasePublication.id == pub_id).first()
     if not pub:
         raise HTTPException(status_code=404, detail="Publicación no encontrada")
@@ -5953,6 +6201,9 @@ async def aprobar_publicacion(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not is_global_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Acción permitida únicamente para SuperAdmin global.")
+        
     pub = db.query(CasePublication).filter(CasePublication.id == pub_id).first()
     if not pub:
         raise HTTPException(status_code=404, detail="Publicación no encontrada")
@@ -7077,7 +7328,14 @@ async def export_search_results(
     current_user: User = Depends(get_current_user)
 ):
     job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
-    if not job or not job.results_json:
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabajo de búsqueda no encontrado")
+
+    if not is_global_superadmin(current_user):
+        if job.company_id is None or job.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a los resultados de este trabajo de búsqueda.")
+
+    if not job.results_json:
         raise HTTPException(status_code=404, detail="Resultados no encontrados")
     
     results = json.loads(job.results_json)
@@ -7159,8 +7417,22 @@ async def export_search_results(
 @app.post("/cases/bulk-update-metadata")
 async def bulk_update_metadata(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
+    # Validar permisos de usuario normal
+    if not is_global_superadmin(current_user) and not is_company_admin(current_user):
+        has_perm = False
+        try:
+            has_perm = db.query(Permission).join(role_permissions).join(Role).join(user_roles).filter(
+                user_roles.c.user_id == current_user.id,
+                Permission.name == "cases.bulk-update"
+            ).first() is not None
+        except Exception:
+            pass
+        if not has_perm:
+            raise HTTPException(status_code=403, detail="No tienes permiso para realizar actualización masiva de metadatos.")
+
     try:
         content = await file.read()
         df = pd.read_excel(BytesIO(content))
@@ -7168,16 +7440,48 @@ async def bulk_update_metadata(
         df.columns = [str(c).strip().upper() for c in df.columns]
         
         updated_cases = 0
-        for _, row in df.iterrows():
-            radicado = str(row.get("RADICADO", "")).strip()
+        omitted_rows = []
+        
+        for idx, row in df.iterrows():
+            radicado = clean_str(str(row.get("RADICADO", "")))
             if not radicado:
+                omitted_rows.append({"row_index": idx, "radicado": "", "reason": "Radicado vacío"})
                 continue
             
             cedula = str(row.get("CEDULA", "")).strip() if "CEDULA" in df.columns else None
             abogado = str(row.get("ABOGADO", "")).strip() if "ABOGADO" in df.columns else None
             
-            # Buscamos todos los casos con este radicado
-            cases = db.query(Case).filter(Case.radicado == radicado).all()
+            target_company_id = None
+            if is_global_superadmin(current_user):
+                comp_val = row.get("COMPANY_ID") or row.get("EMPRESA")
+                if comp_val and not pd.isna(comp_val):
+                    if str(comp_val).strip().isdigit():
+                        target_company_id = int(str(comp_val).strip())
+                    else:
+                        from backend.models import Company
+                        company_obj = db.query(Company).filter(Company.nombre.ilike(str(comp_val).strip())).first()
+                        if company_obj:
+                            target_company_id = company_obj.id
+                if not target_company_id:
+                    # SuperAdmin sin empresa objetivo especificada -> omitir
+                    omitted_rows.append({"row_index": idx, "radicado": radicado, "reason": "Empresa objetivo no especificada o no válida para SuperAdmin"})
+                    continue
+            else:
+                # Company Admin o normal: ignorar cualquier company_id del Excel y usar el propio
+                target_company_id = current_user.company_id
+                
+            if target_company_id is None:
+                omitted_rows.append({"row_index": idx, "radicado": radicado, "reason": "No se pudo determinar la empresa del usuario"})
+                continue
+                
+            # Actualizar únicamente por company_id + radicado (nunca por radicado global)
+            q_case = db.query(Case).filter(Case.radicado == radicado, Case.company_id == target_company_id)
+            
+            cases = q_case.all()
+            if not cases:
+                omitted_rows.append({"row_index": idx, "radicado": radicado, "reason": "Caso no encontrado en la empresa especificada"})
+                continue
+
             for c in cases:
                 if cedula and cedula.lower() != "nan":
                     c.cedula = cedula
@@ -7186,7 +7490,12 @@ async def bulk_update_metadata(
                 updated_cases += 1
                 
         db.commit()
-        return {"ok": True, "updated_count": updated_cases}
+        return {
+            "ok": True, 
+            "updated_count": updated_cases, 
+            "omitted_count": len(omitted_rows), 
+            "omitted_details": omitted_rows
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error procesando Excel: {str(e)}")
@@ -7435,14 +7744,28 @@ async def create_list(
 
 @app.get("/api/cases/id/{case_id}/tasks")
 @app.get("/cases/id/{case_id}/tasks")
-async def get_tasks_by_case(case_id: int, db: Session = Depends(get_db)):
+async def get_tasks_by_case(
+    case_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    case_obj = db.query(Case).filter(Case.id == case_id).first()
+    if not case_obj:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    if not is_global_superadmin(current_user):
+        if case_obj.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
+            
     tasks = db.query(Task).filter(Task.case_id == case_id).all()
     return tasks
 
 # Endpoint de diagnóstico público (sin auth) para verificar que el backend responde
 @app.get("/debug/tasks")
-async def debug_tasks(db: Session = Depends(get_db)):
+async def debug_tasks(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Endpoint público sin auth para diagnóstico. NO usar en producción final."""
+    if not is_global_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
     try:
         tasks = db.query(Task).limit(5).all()
         total = db.query(Task).count()
@@ -7650,6 +7973,17 @@ async def get_task_detail(
         
         if not task:
             return JSONResponse(status_code=404, content={"detail": "Tarea no encontrada"})
+            
+        if not is_global_superadmin(current_user):
+            if task.company_id is not None:
+                if task.company_id != current_user.company_id:
+                    return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
+            elif task.case_id is not None:
+                case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+                if not case_obj or case_obj.company_id != current_user.company_id:
+                    return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
+            else:
+                return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
         
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
@@ -7794,6 +8128,19 @@ async def create_task(
             else:
                 raise HTTPException(status_code=400, detail="No existe ninguna lista de proyectos en la base de datos para asignar la tarea.")
 
+    # Validaciones multiempresa al crear tarea
+    comp_id = current_user.company_id
+    if t_data.case_id:
+        case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
+        if not case_obj:
+            raise HTTPException(status_code=404, detail="Caso no encontrado")
+        if not is_global_superadmin(current_user) and case_obj.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
+        comp_id = case_obj.company_id
+    else:
+        if not is_global_superadmin(current_user) and current_user.company_id is None:
+            raise HTTPException(status_code=403, detail="No se pudo determinar la empresa del usuario.")
+
     print(f"[DEBUG] Creating task: title={t_data.title}, parent_id={t_data.parent_id}, case_id={t_data.case_id}")
     try:
         task = Task(
@@ -7806,7 +8153,8 @@ async def create_task(
             due_date=t_data.due_date,
             case_id=t_data.case_id,
             parent_id=t_data.parent_id,
-            creator_id=current_user.id
+            creator_id=current_user.id,
+            company_id=comp_id
         )
         
         # Auditoría de identidad: Poblar assignee_name automáticamente
@@ -7836,6 +8184,17 @@ async def delete_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
     
     try:
         # Eliminar subtareas primero
@@ -7870,6 +8229,21 @@ async def add_task_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+
     comment = TaskComment(
         task_id=task_id,
         content=data.get("content"),
@@ -7891,6 +8265,21 @@ async def add_task_checklist_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+
     item = TaskChecklistItem(
         task_id=task_id,
         content=data.content,
@@ -7907,6 +8296,21 @@ async def delete_task_comment(comment_id: int, db: Session = Depends(get_db), cu
     comment = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comentario no encontrado")
+        
+    task = db.query(Task).filter(Task.id == comment.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
     
     # Solo admin o el creador pueden borrar
     if not current_user.is_admin and comment.user_id != current_user.id:
@@ -7922,6 +8326,21 @@ async def update_task_comment(comment_id: int, data: dict = Body(...), db: Sessi
     comment = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comentario no encontrado")
+        
+    task = db.query(Task).filter(Task.id == comment.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
     
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="No tienes permiso para editar este comentario")
@@ -7935,6 +8354,22 @@ async def update_task_comment(comment_id: int, data: dict = Body(...), db: Sessi
 async def update_task_checklist_item(item_id: int, data: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(TaskChecklistItem).filter(TaskChecklistItem.id == item_id).first()
     if not item: raise HTTPException(status_code=404)
+    
+    task = db.query(Task).filter(Task.id == item.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+
     if "content" in data: item.content = data["content"]
     if "is_completed" in data: item.is_completed = data["is_completed"]
     db.commit()
@@ -7945,6 +8380,22 @@ async def update_task_checklist_item(item_id: int, data: dict, db: Session = Dep
 async def delete_task_checklist_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(TaskChecklistItem).filter(TaskChecklistItem.id == item_id).first()
     if not item: raise HTTPException(status_code=404)
+    
+    task = db.query(Task).filter(Task.id == item.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if not case_obj or case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+        else:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+
     db.delete(item)
     db.commit()
     return {"ok": True}
@@ -7965,12 +8416,28 @@ async def update_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
+        
+    if not is_global_superadmin(current_user):
+        if task.company_id is not None:
+            if task.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+        elif task.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+            if case_obj and case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
     
     try:
         if t_data.title is not None: task.title = t_data.title
         if t_data.description is not None: task.description = t_data.description
         if t_data.status is not None: task.status = t_data.status.upper()
-        if hasattr(t_data, 'case_id') and t_data.case_id is not None: task.case_id = t_data.case_id
+        if hasattr(t_data, 'case_id') and t_data.case_id is not None:
+            case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
+            if not case_obj:
+                raise HTTPException(status_code=404, detail="Caso destino no encontrado")
+            if not is_global_superadmin(current_user) and case_obj.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="No tienes acceso al caso de destino.")
+            task.case_id = t_data.case_id
+            task.company_id = case_obj.company_id
         
         # Auditoría de identidad: Sincronizar nombre si cambia el ID
         if t_data.assignee_id is not None:
@@ -8099,6 +8566,9 @@ async def update_case_lawyer(
     cs = db.query(Case).filter(Case.id == case_id).first()
     if not cs:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
+        
+    if not is_global_superadmin(current_user) and cs.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
     
     cs.abogado = data.abogado
     # Intentar buscar el usuario por nombre para sincronizar user_id autom?ticamente

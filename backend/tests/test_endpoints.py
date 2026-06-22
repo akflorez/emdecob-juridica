@@ -406,6 +406,129 @@ def test_password_recovery_flow():
     assert "expiró o ya fue usado" in resp.json()["detail"]
 
 
+def test_company_registration_status_and_role():
+    # Setup fresh DB state or check directly via registration endpoint
+    payload = {
+        "company_name": "New Test Company LLC",
+        "company_nit": "999-999-999-1",
+        "admin_name": "Admin Karinitas",
+        "email": "adminkarinitas@testcompany.com",
+        "password": "Password123!",
+        "confirm_password": "Password123!"
+    }
+    
+    # Use normal dependencies since we bypass auth for signup
+    app.dependency_overrides.clear()
+    
+    response = client.post("/auth/register-company", json=payload)
+    assert response.status_code == 200
+    
+    # Verify in DB
+    db = TestingSessionLocal()
+    comp = db.query(Company).filter(Company.nombre == "New Test Company LLC").first()
+    assert comp is not None
+    assert comp.estado == "activo"  # Verify fixed string status
+    
+    user = db.query(User).filter(User.email == "adminkarinitas@testcompany.com").first()
+    assert user is not None
+    assert user.role == "COMPANY_ADMIN"
+    assert user.is_admin is True
+    assert user.cases_view_scope == "COMPANY"
+    db.close()
+
+
+def test_task_checklist_comment_company_isolation():
+    from backend.models import Task, TaskChecklistItem, TaskComment, Workspace, ProjectList
+    
+    db = TestingSessionLocal()
+    # Create two companies
+    c1 = Company(id=10, nombre="Company 10", nit="10-10", estado="activo")
+    c2 = Company(id=11, nombre="Company 11", nit="11-11", estado="activo")
+    db.add(c1)
+    db.add(c2)
+    
+    # Create workspace and list
+    ws = Workspace(id=1, name="Workspace 1")
+    plist = ProjectList(id=1, name="List 1", workspace_id=1)
+    db.add(ws)
+    db.add(plist)
+    
+    # Create cases
+    case1 = Case(id=1001, company_id=10, radicado="1001001001", demandante="C1 Demandante", is_active=True)
+    case2 = Case(id=1002, company_id=11, radicado="1002002002", demandante="C2 Demandante", is_active=True)
+    db.add(case1)
+    db.add(case2)
+    
+    # Create tasks
+    task1 = Task(id=501, company_id=10, case_id=1001, list_id=1, title="Task 1 Company 10", status="ABIERTO")
+    task2 = Task(id=502, company_id=11, case_id=1002, list_id=1, title="Task 2 Company 11", status="ABIERTO")
+    db.add(task1)
+    db.add(task2)
+    
+    # Create checklists and comments
+    chk1 = TaskChecklistItem(id=901, task_id=501, content="Checklist 1 Task 1", is_completed=False)
+    comment1 = TaskComment(id=801, task_id=501, user_id=10, content="Comment 1 Task 1")
+    db.add(chk1)
+    db.add(comment1)
+    
+    db.commit()
+    db.close()
+
+    # Define mock users representing different actors
+    user_c1 = User(id=10, company_id=10, username="user_c1", nombre="User C1", is_active=True, is_admin=False, role="USER", cases_view_scope="OWN")
+    user_c2 = User(id=11, company_id=11, username="user_c2", nombre="User C2", is_active=True, is_admin=False, role="USER", cases_view_scope="OWN")
+    sa = User(id=1, company_id=None, username="sa", nombre="Super Admin", is_active=True, is_admin=True, is_superadmin=True, role="SUPERADMIN", cases_view_scope="GLOBAL")
+
+    # 1. Test update Task
+    # Actor 1: User from company 1 updates task 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: user_c1
+    resp = client.patch("/api/tasks/501", json={"title": "Updated Task 1"})
+    assert resp.status_code == 200
+
+    # Actor 2: User from company 2 updates task 1 -> 403 Forbidden
+    app.dependency_overrides[get_current_user] = lambda: user_c2
+    resp = client.patch("/api/tasks/501", json={"title": "Hack Task 1"})
+    assert resp.status_code == 403
+
+    # Actor 3: SuperAdmin updates task 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: sa
+    resp = client.patch("/api/tasks/501", json={"title": "SA Task 1"})
+    assert resp.status_code == 200
+
+    # 2. Test update Task Checklist Item
+    # Actor 1: User from company 1 updates checklist 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: user_c1
+    resp = client.patch("/api/tasks/checklists/901", json={"is_completed": True})
+    assert resp.status_code == 200
+
+    # Actor 2: User from company 2 updates checklist 1 -> 403 Forbidden
+    app.dependency_overrides[get_current_user] = lambda: user_c2
+    resp = client.patch("/api/tasks/checklists/901", json={"is_completed": True})
+    assert resp.status_code == 403
+
+    # Actor 3: SuperAdmin updates checklist 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: sa
+    resp = client.patch("/api/tasks/checklists/901", json={"is_completed": False})
+    assert resp.status_code == 200
+
+    # 3. Test update Task Comment
+    # Actor 1: User from company 1 updates comment 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: user_c1
+    resp = client.patch("/api/tasks/comments/801", json={"content": "Updated comment by user 1"})
+    assert resp.status_code == 200
+
+    # Actor 2: User from company 2 updates comment 1 -> 403 Forbidden
+    app.dependency_overrides[get_current_user] = lambda: user_c2
+    resp = client.patch("/api/tasks/comments/801", json={"content": "Hacked comment"})
+    assert resp.status_code == 403
+
+    # Actor 3: SuperAdmin updates comment 1 -> 200 OK
+    app.dependency_overrides[get_current_user] = lambda: sa
+    resp = client.patch("/api/tasks/comments/801", json={"content": "SA comment"})
+    assert resp.status_code == 200
+
+
+
 # Cleanup test file after execution
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_temp_db_file():

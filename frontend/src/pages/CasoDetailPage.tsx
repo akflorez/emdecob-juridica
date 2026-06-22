@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, FileText, Loader2, Filter, AlertCircle, 
-  Download, User, Users, Building2, Hash, Paperclip, ChevronDown,
+  Download, User as UserIcon, Users, Building2, Hash, Paperclip, ChevronDown,
   FileDown, RefreshCw, ArrowRight, UserCheck, Edit3, ChevronRight,
   ExternalLink
 } from 'lucide-react';
@@ -27,8 +27,10 @@ import {
   createTask,
   getCaseSourcesHistory,
   buscarNuevamente,
+  markCaseRead,
   type User,
   type Task as TaskType,
+  type CasePublication,
   apiFetch
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -755,7 +757,7 @@ export default function CasoDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
             {[
               { icon: Hash,      label: 'RADICADO',          value: caseData.radicado,                    mono: true },
-              { icon: User,      label: 'DEMANDANTE',        value: caseData.demandante || '—' },
+              { icon: UserIcon,  label: 'DEMANDANTE',        value: caseData.demandante || '—' },
               { icon: Users,     label: 'DEMANDADO',         value: caseData.demandado  || '—' },
               { icon: Building2, label: 'JUZGADO',           value: caseData.juzgado    || '—' },
               { icon: Calendar,  label: 'FECHA RADICACIÓN',  value: formatDate(caseData.fecha_radicacion) },
@@ -1664,7 +1666,7 @@ function TaskItem({ task, onSelect, isSubtask }: { task: TaskType; onSelect: (t:
             )}
             {task.assignee_name && (
               <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
-                <User className="h-3 w-3" />
+                <UserIcon className="h-3 w-3" />
                 {task.assignee_name}
               </span>
             )}

@@ -107,6 +107,11 @@ export type User = {
   nombre?: string;
   is_active: boolean;
   is_admin: boolean;
+  is_superadmin?: boolean;
+  company_id?: number | null;
+  role?: string;
+  roles?: string[];
+  rol?: string;
 };
 
 export function getUsers() {
@@ -855,11 +860,25 @@ export type CasePublication = {
 
 export function getCasePublications(radicado: string) {
   const r = encodeURIComponent(radicado.trim());
-  return apiFetch<{ items: CasePublication[] }>(`/cases/${r}/publicaciones`);
+  return apiFetch<{
+    items: CasePublication[];
+    company_id?: number | null;
+    busquedas?: any[];
+    estado_busqueda?: string;
+    sync_pub_status?: string;
+    sync_pub_progress?: number;
+  }>(`/cases/${r}/publicaciones`);
 }
 
 export function getCasePublicationsById(id: number) {
-  return apiFetch<{ items: any[] }>(`/cases/id/${id}/publicaciones`);
+  return apiFetch<{
+    items: any[];
+    company_id?: number | null;
+    busquedas?: any[];
+    estado_busqueda?: string;
+    sync_pub_status?: string;
+    sync_pub_progress?: number;
+  }>(`/cases/id/${id}/publicaciones`);
 }
 
 
@@ -974,6 +993,7 @@ export type TaskComment = {
   id: number;
   content: string;
   user_id?: number;
+  user_name?: string;
   created_at: string;
 };
 

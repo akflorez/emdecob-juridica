@@ -47,6 +47,8 @@ def extract_radicado(text: str) -> str:
 
 async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int, user_map: dict, api_token: str, parent_id: int = None, inherited_case_id: int = None):
     """Procesa una tarea de ClickUp y sus subtareas recursivamente."""
+    owner = db.query(User).filter(User.id == owner_id).first()
+    owner_company_id = owner.company_id if owner else None
     
     # 1. Mapear responsable (Múltiples)
     all_assignees_data = task_data.get('assignees', [])
@@ -95,7 +97,8 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
                 radicado=radicado, 
                 user_id=target_user_id, 
                 demandado=case_title,
-                demandante="Importado de ClickUp"
+                demandante="Importado de ClickUp",
+                company_id=owner_company_id
             )
             db.add(new_case)
             db.flush()
@@ -126,6 +129,8 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
         existing_task.assignee_name = assignee_name
         existing_task.assignees = mapped_users
         existing_task.parent_id = parent_id or existing_task.parent_id
+        if existing_task.company_id is None:
+            existing_task.company_id = owner_company_id
         db_task = existing_task
     else:
         db_task = Task(
@@ -142,7 +147,8 @@ async def process_task(task_data: dict, list_id: int, db: Session, owner_id: int
             assignees=mapped_users,
             creator_id=owner_id,
             parent_id=parent_id,
-            custom_fields=json.dumps(task_data.get('custom_fields', []))
+            custom_fields=json.dumps(task_data.get('custom_fields', [])),
+            company_id=owner_company_id
         )
         db.add(db_task)
     
@@ -251,6 +257,8 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
     """Sincronización Maestra Juricob v2: Importación total y jerárquica."""
     
     print("[Master Sync] Iniciando importacion desde ClickUp...")
+    owner = db.query(User).filter(User.id == owner_id).first()
+    owner_company_id = owner.company_id if owner else None
     
     # Cache de usuarios
     all_users = db.query(User).all()
@@ -279,7 +287,8 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
                             email=m_user.get('email'),
                             is_active=True,
                             is_admin=False,
-                            hashed_password="clickup_placeholder"
+                            hashed_password="clickup_placeholder",
+                            company_id=owner_company_id
                         )
                         db.add(new_u)
                         db.flush()

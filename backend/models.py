@@ -141,7 +141,7 @@ class InvalidRadicado(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
-    radicado = Column(String(23), unique=True, index=True, nullable=False)
+    radicado = Column(String(23), index=True, nullable=False)
     motivo = Column(String(255), default="No encontrado en Rama Judicial")
     intentos = Column(Integer, default=1)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -152,6 +152,10 @@ class InvalidRadicado(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "radicado", name="uq_invalid_radicado_company"),
     )
 
 
@@ -409,7 +413,7 @@ class CasePublicationSearch(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint('radicado', 'mes_busqueda', name='uix_pub_search_radicado_mes'),
+        UniqueConstraint('company_id', 'radicado', 'mes_busqueda', name='uix_pub_search_company_radicado_mes'),
         Index('idx_pub_search_queue_worker', 'estado', 'prioridad', 'created_at'),
         Index('idx_pub_search_retry', 'estado', 'next_retry_at'),
     )
@@ -689,3 +693,24 @@ class CaseSearchSourceResult(Base):
 
     case = relationship("Case", backref=backref("search_source_results", cascade="all, delete-orphan"))
     user = relationship("User", backref=backref("case_searches"))
+
+
+class ExcelImportJob(Base):
+    """Seguimiento de importaciones de Excel"""
+    __tablename__ = "excel_import_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
+    usuario_username = Column(String(255), nullable=True)
+    estado = Column(String(50), default="pendiente", nullable=False) # 'pendiente', 'procesando', 'finalizado', 'error'
+    total_filas = Column(Integer, default=0)
+    filas_procesadas = Column(Integer, default=0)
+    filas_creadas = Column(Integer, default=0)
+    filas_actualizadas = Column(Integer, default=0)
+    errores_parciales = Column(Text, nullable=True)
+
+    fecha_inicio = Column(DateTime, server_default=func.now(), nullable=False)
+    fecha_fin = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

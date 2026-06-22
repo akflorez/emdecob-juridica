@@ -534,9 +534,11 @@ export default function CasosPage() {
     formData.append("file", file);
 
     try {
+      const token = localStorage.getItem("emdecob_auth_token");
       const resp = await fetch(`${API_BASE}/cases/bulk-update-metadata`, {
         method: "POST",
         body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "Error al actualizar metadatos");

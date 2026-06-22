@@ -100,14 +100,13 @@ def test_auto_queue_publicaciones_for_case(db_session):
     assert db_session.query(CasePublicationSearch).filter(CasePublicationSearch.radicado == case.radicado).count() == 3
     
     # Re-run with force -> Should reactivate and not duplicate
-    s_april = db_session.query(CasePublicationSearch).filter(
-        CasePublicationSearch.radicado == case.radicado,
-        CasePublicationSearch.mes_busqueda == "2026-04"
-    ).first()
-    s_april.estado = "error"
-    s_april.intentos = 2
-    s_april.ultimo_error = "some error"
+    searches = db_session.query(CasePublicationSearch).filter(CasePublicationSearch.radicado == case.radicado).all()
+    for s in searches:
+        s.estado = "error"
+        s.intentos = 2
+        s.ultimo_error = "some error"
     db_session.commit()
+    s_april = next(s for s in searches if s.mes_busqueda == "2026-04")
     
     queued_force = auto_queue_publicaciones_for_case(db_session, case, force=True)
     assert queued_force == 3 # All 3 are forced (reset)
