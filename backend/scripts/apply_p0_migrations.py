@@ -56,7 +56,39 @@ def main():
         if ir_nulls > 0 or len(ir_dups) > 0 or pb_nulls > 0 or len(pb_dups) > 0:
             print("\n[ERROR] Hay inconsistencias en los datos. No se pueden aplicar las constraints UNIQUE.")
             print("Por favor resuelva los duplicados o registros NULL antes de continuar.")
-            sys.exit(1)
+    print("\n--- 1.5 CONSTRAINTS ACTUALES EN POSTGRESQL ---")
+    try:
+        with engine.connect() as conn:
+            # Constraints en invalid_radicados
+            c_ir = conn.execute(text("SELECT conname FROM pg_constraint WHERE conrelid = 'invalid_radicados'::regclass")).fetchall()
+            print("Constraints en invalid_radicados:")
+            for row in c_ir: print(f"  - {row[0]}")
+            
+            # Constraints en publicaciones_busquedas
+            c_pb = conn.execute(text("SELECT conname FROM pg_constraint WHERE conrelid = 'publicaciones_busquedas'::regclass")).fetchall()
+            print("Constraints en publicaciones_busquedas:")
+            for row in c_pb: print(f"  - {row[0]}")
+    except Exception as e:
+        print(f"[ERROR] No se pudieron leer las constraints: {e}")
+
+    print("\n--- 1.6 BACKUP LÓGICO DE TABLAS AFECTADAS ---")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_ir = f"backup_invalid_radicados_{ts}"
+    backup_pb = f"backup_publicaciones_busquedas_{ts}"
+    
+    try:
+        with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
+            print(f"Respaldando invalid_radicados en: {backup_ir}...")
+            conn.execute(text(f"CREATE TABLE {backup_ir} AS SELECT * FROM invalid_radicados"))
+            
+            print(f"Respaldando publicaciones_busquedas en: {backup_pb}...")
+            conn.execute(text(f"CREATE TABLE {backup_pb} AS SELECT * FROM publicaciones_busquedas"))
+            
+            print("[OK] Backups lógicos completados exitosamente.")
+    except Exception as e:
+        print(f"[ERROR CRÍTICO] Falló el backup de las tablas: {e}")
+        print("MIGRACIÓN CANCELADA por seguridad. No se alterarán las constraints.")
+        sys.exit(1)
 
     print("\n--- 2. APLICANDO CONSTRAINTS (CON TIMEOUTS) ---")
     
