@@ -1170,6 +1170,16 @@ def detect_main_sources(detail_html: str) -> list:
     seen_urls = set()
     
     def add_source(url, tipo):
+        url_lower = url.lower()
+        if any(k in url_lower for k in [
+            "corteconstitucional", "consejodeestado", "directoriojudicial", "facebook", "youtube", "twitter", "instagram", 
+            "outlook.cloud", "mailto:", "consultaprocesos", "centroderelevo", "arcg.is", "javascript:", "#",
+            "/web/consejo-superior-de-la-judicatura", "/web/informacion", "/portal/politicas", "/web/guest", "/transparencia",
+            "cortesuprema.gov.co", "cndj.gov.co", "c/portal/login", "/inicio", "/avisos-vacantes-temporales",
+            "/otras-consultas", "/consulta-historica", "/novedades", "/como-consultar-publicaciones", "infografia", "abc_ciudadano",
+            "/directorio-cuentas-de-correo-electronico"
+        ]) or url.strip() == "https://www.ramajudicial.gov.co" or url.strip() == "https://publicacionesprocesales.ramajudicial.gov.co/":
+            return
         if not url.startswith("http"):
             url = "https://publicacionesprocesales.ramajudicial.gov.co" + (url if url.startswith("/") else "/" + url)
         if url not in seen_urls:
@@ -1525,12 +1535,12 @@ async def consultar_publicaciones_rango(
                             return None
                             
                         # Determinar estado de validación y registrar log de validación/descarte
+                        estado_val = match_principal.estado_validacion
+                        
                         if match_principal.is_valid:
-                            estado_val = "validado_automatico" if match_principal.match_type in ["radicado_completo", "radicado_completo_con_guiones", "radicado_completo_con_espacios"] else "validado_por_fuente_oficial"
                             print(f"[PUBLICACIONES][DOC_VALIDATED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={fuente_validada_url} score={match_principal.score} type={match_principal.match_type}")
                         else:
-                            estado_val = "descartado" if match_principal.score < 70 else "requiere_revision"
-                            print(f"[PUBLICACIONES][DOC_DISCARDED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={fuente_validada_url} score={match_principal.score} reason={match_principal.reasons}")
+                            print(f"[PUBLICACIONES][DOC_DISCARDED] company_id={company_id} radicado={radicado_completo} mes_busqueda={year}-{month:02d} search_id={search_id} url={fuente_validada_url} score={match_principal.score} reason={match_principal.reasons} final_state={estado_val}")
 
                         if match_principal.score < 50:
                             return None

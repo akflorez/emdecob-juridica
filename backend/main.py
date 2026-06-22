@@ -1025,9 +1025,11 @@ async def run_publicaciones_worker_loop():
                             if has_visible:
                                 c_rec.estado = "encontrada"
                                 c_rec.estado_busqueda = "encontrada"
+                                print(f"[PUBLICACIONES][SEARCH_MARKED_FOUND] company_id={company_id} radicado={radicado} search_id={locked_id} url=N/A estado_validacion=encontrada motivo=has_visible")
                             else:
                                 c_rec.estado = "sin_resultado"
                                 c_rec.estado_busqueda = "sin_resultado"
+                                print(f"[PUBLICACIONES][SEARCH_MARKED_NO_RESULT] company_id={company_id} radicado={radicado} search_id={locked_id} url=N/A estado_validacion=sin_resultado motivo=no_visible_pubs")
                                 
                             c_rec.processed_at = now_colombia()
                             c_rec.ultimo_error = None
@@ -6063,8 +6065,10 @@ async def get_case_publications(
     elif not validadas_db and any(b.estado == "sin_resultado" for b in busquedas_db):
         global_status = "sin_resultado"
         
+    is_sa = is_global_superadmin(current_user)
+    
     def serialize_pub(p):
-        return {
+        res = {
             "id": p.id,
             "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
             "tipo_publicacion": p.tipo_publicacion,
@@ -6074,9 +6078,6 @@ async def get_case_publications(
             "source_id": p.source_id,
             "fecha_estado_electronico": p.fecha_estado_electronico.isoformat() if p.fecha_estado_electronico else None,
             "numero_estado": p.numero_estado,
-            "match_fuerte": p.match_fuerte,
-            "match_type": p.match_type,
-            "motivo_match": p.motivo_match,
             "url_fuente_principal": p.url_fuente_principal,
             "tipo_fuente_principal": p.tipo_fuente_principal,
             "documentos_complementarios": p.documentos_complementarios,
@@ -6085,18 +6086,28 @@ async def get_case_publications(
             "url_providencia": p.url_providencia,
             "observacion": p.observacion,
             "estado_validacion": getattr(p, "estado_validacion", "requiere_revision") or "requiere_revision",
-            "match_score": getattr(p, "match_score", 0),
-            "texto_bloque_match": getattr(p, "texto_bloque_match", ""),
-            "motivo_descarte": getattr(p, "motivo_descarte", ""),
-            "fuente_principal_validada": getattr(p, "fuente_principal_validada", False),
-            "requiere_revision": getattr(p, "requiere_revision", True),
-            "elementos_detectados": getattr(p, "elementos_detectados", ""),
             "documento_nombre": getattr(p, "documento_nombre", ""),
-            "extraction_quality": getattr(p, "extraction_quality", "")
         }
+        if is_sa:
+            res.update({
+                "match_fuerte": getattr(p, "match_fuerte", False),
+                "match_type": getattr(p, "match_type", ""),
+                "motivo_match": getattr(p, "motivo_match", ""),
+                "match_score": getattr(p, "match_score", 0),
+                "texto_bloque_match": getattr(p, "texto_bloque_match", ""),
+                "motivo_descarte": getattr(p, "motivo_descarte", ""),
+                "fuente_principal_validada": getattr(p, "fuente_principal_validada", False),
+                "requiere_revision": getattr(p, "requiere_revision", True),
+                "elementos_detectados": getattr(p, "elementos_detectados", ""),
+                "extraction_quality": getattr(p, "extraction_quality", "")
+            })
+        return res
 
-    is_sa = is_global_superadmin(current_user)
-    serialized_pubs = [serialize_pub(p) for p in pubs if getattr(p, "estado_validacion", "requiere_revision") != "descartado"]
+    if is_sa:
+        serialized_pubs = [serialize_pub(p) for p in pubs]
+    else:
+        serialized_pubs = [serialize_pub(p) for p in pubs if getattr(p, "estado_validacion", "requiere_revision") in ["validado", "validado_automatico", "validado_por_fuente_oficial"]]
+        
     validadas = [p for p in serialized_pubs if p["estado_validacion"] in ["validado", "validado_automatico", "validado_por_fuente_oficial"]]
     
     if is_sa:
@@ -7107,6 +7118,12 @@ async def save_new_publications(case: Case, db: Session, force: bool = False):
                                 has_visible = True
                                 
                 estado_fin = "encontrada" if has_visible else "sin_resultado"
+                
+                if has_visible:
+                    print(f"[PUBLICACIONES][SEARCH_MARKED_FOUND] company_id={case.company_id} radicado={case.radicado} mes_busqueda={year}-{month:02d} search_id={search_id} url=N/A estado_validacion=encontrada motivo=has_visible")
+                else:
+                    print(f"[PUBLICACIONES][SEARCH_MARKED_NO_RESULT] company_id={case.company_id} radicado={case.radicado} mes_busqueda={year}-{month:02d} search_id={search_id} url=N/A estado_validacion=sin_resultado motivo=no_visible_pubs")
+
                 guardar_estado_busqueda(db, {
                     "company_id": case.company_id,
                     "radicado": case.radicado,
