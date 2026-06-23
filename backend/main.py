@@ -2023,42 +2023,6 @@ HARDCODED_USERS = {
         "nombre": "Juridico Emdecob",
         "is_admin": False,
     },
-    "julian.cuartas": {
-        "password": "292509",
-        "id": 1001,
-        "nombre": "JULIAN CUARTAS",
-        "is_admin": False,
-    },
-    "JULIAN CUARTAS": {
-        "password": "292509",
-        "id": 1001,
-        "nombre": "JULIAN CUARTAS",
-        "is_admin": False,
-    },
-    "valentina.patino": {
-        "password": "251410",
-        "id": 1002,
-        "nombre": "VALENTINA PATIÑO",
-        "is_admin": False,
-    },
-    "VALENTINA PATIÑO": {
-        "password": "251410",
-        "id": 1002,
-        "nombre": "VALENTINA PATIÑO",
-        "is_admin": False,
-    },
-    "hereiberto.montealegre": {
-        "password": "251016",
-        "id": 1003,
-        "nombre": "HEREIBERTO MONTEALEGRE",
-        "is_admin": False,
-    },
-    "HEREIBERTO MONTEALEGRE": {
-        "password": "251016",
-        "id": 1003,
-        "nombre": "HEREIBERTO MONTEALEGRE",
-        "is_admin": False,
-    },
     "juricob": {
         "password": "emdecob2027$",
         "id": 2,
