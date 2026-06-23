@@ -19,17 +19,14 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
   uploadNamesSearch, 
-  getSearchJob, 
-  getLatestSearchJob,
   importSearchResults, 
   downloadSearchResultsExcel,
   type SearchJobResponse 
 } from "@/services/api";
+import { useSearchJob } from "@/contexts/SearchJobContext";
 
 export default function BulkSearchPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [jobId, setJobId] = useState<number | null>(null);
-  const [job, setJob] = useState<SearchJobResponse | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -37,50 +34,8 @@ export default function BulkSearchPage() {
   const [toDate, setToDate] = useState("");
   const { toast } = useToast();
   
-  const pollInterval = useRef<NodeJS.Timeout | null>(null);
-
-  // Cargar último trabajo al montar si existe y no ha sido importado
-  useEffect(() => {
-    const fetchLatest = async () => {
-      try {
-        const latestJob = await getLatestSearchJob();
-        if (latestJob && (!latestJob.is_imported || latestJob.status === 'processing' || latestJob.status === 'pending')) {
-          setJobId(latestJob.id);
-          setJob(latestJob);
-        }
-      } catch (error) {
-        console.error("Error fetching latest job:", error);
-      }
-    };
-    fetchLatest();
-
-    return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
-    };
-  }, []);
-
-  // Polling de estado del trabajo
-  useEffect(() => {
-    if (jobId && (!job || (job.status === 'pending' || job.status === 'processing'))) {
-      if (!pollInterval.current) {
-        pollInterval.current = setInterval(async () => {
-          try {
-            const data = await getSearchJob(jobId);
-            setJob(data);
-            if (data.status === 'completed' || data.status === 'failed') {
-              if (pollInterval.current) clearInterval(pollInterval.current);
-              pollInterval.current = null;
-            }
-          } catch (error) {
-            console.error("Error polling job:", error);
-          }
-        }, 10000); // Polling de 10 segundos para no saturar Cloudflare
-      }
-    } else if (pollInterval.current) {
-      clearInterval(pollInterval.current);
-      pollInterval.current = null;
-    }
-  }, [jobId, job]);
+  const { activeJob: job, startPolling, clearJob } = useSearchJob();
+  const jobId = job?.id;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -93,7 +48,7 @@ export default function BulkSearchPage() {
     setIsUploading(true);
     try {
       const { job_id } = await uploadNamesSearch(file, fromDate, toDate);
-      setJobId(job_id);
+      startPolling(job_id);
       toast({ title: "Búsqueda iniciada", description: "Estamos consultando la Rama Judicial en segundo plano" });
     } catch (error: any) {
       toast({ title: "Error al subir archivo", description: error.message, variant: "destructive" });
@@ -115,8 +70,7 @@ export default function BulkSearchPage() {
       toast({ title: "Importación exitosa", description: `Se importaron ${res.imported} radicados nuevos` });
       // Limpiar estado
       setFile(null);
-      setJobId(null);
-      setJob(null);
+      clearJob();
     } catch (error: any) {
       toast({ title: "Error al importar", description: error.message, variant: "destructive" });
     } finally {
@@ -264,7 +218,7 @@ export default function BulkSearchPage() {
                 </div>
 
                 <div className="flex items-center gap-4 w-full">
-                  <Button variant="outline" className="flex-1" onClick={() => setJobId(null)}>
+                  <Button variant="outline" className="flex-1" onClick={() => clearJob()}>
                     <Trash2 className="mr-2 h-4 w-4" /> Cancelar / Limpiar
                   </Button>
                   <Button variant="outline" className="flex-1 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExport} disabled={isExporting}>
@@ -286,7 +240,7 @@ export default function BulkSearchPage() {
                   <p className="font-semibold">Error en el proceso</p>
                   <p className="text-sm opacity-90">{job.error}</p>
                 </div>
-                <Button variant="outline" size="sm" className="ml-auto" onClick={() => setJobId(null)}>Reintentar</Button>
+                <Button variant="outline" size="sm" className="ml-auto" onClick={() => clearJob()}>Reintentar</Button>
               </div>
             )}
           </CardContent>

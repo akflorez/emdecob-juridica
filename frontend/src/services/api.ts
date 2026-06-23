@@ -936,11 +936,11 @@ export function uploadNamesSearch(file: File, fromDate?: string, toDate?: string
 }
 
 export function getSearchJob(jobId: number) {
-  return apiFetch<SearchJobResponse>(`/search/jobs/${jobId}`);
+  return apiFetch<SearchJobResponse>(`/search/jobs/${jobId}`, { cache: "no-store" });
 }
 
 export function getLatestSearchJob() {
-  return apiFetch<SearchJobResponse | null>("/search/latest");
+  return apiFetch<SearchJobResponse | null>("/search/latest", { cache: "no-store" });
 }
 
 export function importSearchResults(jobId: number, selectedIndices: number[]) {

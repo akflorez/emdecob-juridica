@@ -392,7 +392,7 @@ export default function CasoDetailPage() {
     setLoadingDocs(prev => ({ ...prev, [idReg]: true }));
 
     try {
-      const decoded = decodeURIComponent(radicado);
+      const decoded = caseData?.radicado || (radicado ? decodeURIComponent(radicado) : '');
       const result = await getDocumentosActuacion(decoded, idReg);
 
       setExpandedDocs(prev => ({

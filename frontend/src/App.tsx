@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { SearchJobProvider } from "./contexts/SearchJobContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
@@ -36,8 +37,9 @@ const App = () => (
         <Sonner />
         <Toaster />
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
+          <SearchJobProvider>
+            <BrowserRouter>
+              <Routes>
               {/* Rutas públicas */}
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage initialView="login" />} />
@@ -80,8 +82,9 @@ const App = () => (
               </Route>
               
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+              </Routes>
+            </BrowserRouter>
+          </SearchJobProvider>
         </AuthProvider>
       </ThemeProvider>
     </TooltipProvider>

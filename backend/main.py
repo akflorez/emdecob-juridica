@@ -7246,6 +7246,26 @@ async def upload_radicados_search(
 
     return {"job_id": job.id, "status": "pending"}
 
+@app.get("/search/latest")
+async def get_latest_search_job(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    job = db.query(SearchJob).filter(SearchJob.company_id == current_user.company_id).order_by(SearchJob.id.desc()).first()
+    if not job:
+        return None
+    
+    results = []
+    if job.results_json:
+        results = json.loads(job.results_json)
+
+    return {
+        "id": job.id,
+        "status": job.status,
+        "total_items": job.total_items,
+        "processed_items": job.processed_items,
+        "results": results,
+        "is_imported": job.is_imported,
+        "error": job.error_message
+    }
+
 @app.get("/search/jobs/{job_id}")
 async def get_search_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(SearchJob).filter(SearchJob.id == job_id).first()

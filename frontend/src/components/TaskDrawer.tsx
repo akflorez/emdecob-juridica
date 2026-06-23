@@ -668,6 +668,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                    <span className="text-[12px] font-black uppercase tracking-[0.4em] text-muted-foreground">Historial Judicial</span>
                 </div>
                 <div className="flex items-center gap-6 text-muted-foreground">
+                   <RefreshCw onClick={refreshTask} className={cn("h-5 w-5 hover:text-foreground cursor-pointer transition-all", isLoading && "animate-spin")} title="Sincronizar comentarios" />
                    <Settings className="h-5 w-5 hover:text-foreground cursor-pointer transition-all" />
                 </div>
              </div>

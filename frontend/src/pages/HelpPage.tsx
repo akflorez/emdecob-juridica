@@ -122,7 +122,10 @@ export default function HelpPage() {
               </h3>
               <p className="text-sm text-muted-foreground">Si tiene dudas adicionales o requiere una función personalizada, nuestro equipo está listo para ayudarle.</p>
             </div>
-            <Button className="rounded-xl bg-primary hover:bg-primary/90 px-8 font-black uppercase tracking-widest text-xs h-12 shadow-lg shadow-primary/20">
+            <Button 
+              className="rounded-xl bg-primary hover:bg-primary/90 px-8 font-black uppercase tracking-widest text-xs h-12 shadow-lg shadow-primary/20"
+              onClick={() => window.location.href = 'mailto:direccionanalitica@emdecob.com'}
+            >
               Contactar Soporte
             </Button>
           </CardContent>
