@@ -950,6 +950,12 @@ export function importSearchResults(jobId: number, selectedIndices: number[]) {
   });
 }
 
+export function cancelSearchJob(jobId: number) {
+  return apiFetch<{ ok: boolean; status: string }>(`/search/jobs/${jobId}/cancel`, {
+    method: "POST"
+  });
+}
+
 export function downloadSearchResultsExcel(jobId: number) {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
   const token = getToken();

@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   History, 
   Trash2,
-  Database
+  Database,
+  XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   uploadNamesSearch, 
   importSearchResults, 
   downloadSearchResultsExcel,
+  cancelSearchJob,
   type SearchJobResponse 
 } from "@/services/api";
 import { useSearchJob } from "@/contexts/SearchJobContext";
@@ -54,6 +56,18 @@ export default function BulkSearchPage() {
       toast({ title: "Error al subir archivo", description: error.message, variant: "destructive" });
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!jobId) return;
+    try {
+      await cancelSearchJob(jobId);
+      toast({ title: "Búsqueda cancelada", description: "La búsqueda ha sido detenida." });
+      clearJob();
+      setFile(null);
+    } catch (error: any) {
+      toast({ title: "Error al cancelar", description: error.message, variant: "destructive" });
     }
   };
 
@@ -173,6 +187,14 @@ export default function BulkSearchPage() {
               </div>
               <Progress value={progress} className="h-2" />
             </div>
+
+            {(job?.status === 'processing' || job?.status === 'pending') && (
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10" onClick={handleCancelJob}>
+                  <XCircle className="mr-2 h-4 w-4" /> Cancelar Búsqueda
+                </Button>
+              </div>
+            )}
 
             {job?.status === 'completed' && job.results && (
               <div className="space-y-4">

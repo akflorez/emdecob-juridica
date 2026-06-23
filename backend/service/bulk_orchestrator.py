@@ -163,6 +163,11 @@ async def run_name_search_job(job_id: int, file_content: bytes, db_factory, date
         log_job(f"--- INICIANDO BÚSQUEDA ({total} filas) ---")
         batch_size = 3
         for i in range(0, total, batch_size):
+            db.refresh(job)
+            if job.status == "canceled":
+                log_job(f"🛑 Trabajo {job_id} cancelado por el usuario")
+                return
+
             batch = df.iloc[i : i + batch_size]
             tasks = []
             for index, row in batch.iterrows():
@@ -280,6 +285,11 @@ async def run_radicado_search_job(job_id: int, file_content: bytes, db_factory):
         # --- PROCESAMIENTO POR LOTES ---
         batch_size = 3
         for i in range(0, total, batch_size):
+            db.refresh(job)
+            if job.status == "canceled":
+                log_job(f"🛑 Trabajo de radicado {job_id} cancelado por el usuario")
+                return
+
             batch = df.iloc[i : i + batch_size]
             tasks = []
             for index, row in batch.iterrows():

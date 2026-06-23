@@ -7208,10 +7208,11 @@ async def upload_names_search(
     from_date: str | None = None,
     to_date: str | None = None,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     # 1. Crear el Job
-    job = SearchJob(job_type="name", status="pending")
+    job = SearchJob(job_type="name", status="pending", company_id=current_user.company_id)
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -7230,10 +7231,11 @@ async def upload_names_search(
 async def upload_radicados_search(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     # 1. Crear el Job
-    job = SearchJob(job_type="radicado", status="pending")
+    job = SearchJob(job_type="radicado", status="pending", company_id=current_user.company_id)
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -7265,6 +7267,17 @@ async def get_latest_search_job(db: Session = Depends(get_db), current_user: Use
         "is_imported": job.is_imported,
         "error": job.error_message
     }
+
+@app.post("/search/jobs/{job_id}/cancel")
+async def cancel_search_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(SearchJob).filter(SearchJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    
+    if job.status in ["processing", "pending"]:
+        job.status = "canceled"
+        db.commit()
+    return {"ok": True, "status": job.status}
 
 @app.get("/search/jobs/{job_id}")
 async def get_search_job(job_id: int, db: Session = Depends(get_db)):
