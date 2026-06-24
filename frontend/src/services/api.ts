@@ -1171,14 +1171,14 @@ export function getDashboardStats() {
 export function updateCaseLawyer(caseId: number, lawyerName: string) {
   return apiFetch<any>(`/cases/${caseId}/lawyer`, {
     method: "PATCH",
-    body: JSON.stringify({ lawyer: lawyerName }),
+    body: JSON.stringify({ abogado: lawyerName }),
   });
 }
 
 export function bulkAssignLawyer(caseIds: number[], lawyerName: string) {
   return apiFetch<{ ok: boolean; message: string; updated: number }>("/cases/bulk-assign-lawyer", {
     method: "POST",
-    body: JSON.stringify({ case_ids: caseIds, lawyer: lawyerName }),
+    body: JSON.stringify({ case_ids: caseIds, abogado: lawyerName }),
   });
 }
 

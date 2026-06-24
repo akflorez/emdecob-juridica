@@ -545,7 +545,8 @@ export default function CasosPage() {
       setSelectedIds(new Set());
       fetchStats();
     } catch (err: any) {
-      toast({ title: "Error al asignar abogado", description: err?.message || "Error desconocido", variant: "destructive" });
+      const errorMsg = err.detail ? (typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)) : (err.message || err.toString());
+      toast({ title: "Error al asignar abogado", description: errorMsg, variant: "destructive" });
     } finally {
       setIsAssigningLawyer(false);
     }
@@ -1130,7 +1131,8 @@ export default function CasosPage() {
                               toast({ title: "Abogado actualizado", description: "El cambio se guardó correctamente" });
                               fetchStats();
                             } catch (err: any) {
-                              toast({ title: "Error", description: err.message, variant: "destructive" });
+                              const errorMsg = err.detail ? (typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)) : (err.message || err.toString());
+                              toast({ title: "Error", description: errorMsg, variant: "destructive" });
                               e.target.value = row.abogado || "";
                             }
                           }}
