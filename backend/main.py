@@ -8629,6 +8629,10 @@ async def get_advanced_dashboard_stats(
 class LawyerUpdate(BaseModel):
     abogado: str
 
+class LawyerBulkAssign(BaseModel):
+    case_ids: List[int]
+    abogado: str
+
 @app.patch("/cases/{case_id}/lawyer")
 async def update_case_lawyer(
     case_id: int,
@@ -8636,7 +8640,7 @@ async def update_case_lawyer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Actualizaci?n ultra-r?pida del abogado para edici?n en l?nea."""
+    """Actualización ultra-rápida del abogado para edición en línea."""
     cs = db.query(Case).filter(Case.id == case_id).first()
     if not cs:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
@@ -8645,13 +8649,41 @@ async def update_case_lawyer(
         raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
     
     cs.abogado = data.abogado
-    # Intentar buscar el usuario por nombre para sincronizar user_id autom?ticamente
+    # Intentar buscar el usuario por nombre para sincronizar user_id automáticamente
     match_user = db.query(User).filter(User.nombre.ilike(f"%{data.abogado}%")).first()
     if match_user:
         cs.user_id = match_user.id
         
     db.commit()
     return {"ok": True, "abogado": cs.abogado, "user_id": cs.user_id}
+
+@app.post("/cases/bulk-assign-lawyer")
+async def bulk_assign_lawyer(
+    data: LawyerBulkAssign,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Asigna un abogado a múltiples radicados a la vez."""
+    query = db.query(Case).filter(Case.id.in_(data.case_ids))
+    
+    if not is_global_superadmin(current_user):
+        query = query.filter(Case.company_id == current_user.company_id)
+        
+    cases = query.all()
+    if not cases:
+        raise HTTPException(status_code=404, detail="No se encontraron casos o no tienes acceso.")
+        
+    match_user = db.query(User).filter(User.nombre.ilike(f"%{data.abogado}%")).first()
+    user_id = match_user.id if match_user else None
+    
+    for cs in cases:
+        cs.abogado = data.abogado
+        if user_id:
+            cs.user_id = user_id
+            
+    db.commit()
+    return {"ok": True, "updated": len(cases), "abogado": data.abogado}
+
 
 # =========================
 # INTEGRACIONES EXTERNAS (CALLY, ETC)

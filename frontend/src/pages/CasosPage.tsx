@@ -72,6 +72,7 @@ import {
   deleteCase,
   getDashboardStats,
   updateCaseLawyer,
+  bulkAssignLawyer,
   type CaseRow,
   type CasesResponse,
   type InvalidRadicado,
@@ -145,6 +146,11 @@ export default function CasosPage() {
   const [abogadosList, setAbogadosList] = useState<string[]>([]);
   const [isSyncingPublications, setIsSyncingPublications] = useState(false);
   const [bulkSyncProgress, setBulkSyncProgress] = useState<{running: boolean; reviewed: number; total: number; percent: number} | null>(null);
+  
+  const [isMassAssignOpen, setIsMassAssignOpen] = useState(false);
+  const [massAssignLawyer, setMassAssignLawyer] = useState("");
+  const [isAssigningLawyer, setIsAssigningLawyer] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const API_BASE = (import.meta.env.VITE_API_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '');
 
@@ -518,6 +524,30 @@ export default function CasosPage() {
       toast({ title: "Error al descargar", description: error?.message || "Error desconocido", variant: "destructive" });
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleMassAssignLawyer = async () => {
+    if (selectedIds.size === 0) return;
+    const lawyerVal = massAssignLawyer.trim() || "sin_asignar";
+    setIsAssigningLawyer(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      const result = await bulkAssignLawyer(idsArray, lawyerVal);
+      
+      setRows(prev => prev.map(r => 
+        selectedIds.has(r.id) ? { ...r, abogado: lawyerVal === "sin_asignar" ? null : lawyerVal } : r
+      ));
+      
+      toast({ title: "Asignación masiva completada", description: `Se actualizaron ${result.updated} casos correctamente.` });
+      setIsMassAssignOpen(false);
+      setMassAssignLawyer("");
+      setSelectedIds(new Set());
+      fetchStats();
+    } catch (err: any) {
+      toast({ title: "Error al asignar abogado", description: err?.message || "Error desconocido", variant: "destructive" });
+    } finally {
+      setIsAssigningLawyer(false);
     }
   };
 
@@ -930,10 +960,15 @@ export default function CasosPage() {
                 </Button>
               )}
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && selectedIds.size > 0 && (
-                <Button onClick={handleDownloadSelected} disabled={isDownloading} variant="outline" size="sm">
-                  {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  Descargar {selectedIds.size}
-                </Button>
+                <>
+                  <Button onClick={() => setIsMassAssignOpen(true)} variant="outline" size="sm" className="border-primary/50 text-primary hover:bg-primary/10">
+                    Asignar Abogado
+                  </Button>
+                  <Button onClick={handleDownloadSelected} disabled={isDownloading} variant="outline" size="sm">
+                    {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                    Descargar {selectedIds.size}
+                  </Button>
+                </>
               )}
               {activeTab !== "pendientes" && total > 0 && (
                 <Button onClick={handleDownloadExcel} variant="outline" size="sm">
@@ -1080,29 +1115,29 @@ export default function CasosPage() {
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{row.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{row.demandado || "—"}</TableCell>
                       <TableCell className="max-w-[200px]">
-                        <Select
-                          defaultValue={row.abogado || "sin_asignar"}
-                          onValueChange={async (val) => {
+                        <Input 
+                          defaultValue={row.abogado || ""}
+                          placeholder="Sin asignar"
+                          list="abogados-list"
+                          className={`h-8 text-xs font-medium w-full ${getAbogadoColor(row.abogado || "")}`}
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim() || "sin_asignar";
+                            const oldVal = row.abogado || "sin_asignar";
+                            if (val.toLowerCase() === oldVal.toLowerCase()) return;
                             try {
                               await updateCaseLawyer(row.id, val);
-                              setRows(prev => prev.map(r => r.id === row.id ? { ...r, abogado: val } : r));
+                              setRows(prev => prev.map(r => r.id === row.id ? { ...r, abogado: val === "sin_asignar" ? null : val } : r));
                               toast({ title: "Abogado actualizado", description: "El cambio se guardó correctamente" });
                               fetchStats();
                             } catch (err: any) {
                               toast({ title: "Error", description: err.message, variant: "destructive" });
+                              e.target.value = row.abogado || "";
                             }
                           }}
-                        >
-                          <SelectTrigger className={`h-8 text-xs font-medium ${getAbogadoColor(row.abogado || "")}`}>
-                            <SelectValue placeholder="Asignar..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sin_asignar">Sin asignar</SelectItem>
-                            {abogadosList.map(name => (
-                              <SelectItem key={name} value={name}>{name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                          }}
+                        />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{row.cedula || "—"}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{row.juzgado || "—"}</TableCell>
@@ -1172,6 +1207,38 @@ export default function CasosPage() {
               {isDeletingCase ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Sí, eliminar
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isMassAssignOpen} onOpenChange={setIsMassAssignOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Asignar Abogado Masivamente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Asignarás el siguiente abogado a {selectedIds.size} caso(s) seleccionado(s). Puedes seleccionar uno existente o escribir uno nuevo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label htmlFor="mass-lawyer" className="mb-2 block text-sm font-medium">Nombre del Abogado</label>
+            <Input 
+              id="mass-lawyer"
+              placeholder="Escribir o seleccionar abogado..." 
+              value={massAssignLawyer} 
+              onChange={(e) => setMassAssignLawyer(e.target.value)} 
+              list="abogados-list"
+              className="w-full"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleMassAssignLawyer();
+              }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isAssigningLawyer} onClick={() => setMassAssignLawyer("")}>Cancelar</AlertDialogCancel>
+            <Button onClick={handleMassAssignLawyer} disabled={isAssigningLawyer}>
+              {isAssigningLawyer ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Confirmar Asignación
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

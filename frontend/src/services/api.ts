@@ -1175,6 +1175,13 @@ export function updateCaseLawyer(caseId: number, lawyerName: string) {
   });
 }
 
+export function bulkAssignLawyer(caseIds: number[], lawyerName: string) {
+  return apiFetch<{ ok: boolean; message: string; updated: number }>("/cases/bulk-assign-lawyer", {
+    method: "POST",
+    body: JSON.stringify({ case_ids: caseIds, lawyer: lawyerName }),
+  });
+}
+
 export function updateCaseIdProceso(caseId: number, idProceso: string) {
   return apiFetch<any>(`/cases/${caseId}/id-proceso`, {
     method: "PATCH",
