@@ -8159,16 +8159,8 @@ async def get_task_detail(
         if not task:
             return JSONResponse(status_code=404, content={"detail": "Tarea no encontrada"})
             
-        if not is_global_superadmin(current_user):
-            if task.company_id is not None:
-                if task.company_id != current_user.company_id:
-                    return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
-            elif task.case_id is not None:
-                case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-                if not case_obj or case_obj.company_id != current_user.company_id:
-                    return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
-            else:
-                return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
+        if not check_task_access(task, current_user, db):
+            return JSONResponse(status_code=403, content={"detail": "No tienes acceso a esta tarea"})
         
         # Sincronización inteligente on-demand si es tarea de ClickUp
         if task.clickup_id:
@@ -8370,16 +8362,8 @@ async def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
     
     try:
         # Eliminar subtareas primero
@@ -8418,16 +8402,8 @@ async def add_task_comment(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
 
     comment = TaskComment(
         task_id=task_id,
@@ -8454,16 +8430,8 @@ async def add_task_checklist_item(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
 
     item = TaskChecklistItem(
         task_id=task_id,
@@ -8486,16 +8454,8 @@ async def delete_task_comment(comment_id: int, db: Session = Depends(get_db), cu
     if not task:
         raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
     
     # Solo admin o el creador pueden borrar
     if not current_user.is_admin and comment.user_id != current_user.id:
@@ -8516,16 +8476,8 @@ async def update_task_comment(comment_id: int, data: dict = Body(...), db: Sessi
     if not task:
         raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este comentario.")
     
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="No tienes permiso para editar este comentario")
@@ -8544,16 +8496,8 @@ async def update_task_checklist_item(item_id: int, data: dict, db: Session = Dep
     if not task:
         raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
 
     if "content" in data: item.content = data["content"]
     if "is_completed" in data: item.is_completed = data["is_completed"]
@@ -8570,16 +8514,8 @@ async def delete_task_checklist_item(item_id: int, db: Session = Depends(get_db)
     if not task:
         raise HTTPException(status_code=404, detail="Tarea asociada no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if not case_obj or case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
-        else:
-            raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este elemento de checklist.")
 
     db.delete(item)
     db.commit()
@@ -8602,14 +8538,8 @@ async def update_task(
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
         
-    if not is_global_superadmin(current_user):
-        if task.company_id is not None:
-            if task.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
-        elif task.case_id is not None:
-            case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-            if case_obj and case_obj.company_id != current_user.company_id:
-                raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
+    if not check_task_access(task, current_user, db):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta tarea.")
     
     try:
         if t_data.title is not None: task.title = t_data.title
@@ -8798,6 +8728,53 @@ async def bulk_assign_lawyer(
 
 # =========================
 # INTEGRACIONES EXTERNAS (CALLY, ETC)
+
+def check_task_access(task, current_user, db):
+    """Determine if the current user can access a given task.
+    Allows access if:
+      * User is a global superadmin.
+      * User is the assignee of the task (or one of multiple assignees).
+      * User belongs to the same company (via task.company_id) or same case's company.
+      * User is the owner or a member of the task's Workspace.
+      * User has access to the parent task (for subtasks).
+    """
+    if is_global_superadmin(current_user):
+        return True
+    if getattr(task, "assignee_id", None) == current_user.id:
+        return True
+    if hasattr(task, "assignees") and task.assignees:
+        if current_user.id in [u.id for u in task.assignees]:
+            return True
+    if getattr(task, "company_id", None) is not None:
+        if task.company_id == current_user.company_id:
+            return True
+    if getattr(task, "case_id", None) is not None:
+        case_obj = db.query(Case).filter(Case.id == task.case_id).first()
+        if case_obj and case_obj.company_id == current_user.company_id:
+            return True
+
+    # If it's a subtask, it inherits access from the parent task
+    if getattr(task, "parent_id", None) is not None:
+        parent_task = db.query(Task).filter(Task.id == task.parent_id).first()
+        if parent_task and check_task_access(parent_task, current_user, db):
+            return True
+
+    # Check Workspace membership/ownership
+    if getattr(task, "list_id", None) is not None:
+        list_obj = db.query(ProjectList).filter(ProjectList.id == task.list_id).first()
+        if list_obj:
+            ws_id = list_obj.workspace_id
+            is_member = db.query(WorkspaceMember).filter(
+                WorkspaceMember.workspace_id == ws_id,
+                WorkspaceMember.user_id == current_user.id
+            ).count() > 0
+            if is_member:
+                return True
+            ws_obj = db.query(Workspace).filter(Workspace.id == ws_id).first()
+            if ws_obj and ws_obj.owner_id == current_user.id:
+                return True
+
+    return False
 # =========================
 
 def verify_cally_key(api_key: str):
