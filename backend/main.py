@@ -4987,21 +4987,30 @@ async def get_case_by_radicado_endpoint(
 
     # 2. Si no existe, buscar en Rama Judicial (Live)
     try:
-        # B?squeda inicial r?pida (pocos reintentos)
-        # Usamos wait_for para asegurar que no se quede pegado m?s de 25s
+        # Búsqueda inicial rápida (pocos reintentos)
+        # Usamos wait_for para asegurar que no se quede pegado más de 25s
         resp = await asyncio.wait_for(consulta_por_radicado(r), timeout=25.0)
         items = extract_items(resp)
         if not items:
-            raise HTTPException(404, f"No se encontr? el radicado {r} en la Rama Judicial")
+            raise HTTPException(404, f"No se encontró el radicado {r} en la Rama Judicial")
 
         async def fetch_process_data(p):
             id_p = p.get("idProceso")
             det = None
+            acts = []
             if id_p:
                 try:
-                    # Detalle r?pido (1 reintento para velocidad)
+                    # Detalle rápido (1 reintento para velocidad)
                     from backend.service.rama import _get
                     det = await _get(f"/Proceso/Detalle/{id_p}", retries=1)
+                except:
+                    pass
+                try:
+                    acts_resp = await actuaciones_proceso(int(id_p))
+                    if isinstance(acts_resp, dict):
+                        acts = acts_resp.get("actuaciones") or acts_resp.get("items") or []
+                    elif isinstance(acts_resp, list):
+                        acts = acts_resp
                 except:
                     pass
             
@@ -5012,17 +5021,18 @@ async def get_case_by_radicado_endpoint(
                 sujetos_raw = p.get("sujetosProcesales")
                 
             dem, ddo, abo = parse_sujetos_procesales(sujetos_raw)
-            f_rad, _ = extract_fecha_proceso(p, det)
+            f_rad, f_ult = extract_fecha_proceso(p, det)
             
             return {
-                "id": 0, # Virtual
                 "radicado": r,
                 "demandante": dem or "?",
                 "demandado": ddo or "?",
                 "juzgado": p.get("despacho") or "?",
                 "id_proceso": id_p,
                 "fecha_radicacion": f_rad,
-                "note": "Caso encontrado en tiempo real (En l?nea)."
+                "ultima_actuacion": f_ult,
+                "actuaciones": acts,
+                "note": "Caso encontrado en tiempo real (En línea)."
             }
 
         # PROCESAMIENTO PARALELO (SENIOR OPTIMIZATION)
@@ -5035,9 +5045,110 @@ async def get_case_by_radicado_endpoint(
             if not filtered_results:
                 filtered_results = results
         
-        # ORDENAMIENTO: Fecha de radicaci?n m?s reciente primero
-        # La fecha de radicaci?n es la que el usuario prefiere como criterio principal
-        sorted_results = sorted(filtered_results, key=lambda x: x.get('fecha_radicacion') or '', reverse=True)
+        # Mapeamos casos existentes y visibles por id_proceso para evitar duplicados
+        visible_existing_by_id_proceso = {}
+        for c_db in existing_items:
+            visible = False
+            if is_jurico:
+                if c_db.user_id == 2 or c_db.user_id == current_user.id: visible = True
+            else:
+                if _es_fna(c_db.demandante or "") or (c_db.user_id != 2 and c_db.user_id != 1): visible = True
+                if c_db.user_id == 1: visible = True
+            
+            if visible and c_db.id_proceso:
+                visible_existing_by_id_proceso[c_db.id_proceso] = c_db
+
+        saved_results = []
+        for r_item in filtered_results:
+            id_proceso_str = str(r_item["id_proceso"]) if r_item["id_proceso"] else None
+            
+            c = None
+            if id_proceso_str and id_proceso_str in visible_existing_by_id_proceso:
+                c = visible_existing_by_id_proceso[id_proceso_str]
+            
+            if not c and not id_proceso_str:
+                # Si no tiene id_proceso, buscar por radicado con la misma lógica de visibilidad
+                for existing_case in existing_items:
+                    visible = False
+                    if is_jurico:
+                        if existing_case.user_id == 2 or existing_case.user_id == current_user.id: visible = True
+                    else:
+                        if _es_fna(existing_case.demandante or "") or (existing_case.user_id != 2 and existing_case.user_id != 1): visible = True
+                        if existing_case.user_id == 1: visible = True
+                    if visible:
+                        c = existing_case
+                        break
+
+            if not c:
+                # Crear el caso en la base de datos
+                c = Case(
+                    radicado=r_item["radicado"],
+                    id_proceso=id_proceso_str,
+                    demandante=r_item["demandante"],
+                    demandado=r_item["demandado"],
+                    juzgado=r_item["juzgado"],
+                    fecha_radicacion=parse_fecha(r_item["fecha_radicacion"]) if isinstance(r_item["fecha_radicacion"], str) else r_item["fecha_radicacion"],
+                    ultima_actuacion=parse_fecha(r_item["ultima_actuacion"]) if isinstance(r_item["ultima_actuacion"], str) else r_item["ultima_actuacion"],
+                    company_id=current_user.company_id if current_user else None,
+                    user_id=current_user.id if current_user else None,
+                    last_check_at=now_colombia()
+                )
+                db.add(c)
+                db.flush()
+                
+                # Guardar las actuaciones iniciales
+                acts = r_item.get("actuaciones", [])
+                if acts:
+                    for a in acts:
+                        con_docs = bool(a.get("conDocumentos")) if a.get("conDocumentos") is not None else False
+                        it = {
+                            "id_reg_actuacion": a.get("idRegActuacion"),
+                            "cons_actuacion": a.get("consActuacion"),
+                            "llave_proceso": a.get("llaveProceso"),
+                            "event_date": a.get("fechaActuacion"),
+                            "title": (a.get("actuacion") or "").strip(),
+                            "detail": a.get("anotacion"),
+                            "fecha_inicio": a.get("fechaInicial"),
+                            "fecha_fin": a.get("fechaFinal"),
+                            "fecha_registro": a.get("fechaRegistro"),
+                            "con_documentos": con_docs,
+                            "cant": a.get("cant"),
+                        }
+                        event_hash = sha256_obj(it)
+                        db.add(CaseEvent(
+                            case_id=c.id,
+                            event_date=it.get("event_date"),
+                            title=it.get("title"),
+                            detail=it.get("detail"),
+                            event_hash=event_hash,
+                            con_documentos=con_docs,
+                        ))
+                        if con_docs:
+                            c.has_documents = True
+                    db.flush()
+            else:
+                # Asegurar que el caso existente tenga el company_id y user_id adecuados
+                if current_user and current_user.company_id and not c.company_id:
+                    c.company_id = current_user.company_id
+                if current_user and not c.user_id:
+                    c.user_id = current_user.id
+                db.flush()
+
+            saved_results.append({
+                "id": c.id,
+                "radicado": c.radicado,
+                "demandante": c.demandante or "?",
+                "demandado": c.demandado or "?",
+                "juzgado": c.juzgado or "?",
+                "fecha_radicacion": c.fecha_radicacion.isoformat() if c.fecha_radicacion else None,
+                "note": "Caso encontrado en tiempo real y registrado en el sistema."
+            })
+        
+        db.commit()
+
+        # ORDENAMIENTO: Fecha de radicación más reciente primero
+        # La fecha de radicación es la que el usuario prefiere como criterio principal
+        sorted_results = sorted(saved_results, key=lambda x: x.get('fecha_radicacion') or '', reverse=True)
         
         return sorted_results
 
