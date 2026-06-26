@@ -231,3 +231,195 @@
     }
   }
 }
+
+/* ==========================================
+   React Big Calendar Premium Overrides
+   ========================================== */
+.rbc-calendar {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+  border: 1px solid hsl(var(--border) / 0.7) !important;
+  border-radius: 12px !important;
+  background-color: hsl(var(--card)) !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.rbc-header {
+  padding: 14px 6px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.08em !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border-bottom: 1.5px solid hsl(var(--border) / 0.8) !important;
+  background-color: hsl(var(--muted) / 0.2) !important;
+}
+
+.rbc-header + .rbc-header {
+  border-left: 1px solid hsl(var(--border) / 0.5) !important;
+}
+
+.rbc-day-bg {
+  border-left: 1px solid hsl(var(--border) / 0.5) !important;
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.rbc-day-bg:hover {
+  background-color: hsl(var(--primary) / 0.03) !important;
+  cursor: pointer;
+}
+
+.rbc-month-row {
+  border-top: 1px solid hsl(var(--border) / 0.5) !important;
+}
+
+.rbc-off-range-bg {
+  background-color: hsl(var(--muted) / 0.1) !important;
+  opacity: 0.5 !important;
+}
+
+.rbc-today {
+  background-color: hsl(var(--primary) / 0.04) !important;
+}
+
+.rbc-today .rbc-date-cell {
+  color: hsl(var(--primary)) !important;
+  font-weight: 700 !important;
+}
+
+.rbc-date-cell {
+  padding: 10px 14px !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  color: hsl(var(--foreground) / 0.8) !important;
+}
+
+.rbc-event {
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease !important;
+  border: none !important;
+}
+
+.rbc-event:hover {
+  transform: scale(1.02) translateY(-1px) !important;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Toolbar styling */
+.rbc-toolbar {
+  margin-bottom: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+}
+
+.rbc-toolbar-label {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  color: hsl(var(--foreground)) !important;
+  text-transform: capitalize !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+.rbc-btn-group {
+  background-color: hsl(var(--muted) / 0.5) !important;
+  padding: 4px !important;
+  border-radius: 8px !important;
+  border: 1px solid hsl(var(--border) / 0.8) !important;
+  display: inline-flex !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+.rbc-btn-group button {
+  color: hsl(var(--muted-foreground)) !important;
+  background-color: transparent !important;
+  border: none !important;
+  padding: 6px 14px !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-radius: 6px !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  outline: none !important;
+  cursor: pointer !important;
+}
+
+.rbc-btn-group button:hover {
+  color: hsl(var(--foreground)) !important;
+  background-color: hsl(var(--background) / 0.8) !important;
+}
+
+.rbc-btn-group button.rbc-active {
+  color: hsl(var(--primary-foreground)) !important;
+  background-color: hsl(var(--primary)) !important;
+  box-shadow: 0 2px 8px -2px hsl(var(--primary) / 0.3) !important;
+}
+
+/* Time views overrides */
+.rbc-time-header {
+  border-bottom: 1px solid hsl(var(--border) / 0.7) !important;
+}
+
+.rbc-time-header-content {
+  border-left: 1px solid hsl(var(--border) / 0.5) !important;
+}
+
+.rbc-time-content {
+  border-top: 1px solid hsl(var(--border) / 0.7) !important;
+}
+
+.rbc-time-gutter {
+  background-color: hsl(var(--card)) !important;
+  border-right: 1px solid hsl(var(--border) / 0.5) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-weight: 500 !important;
+}
+
+.rbc-timeslot-group {
+  border-bottom: 1px solid hsl(var(--border) / 0.5) !important;
+}
+
+.rbc-time-slot {
+  border-top: 1px solid hsl(var(--border) / 0.3) !important;
+}
+
+.rbc-time-view .rbc-allday-cell {
+  border-bottom: 1px solid hsl(var(--border) / 0.7) !important;
+}
+
+/* Agenda view overrides */
+.rbc-agenda-view table.rbc-agenda-table {
+  border: none !important;
+  border-collapse: collapse !important;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  padding: 14px 18px !important;
+  border-bottom: 1px solid hsl(var(--border) / 0.5) !important;
+  font-size: 0.85rem !important;
+  color: hsl(var(--foreground) / 0.9) !important;
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  padding: 14px 18px !important;
+  background-color: hsl(var(--muted) / 0.3) !important;
+  border-bottom: 2px solid hsl(var(--border) / 0.8) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.05em !important;
+  text-align: left !important;
+}
