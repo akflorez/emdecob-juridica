@@ -8079,7 +8079,7 @@ async def get_tasks(
             )
         ).scalar_subquery()
         
-        # Filtro SaaS: Ve tareas asociadas a casos de su empresa, O en sus workspaces, O asignadas a él
+        # Filtro SaaS: Ve tareas asociadas a casos de su empresa, O en sus workspaces, O asignadas a él, O creadas por él
         query = query.filter(
             or_(
                 # Caso propio de su empresa
@@ -8087,7 +8087,9 @@ async def get_tasks(
                 # Tarea sin caso pero en un workspace al que pertenece
                 and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
                 # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
-                Task.assignee_id == current_user.id
+                Task.assignee_id == current_user.id,
+                # O creadas por el usuario
+                Task.creator_id == current_user.id
             )
         )
         
@@ -8256,12 +8258,13 @@ async def get_case_tasks_endpoint(
     """Retorna las tareas vinculadas a un radicado espec?fico."""
     q = db.query(Task).filter(Task.case_id == case_id)
     
-    # Seguridad: Si no es admin, verificar que el caso le pertenezca o esté asignado
+    # Seguridad: Si no es admin, verificar que el caso le pertenezca, esté asignado, o sea el creador de la tarea
     if not current_user.is_admin:
         q = q.join(Case, Task.case_id == Case.id)
         q = q.filter(or_(
             Case.user_id == current_user.id,
-            Task.assignee_id == current_user.id
+            Task.assignee_id == current_user.id,
+            Task.creator_id == current_user.id
         ))
 
     return q.order_by(desc(Task.created_at)).all()
@@ -8741,6 +8744,8 @@ def check_task_access(task, current_user, db):
     if is_global_superadmin(current_user):
         return True
     if getattr(task, "assignee_id", None) == current_user.id:
+        return True
+    if getattr(task, "creator_id", None) == current_user.id:
         return True
     if hasattr(task, "assignees") and task.assignees:
         if current_user.id in [u.id for u in task.assignees]:
