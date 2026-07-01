@@ -69,9 +69,14 @@ export function MyTasksView() {
 
   const getFilteredTasks = (mode: string) => {
     let filtered = tasks;
-    if (mode === "today") {
+    if (mode === "assigned") {
+      filtered = filtered.filter(t => t.assignee_id === user?.id);
+    } else if (mode === "created") {
+      filtered = filtered.filter(t => t.creator_id === user?.id);
+    } else if (mode === "today") {
       const today = startOfToday();
       filtered = filtered.filter(t => {
+        if (t.assignee_id !== user?.id) return false;
         if (!t.due_date) return false;
         const d = parseISO(t.due_date.toString());
         return isToday(d) || isBefore(d, today);
@@ -86,11 +91,12 @@ export function MyTasksView() {
   const overdueCount = useMemo(() => {
     const today = startOfToday();
     return tasks.filter(t => {
+      if (t.assignee_id !== user?.id) return false;
       if (!t.due_date) return false;
       const d = parseISO(t.due_date.toString());
       return isToday(d) || isBefore(d, today);
     }).length;
-  }, [tasks]);
+  }, [tasks, user?.id]);
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
@@ -125,6 +131,9 @@ export function MyTasksView() {
                    <TabsTrigger value="assigned" className="bg-transparent border-none text-muted-foreground data-[state=active]:text-primary data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-primary transition-all text-[14px] font-black uppercase tracking-widest shadow-none hover:text-foreground">
                       Asignadas a mí
                    </TabsTrigger>
+                   <TabsTrigger value="created" className="bg-transparent border-none text-muted-foreground data-[state=active]:text-primary data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-primary transition-all text-[14px] font-black uppercase tracking-widest shadow-none hover:text-foreground">
+                      Asignadas por mí
+                   </TabsTrigger>
                    <TabsTrigger value="today" className="bg-transparent border-none text-muted-foreground data-[state=active]:text-red-500 data-[state=active]:shadow-none p-0 pb-4 rounded-none border-b-2 border-transparent data-[state=active]:border-red-500 transition-all text-[14px] font-black uppercase tracking-widest flex items-center gap-3 shadow-none hover:text-foreground">
                       Hoy y vencido
                       {overdueCount > 0 && <Badge className="bg-red-500/10 text-red-500 border-none text-[10px] h-5 px-2">{overdueCount}</Badge>}
@@ -150,6 +159,9 @@ export function MyTasksView() {
              <div className="mt-8">
                 <TabsContent value="assigned" className="m-0 focus-visible:outline-none outline-none">
                    <TaskList tasks={getFilteredTasks("assigned")} isLoading={isLoading} onTaskClick={handleTaskClick} />
+                </TabsContent>
+                <TabsContent value="created" className="m-0 focus-visible:outline-none outline-none">
+                   <TaskList tasks={getFilteredTasks("created")} isLoading={isLoading} onTaskClick={handleTaskClick} />
                 </TabsContent>
                 <TabsContent value="today" className="m-0 focus-visible:outline-none outline-none">
                    <TaskList tasks={getFilteredTasks("today")} isLoading={isLoading} onTaskClick={handleTaskClick} isUrgent />
