@@ -20,7 +20,10 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
     const fetchLatest = async () => {
       try {
         const latestJob = await getLatestSearchJob();
-        if (latestJob && (!latestJob.is_imported || latestJob.status === 'processing' || latestJob.status === 'pending')) {
+        if (latestJob && (
+          (latestJob.status === 'processing' || latestJob.status === 'pending') ||
+          (latestJob.status === 'completed' && !latestJob.is_imported)
+        )) {
           setActiveJob(latestJob);
           if (latestJob.status === 'processing' || latestJob.status === 'pending') {
             startPolling(latestJob.id);
@@ -49,7 +52,7 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
     try {
       const data = await getSearchJob(jobId);
       setActiveJob(data);
-      if (data.status === 'completed' || data.status === 'failed') {
+      if (data.status === 'completed' || data.status === 'failed' || data.status === 'canceled') {
          // Si por alguna razón ya terminó, manejamos el toast aquí también y no iniciamos polling
          if (data.status === 'completed') {
            toast({ 
@@ -63,6 +66,11 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
              description: data.error || "La búsqueda masiva falló.",
              variant: "destructive"
            });
+         } else if (data.status === 'canceled') {
+           toast({
+             title: "Búsqueda Cancelada",
+             description: "La búsqueda masiva fue cancelada."
+           });
          }
          return;
       }
@@ -75,7 +83,7 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
         const data = await getSearchJob(jobId);
         setActiveJob(data);
         
-        if (data.status === 'completed' || data.status === 'failed') {
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'canceled') {
           stopPolling();
           
           if (data.status === 'completed') {
@@ -90,6 +98,11 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
               description: data.error || "La búsqueda masiva falló.",
               variant: "destructive"
             });
+          } else if (data.status === 'canceled') {
+            toast({
+              title: "Búsqueda Cancelada",
+              description: "La búsqueda masiva fue cancelada."
+            });
           }
         }
       } catch (error) {
@@ -102,7 +115,6 @@ export function SearchJobProvider({ children }: { children: ReactNode }) {
     stopPolling();
     setActiveJob(null);
   };
-
   return (
     <SearchJobContext.Provider value={{ activeJob, startPolling, clearJob }}>
       {children}

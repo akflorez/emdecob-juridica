@@ -167,14 +167,22 @@ export default function BulkSearchPage() {
             <div className="flex justify-between items-start">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Loader2 className={`h-5 w-5 ${job?.status === 'processing' ? 'animate-spin text-primary' : ''}`} />
-                  {job?.status === 'completed' ? "Búsqueda Finalizada" : "Buscando en Rama Judicial..."}
+                  {(job?.status === 'processing' || job?.status === 'pending') && (
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  )}
+                  {job?.status === 'completed' 
+                    ? "Búsqueda Finalizada" 
+                    : job?.status === 'canceled' 
+                    ? "Búsqueda Cancelada" 
+                    : job?.status === 'failed' 
+                    ? "Búsqueda Fallida" 
+                    : "Buscando en Rama Judicial..."}
                 </CardTitle>
                 <CardDescription>
                   Procesando {job?.processed_items} de {job?.total_items} nombres
                 </CardDescription>
               </div>
-              <Badge variant={job?.status === 'completed' ? 'secondary' : 'outline'}>
+              <Badge variant={job?.status === 'completed' ? 'secondary' : job?.status === 'canceled' ? 'destructive' : 'outline'}>
                 {job?.status?.toUpperCase()}
               </Badge>
             </div>
@@ -255,14 +263,27 @@ export default function BulkSearchPage() {
               </div>
             )}
             
+            {job?.status === 'canceled' && (
+              <div className="p-4 bg-muted border border-muted-foreground/20 rounded-lg flex items-center gap-3 text-muted-foreground">
+                <AlertCircle className="h-6 w-6" />
+                <div className="flex-1">
+                  <p className="font-semibold text-foreground">Búsqueda Cancelada</p>
+                  <p className="text-sm">El proceso fue cancelado por el usuario y se ha detenido.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => { clearJob(); setFile(null); }}>
+                  Iniciar Nueva Búsqueda
+                </Button>
+              </div>
+            )}
+            
             {job?.status === 'failed' && (
               <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3 text-destructive">
                 <AlertCircle className="h-6 w-6" />
-                <div>
+                <div className="flex-1">
                   <p className="font-semibold">Error en el proceso</p>
                   <p className="text-sm opacity-90">{job.error}</p>
                 </div>
-                <Button variant="outline" size="sm" className="ml-auto" onClick={() => clearJob()}>Reintentar</Button>
+                <Button variant="outline" size="sm" className="ml-auto" onClick={() => { clearJob(); setFile(null); }}>Reintentar</Button>
               </div>
             )}
           </CardContent>
