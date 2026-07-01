@@ -8044,7 +8044,8 @@ async def get_tasks(
     query = db.query(Task).options(
         selectinload(Task.subtasks),
         selectinload(Task.tags),
-        selectinload(Task.attachments)
+        selectinload(Task.attachments),
+        joinedload(Task.case)
     )
     
     # Aplicar filtros adicionales
@@ -8057,7 +8058,7 @@ async def get_tasks(
         case_subquery = db.query(Case.id).filter(Case.radicado.like(f"%{radicado}%")).scalar_subquery()
         query = query.filter(Task.case_id == case_subquery)
     if assignee_id:
-        query = query.filter(Task.assignee_id == assignee_id)
+        query = query.filter(or_(Task.assignee_id == assignee_id, Task.creator_id == assignee_id))
     if status:
         query = query.filter(Task.status.ilike(f"%{status}%"))
         
@@ -8093,7 +8094,34 @@ async def get_tasks(
             )
         )
         
-    return query.order_by(desc(Task.created_at)).all()
+    tasks = query.order_by(desc(Task.created_at)).all()
+    
+    res_list = []
+    for t in tasks:
+        res_list.append({
+            "id": t.id,
+            "title": t.title,
+            "description": t.description,
+            "status": t.status,
+            "priority": t.priority,
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+            "list_id": t.list_id,
+            "assignee_id": t.assignee_id,
+            "assignee_name": t.assignee_name,
+            "creator_id": t.creator_id,
+            "case_id": t.case_id,
+            "parent_id": t.parent_id,
+            "clickup_id": t.clickup_id,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+            "tags": [{"id": tg.id, "name": tg.name, "color": tg.color} for tg in t.tags],
+            "assignees": [{"id": u.id, "username": u.username, "nombre": u.nombre} for u in t.assignees],
+            # Case fields for grouping in frontend
+            "case_radicado": t.case.radicado if t.case else None,
+            "case_demandante": t.case.demandante if t.case else None,
+            "case_demandado": t.case.demandado if t.case else None,
+        })
+    return res_list
 
 # Control de concurrencia y prevención de bucles
 clickup_sync_semaphore = None

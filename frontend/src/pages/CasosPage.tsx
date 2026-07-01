@@ -79,6 +79,7 @@ import {
   type StatsResponse,
   type DashboardStats,
 } from "@/services/api";
+import { LawyerCombobox } from "@/components/LawyerCombobox";
 
 type FilterTab = "todos" | "pendientes" | "no_leidos" | "hoy" | "no_encontrados";
 
@@ -668,6 +669,12 @@ export default function CasosPage() {
   const showingFrom = currentTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = Math.min(page * pageSize, currentTotal);
 
+  const lawyerOptions = Array.from(new Set([
+    ...(dashboardStats?.lawyer_stats?.map(s => s.name) || []),
+    ...rows.map(r => r.abogado).filter(Boolean),
+    ...abogadosList
+  ])).filter(name => name !== "sin_asignar") as string[];
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -1116,29 +1123,24 @@ export default function CasosPage() {
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{row.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{row.demandado || "—"}</TableCell>
                       <TableCell className="max-w-[200px]">
-                        <Input 
-                          defaultValue={row.abogado || ""}
-                          placeholder="Sin asignar"
-                          list="abogados-list"
-                          className={`h-8 text-xs font-medium w-full ${getAbogadoColor(row.abogado || "")}`}
-                          onBlur={async (e) => {
-                            const val = e.target.value.trim() || "sin_asignar";
+                        <LawyerCombobox
+                          options={lawyerOptions}
+                          value={row.abogado || ""}
+                          onChange={async (val) => {
+                            const newVal = val.trim() || "sin_asignar";
                             const oldVal = row.abogado || "sin_asignar";
-                            if (val.toLowerCase() === oldVal.toLowerCase()) return;
+                            if (newVal.toLowerCase() === oldVal.toLowerCase()) return;
                             try {
-                              await updateCaseLawyer(row.id, val);
-                              setRows(prev => prev.map(r => r.id === row.id ? { ...r, abogado: val === "sin_asignar" ? null : val } : r));
+                              await updateCaseLawyer(row.id, newVal);
+                              setRows(prev => prev.map(r => r.id === row.id ? { ...r, abogado: newVal === "sin_asignar" ? null : newVal } : r));
                               toast({ title: "Abogado actualizado", description: "El cambio se guardó correctamente" });
                               fetchStats();
                             } catch (err: any) {
                               const errorMsg = err.detail ? (typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)) : (err.message || err.toString());
                               toast({ title: "Error", description: errorMsg, variant: "destructive" });
-                              e.target.value = row.abogado || "";
                             }
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') e.currentTarget.blur();
-                          }}
+                          className={`h-8 text-xs font-medium w-full ${getAbogadoColor(row.abogado || "")}`}
                         />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{row.cedula || "—"}</TableCell>
@@ -1223,16 +1225,11 @@ export default function CasosPage() {
           </AlertDialogHeader>
           <div className="py-4">
             <label htmlFor="mass-lawyer" className="mb-2 block text-sm font-medium">Nombre del Abogado</label>
-            <Input 
-              id="mass-lawyer"
-              placeholder="Escribir o seleccionar abogado..." 
-              value={massAssignLawyer} 
-              onChange={(e) => setMassAssignLawyer(e.target.value)} 
-              list="abogados-list"
+            <LawyerCombobox
+              options={lawyerOptions}
+              value={massAssignLawyer}
+              onChange={(val) => setMassAssignLawyer(val)}
               className="w-full"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleMassAssignLawyer();
-              }}
             />
           </div>
           <AlertDialogFooter>

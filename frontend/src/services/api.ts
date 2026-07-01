@@ -1045,6 +1045,9 @@ export type Task = {
   attachments?: Attachment[];
   custom_fields?: string; // JSON string
   assignees?: User[];
+  case_radicado?: string;
+  case_demandante?: string;
+  case_demandado?: string;
 };
 
 export function getWorkspaces() {
