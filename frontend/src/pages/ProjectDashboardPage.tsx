@@ -259,7 +259,30 @@ export default function ProjectDashboardPage() {
     });
   }, [tasks]);
 
-  const parentTasks = filteredTasks.filter(t => !t.parent_id);
+  const parentTasks = useMemo(() => {
+    return filteredTasks.filter(t => !t.parent_id);
+  }, [filteredTasks]);
+
+  const tasksByColumn = useMemo(() => {
+    const grouped: Record<string, { parentTasks: TaskType[], count: number }> = {};
+    
+    dynamicBoardColumns.forEach(col => {
+      grouped[col.id] = { parentTasks: [], count: 0 };
+    });
+    
+    (filteredTasks || []).forEach(t => {
+      const status = (t.status || 'ABIERTO').toUpperCase();
+      if (!grouped[status]) {
+        grouped[status] = { parentTasks: [], count: 0 };
+      }
+      grouped[status].count++;
+      if (!t.parent_id) {
+        grouped[status].parentTasks.push(t);
+      }
+    });
+    
+    return grouped;
+  }, [filteredTasks, dynamicBoardColumns]);
 
   const statsByAssignee = useMemo(() => {
     const map: Record<string, number> = {};
@@ -280,10 +303,10 @@ export default function ProjectDashboardPage() {
   const statsByStatus = useMemo(() => {
     return dynamicBoardColumns.map(col => ({
       name: col.label,
-      value: filteredTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).length,
+      value: tasksByColumn[col.id]?.count || 0,
       color: col.dot
     }));
-  }, [filteredTasks, dynamicBoardColumns]);
+  }, [tasksByColumn, dynamicBoardColumns]);
 
   const calendarEvents = useMemo(() => {
     return baseFilteredTasks
@@ -719,10 +742,10 @@ export default function ProjectDashboardPage() {
                                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.dot }} />
                                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">{col.label}</h3>
                                 </div>
-                                <Badge variant="outline" className="text-[10px]">{filteredTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).length}</Badge>
+                                <Badge variant="outline" className="text-[10px]">{tasksByColumn[col.id]?.count || 0}</Badge>
                              </div>
                              <div className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar">
-                                {parentTasks.filter(t => (t.status || 'ABIERTO').toUpperCase() === col.id).map(task => (
+                                {(tasksByColumn[col.id]?.parentTasks || []).map(task => (
                                   <Card key={task.id} className="bg-card/80 border-border/40 hover:border-primary/40 transition-all cursor-pointer shadow-lg overflow-hidden" onClick={() => setSelectedTask(task)}>
                                     <div className="p-4">
                                        <div className="flex justify-between items-start mb-3">
