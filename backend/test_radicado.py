@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.service.rama import consulta_por_radicado
 from backend.main import extract_items
 
-async def test():
+async def run_test():
     radicado = "68547400300520250083300"
     print(f"🔍 Probando radicado: {radicado}")
     r = await consulta_por_radicado(radicado)
@@ -26,4 +26,4 @@ async def test():
     print(f"   - despacho: {p.get('despacho')}")
 
 if __name__ == "__main__":
-    asyncio.run(test())
+    asyncio.run(run_test())

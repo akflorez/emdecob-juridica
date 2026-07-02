@@ -1087,6 +1087,18 @@ export function createList(data: { name: string; folder_id?: number; workspace_i
   return apiFetch<WorkspaceList>("/projects/lists", { method: "POST", body: JSON.stringify(data) });
 }
 
+export function deleteWorkspace(workspaceId: number) {
+  return apiFetch<{ ok: boolean; message: string }>(`/projects/workspaces/${workspaceId}`, { method: "DELETE" });
+}
+
+export function deleteFolder(folderId: number) {
+  return apiFetch<{ ok: boolean; message: string }>(`/projects/folders/${folderId}`, { method: "DELETE" });
+}
+
+export function deleteList(listId: number) {
+  return apiFetch<{ ok: boolean; message: string }>(`/projects/lists/${listId}`, { method: "DELETE" });
+}
+
 export function createTask(data: Partial<Task>) {
   return apiFetch<Task>("/projects/tasks", {
     method: "POST",

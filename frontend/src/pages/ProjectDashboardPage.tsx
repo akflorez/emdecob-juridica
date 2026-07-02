@@ -8,7 +8,7 @@ import {
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
   TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database,
   PanelLeftClose, PanelLeftOpen, AlertTriangle, CalendarRange, ArrowLeft,
-  ChevronLeft
+  ChevronLeft, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,9 +50,11 @@ import { toast } from "sonner";
 import { 
   getWorkspaces, getTasks, importClickUp, updateTask, getUsers,
   createWorkspace, createFolder, createList, addWorkspaceMember, createTask,
+  deleteWorkspace, deleteFolder, deleteList,
   getNotificationConfig, updateNotificationConfig,
   type Workspace, type Task as TaskType, type User, type NotificationConfigResponse
 } from "@/services/api";
+
 import { TaskDrawer } from "@/components/TaskDrawer";
 import { Calendar as BigCalendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
@@ -89,6 +91,7 @@ export default function ProjectDashboardPage() {
   const [newItemName, setNewItemName] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [configData, setConfigData] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Calendario state
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -316,7 +319,8 @@ export default function ProjectDashboardPage() {
   };
 
   const handleCreateConfirm = async () => {
-    if (!newItemName.trim()) return;
+    if (!newItemName.trim() || isSubmitting) return;
+    setIsSubmitting(true);
     try {
       if (creationModal.mode === 'espacio') {
         await createWorkspace({ name: newItemName });
@@ -341,11 +345,14 @@ export default function ProjectDashboardPage() {
       setCreationModal({ open: false, mode: '', title: '' });
       setNewItemName('');
       setNewDueDate('');
-      fetchInitialData();
+      await fetchInitialData();
     } catch (error: any) {
       toast.error("Error al crear el elemento", { description: error.message });
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden relative font-sans transition-colors duration-500">
@@ -365,8 +372,8 @@ export default function ProjectDashboardPage() {
             <LayoutDashboard className="h-5 w-5 text-white" />
           </div>
           <div onClick={() => { setSelectedWorkspaceId(null); setSelectedFolderId(null); setSelectedListId(null); setDetailView(null); }} className="cursor-pointer hidden sm:block">
-            <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
-              EMDECOB JURÍDICO <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">EXPERT</Badge>
+            <h1 className="text-xl font-black tracking-tight flex items-center gap-2 uppercase">
+              {user?.company_name || "EMDECOB JURÍDICO"} <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px]">EXPERT</Badge>
             </h1>
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Master Workflow Engine</p>
           </div>
@@ -427,7 +434,7 @@ export default function ProjectDashboardPage() {
                <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
                   {workspaces.map(ws => (
                     <div key={ws.id}>
-                       <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedWorkspaceId === ws.id && !selectedFolderId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
+                       <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all group ${selectedWorkspaceId === ws.id && !selectedFolderId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
                          const n = new Set(expandedWorkspaces);
                          if (n.has(ws.id)) n.delete(ws.id); else n.add(ws.id);
                          setExpandedWorkspaces(n);
@@ -439,7 +446,31 @@ export default function ProjectDashboardPage() {
                          <motion.div animate={{ rotate: expandedWorkspaces.has(ws.id) ? 0 : -90 }}>
                             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                          </motion.div>
-                         <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">{ws.name}</span>
+                         <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex-1 truncate">{ws.name}</span>
+                         {!user?.sync_with_clickup && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`¿Estás seguro de que deseas eliminar el espacio "${ws.name}"? Se eliminarán todas sus carpetas, listas y tareas de forma permanente.`)) {
+                                  try {
+                                    await deleteWorkspace(ws.id);
+                                    toast.success(`Espacio "${ws.name}" eliminado con éxito`);
+                                    if (selectedWorkspaceId === ws.id) {
+                                      setSelectedWorkspaceId(null);
+                                      setSelectedFolderId(null);
+                                      setSelectedListId(null);
+                                    }
+                                    fetchInitialData();
+                                  } catch (err: any) {
+                                    toast.error("Error al eliminar espacio", { description: err.message });
+                                  }
+                                }
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 text-muted-foreground hover:text-destructive rounded transition-all duration-200"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                        </div>
                        
                        <AnimatePresence>
@@ -452,7 +483,7 @@ export default function ProjectDashboardPage() {
                            >
                              {ws.folders.map(f => (
                                <div key={f.id} className="ml-3">
-                                  <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
+                                  <div className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all group ${selectedFolderId === f.id && !selectedListId ? "bg-primary/10 text-primary" : "hover:bg-accent/50"}`} onClick={() => {
                                     const n = new Set(expandedFolders);
                                     if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
                                     setExpandedFolders(n);
@@ -463,7 +494,30 @@ export default function ProjectDashboardPage() {
                                     <motion.div animate={{ rotate: expandedFolders.has(f.id) ? 0 : -90 }}>
                                       <ChevronDown className="h-3 w-3 text-muted-foreground" />
                                     </motion.div>
-                                    <span className="text-[11px] font-bold text-foreground/70">{f.name}</span>
+                                    <span className="text-[11px] font-bold text-foreground/70 flex-1 truncate">{f.name}</span>
+                                    {!user?.sync_with_clickup && (
+                                       <button
+                                         onClick={async (e) => {
+                                           e.stopPropagation();
+                                           if (window.confirm(`¿Estás seguro de que deseas eliminar la carpeta "${f.name}"? Se eliminarán todas sus listas y tareas de forma permanente.`)) {
+                                             try {
+                                               await deleteFolder(f.id);
+                                               toast.success(`Carpeta "${f.name}" eliminada con éxito`);
+                                               if (selectedFolderId === f.id) {
+                                                 setSelectedFolderId(null);
+                                                 setSelectedListId(null);
+                                               }
+                                               fetchInitialData();
+                                             } catch (err: any) {
+                                               toast.error("Error al eliminar carpeta", { description: err.message });
+                                             }
+                                           }
+                                         }}
+                                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 text-muted-foreground hover:text-destructive rounded transition-all duration-200"
+                                       >
+                                         <Trash2 className="h-3.5 w-3.5" />
+                                       </button>
+                                     )}
                                   </div>
                                   <AnimatePresence>
                                     {expandedFolders.has(f.id) && (
@@ -480,8 +534,32 @@ export default function ProjectDashboardPage() {
                                             onClick={(e) => { e.stopPropagation(); setSelectedListId(list.id); setDetailView(null); }}
                                             className={`ml-5 p-2 rounded-lg cursor-pointer text-[11px] transition-all flex items-center justify-between group ${selectedListId === list.id ? "bg-primary text-primary-foreground font-bold" : "text-muted-foreground hover:text-foreground"}`}
                                           >
-                                             {list.name}
-                                             {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse" />}
+                                             <span className="flex-1 truncate">{list.name}</span>
+                                             <div className="flex items-center gap-1">
+                                                {selectedListId === list.id && <Zap className="h-3 w-3 animate-pulse group-hover:hidden" />}
+                                                {!user?.sync_with_clickup && (
+                                                  <button
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation();
+                                                      if (window.confirm(`¿Estás seguro de que deseas eliminar la lista "${list.name}"? Se eliminarán todas sus tareas de forma permanente.`)) {
+                                                        try {
+                                                          await deleteList(list.id);
+                                                          toast.success(`Lista "${list.name}" eliminada con éxito`);
+                                                          if (selectedListId === list.id) {
+                                                            setSelectedListId(null);
+                                                          }
+                                                          fetchInitialData();
+                                                        } catch (err: any) {
+                                                          toast.error("Error al eliminar lista", { description: err.message });
+                                                        }
+                                                      }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 text-muted-foreground group-hover:text-destructive rounded transition-all duration-200"
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </button>
+                                                )}
+                                              </div>
                                           </motion.div>
                                         ))}
                                       </motion.div>
@@ -830,7 +908,9 @@ export default function ProjectDashboardPage() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreationModal({ ...creationModal, open: false })} className="rounded-xl font-bold">Cancelar</Button>
-            <Button onClick={handleCreateConfirm} disabled={!newItemName} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase tracking-widest px-8">Crear Ahora</Button>
+            <Button onClick={handleCreateConfirm} disabled={!newItemName || isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase tracking-widest px-8">
+              {isSubmitting ? "Creando..." : "Crear Ahora"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

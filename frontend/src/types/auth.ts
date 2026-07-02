@@ -9,6 +9,7 @@ export interface User {
   is_superadmin?: boolean;  // Alias para is_admin en contexto global
   is_active: boolean;
   company_id?: number | null;
+  company_name?: string | null;
   roles?: string[];
   permissions?: string[];
   sync_with_clickup?: boolean;

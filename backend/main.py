@@ -3113,6 +3113,7 @@ def login(data: LoginRequest):
                     "is_admin": user_db.is_admin,
                     "is_superadmin": is_global_superadmin(user_db),
                     "company_id": user_db.company_id,
+                    "company_name": user_db.company.nombre if user_db.company else None,
                     "email": getattr(user_db, 'email', None),
                     "sync_with_clickup": getattr(user_db, 'sync_with_clickup', True),
                     "clickup_api_token": getattr(user_db, 'clickup_api_token', None),
@@ -3487,6 +3488,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "nombre": current_user.nombre,
         "email": getattr(current_user, 'email', None),
         "company_id": current_user.company_id,
+        "company_name": current_user.company.nombre if current_user.company else None,
         "is_admin": current_user.is_admin,
         "is_superadmin": is_sa,
         "role": role_str,
@@ -7970,6 +7972,78 @@ async def create_list(
         db.rollback()
         print(f"[PROJECTS] Error creating list: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error al crear lista: {str(e)}")
+
+@app.delete("/api/projects/workspaces/{workspace_id}")
+@app.delete("/projects/workspaces/{workspace_id}")
+async def delete_workspace(
+    workspace_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Espacio no encontrado")
+    
+    if ws.owner_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No tienes permiso para eliminar este espacio")
+        
+    try:
+        db.delete(ws)
+        db.commit()
+        return {"ok": True, "message": "Espacio eliminado exitosamente"}
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error deleting workspace: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al eliminar espacio: {str(e)}")
+
+@app.delete("/api/projects/folders/{folder_id}")
+@app.delete("/projects/folders/{folder_id}")
+async def delete_folder(
+    folder_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    f = db.query(Folder).filter(Folder.id == folder_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Carpeta no encontrada")
+    
+    ws = db.query(Workspace).filter(Workspace.id == f.workspace_id).first()
+    if ws and ws.owner_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No tienes permiso para eliminar esta carpeta")
+        
+    try:
+        db.delete(f)
+        db.commit()
+        return {"ok": True, "message": "Carpeta eliminada exitosamente"}
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error deleting folder: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al eliminar carpeta: {str(e)}")
+
+@app.delete("/api/projects/lists/{list_id}")
+@app.delete("/projects/lists/{list_id}")
+async def delete_list(
+    list_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    l = db.query(ProjectList).filter(ProjectList.id == list_id).first()
+    if not l:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    
+    ws = db.query(Workspace).filter(Workspace.id == l.workspace_id).first()
+    if ws and ws.owner_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="No tienes permiso para eliminar esta lista")
+        
+    try:
+        db.delete(l)
+        db.commit()
+        return {"ok": True, "message": "Lista eliminada exitosamente"}
+    except Exception as e:
+        db.rollback()
+        print(f"[PROJECTS] Error deleting list: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al eliminar lista: {str(e)}")
+
 
 @app.get("/api/cases/id/{case_id}/tasks")
 @app.get("/cases/id/{case_id}/tasks")

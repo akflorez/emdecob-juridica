@@ -6,13 +6,13 @@ from sqlalchemy.orm import sessionmaker
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.models import Base
-from backend.db import SQLALCHEMY_DATABASE_URL
+from backend.db import DATABASE_URL
 
 def get_sql_type(col, dialect):
     return str(col.type.compile(dialect=dialect))
 
 def run():
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(DATABASE_URL)
     inspector = inspect(engine)
     
     for table_name, table in Base.metadata.tables.items():
