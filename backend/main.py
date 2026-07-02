@@ -7832,7 +7832,8 @@ async def get_workspaces(
     """Retorna la jerarquia completa de espacios para el usuario."""
     if current_user.is_admin:
         workspaces = db.query(Workspace).options(
-            joinedload(Workspace.folders).joinedload(Folder.lists)
+            selectinload(Workspace.folders).selectinload(Folder.lists),
+            selectinload(Workspace.lists)
         ).all()
         
         # Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
@@ -7861,8 +7862,8 @@ async def get_workspaces(
                 WorkspaceMember.user_id == current_user.id
             )
         ).options(
-            joinedload(Workspace.folders).joinedload(Folder.lists),
-            joinedload(Workspace.lists)
+            selectinload(Workspace.folders).selectinload(Folder.lists),
+            selectinload(Workspace.lists)
         ).all()
     
     results = []

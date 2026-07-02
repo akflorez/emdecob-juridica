@@ -124,10 +124,13 @@ export default function ProjectDashboardPage() {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const wsData = await getWorkspaces();
+      const [wsData, taskData] = await Promise.all([
+        getWorkspaces(),
+        getTasks({})
+      ]);
       const uniqueWS = Array.from(new Map(wsData.map(ws => [ws.id, ws])).values());
       setWorkspaces(uniqueWS);
-      await fetchTasks();
+      setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
       toast.error("Error al cargar proyectos");
     } finally {
@@ -323,15 +326,48 @@ export default function ProjectDashboardPage() {
     setIsSubmitting(true);
     try {
       if (creationModal.mode === 'espacio') {
-        await createWorkspace({ name: newItemName });
+        const ws = await createWorkspace({ name: newItemName });
+        if (ws && ws.id) {
+          const expanded = new Set(expandedWorkspaces);
+          expanded.add(ws.id);
+          setExpandedWorkspaces(expanded);
+          setSelectedWorkspaceId(ws.id);
+          setSelectedFolderId(null);
+          setSelectedListId(null);
+        }
       } else if (creationModal.mode === 'equipo' && selectedWorkspaceId && selectedUserId) {
         await addWorkspaceMember(selectedWorkspaceId, selectedUserId);
       } else if (creationModal.mode === 'pref' && configData) {
         await updateNotificationConfig(configData);
       } else if (creationModal.mode === 'carpeta' && selectedWorkspaceId) {
-        await createFolder({ name: newItemName, workspace_id: selectedWorkspaceId });
+        const f = await createFolder({ name: newItemName, workspace_id: selectedWorkspaceId });
+        if (f && f.id) {
+          const wsExpanded = new Set(expandedWorkspaces);
+          wsExpanded.add(selectedWorkspaceId);
+          setExpandedWorkspaces(wsExpanded);
+
+          const fExpanded = new Set(expandedFolders);
+          fExpanded.add(f.id);
+          setExpandedFolders(fExpanded);
+
+          setSelectedFolderId(f.id);
+          setSelectedListId(null);
+        }
       } else if (creationModal.mode === 'lista' && (selectedFolderId || selectedWorkspaceId)) {
-        await createList({ name: newItemName, workspace_id: selectedWorkspaceId!, folder_id: selectedFolderId || undefined });
+        const l = await createList({ name: newItemName, workspace_id: selectedWorkspaceId!, folder_id: selectedFolderId || undefined });
+        if (l && l.id) {
+          const wsExpanded = new Set(expandedWorkspaces);
+          wsExpanded.add(selectedWorkspaceId!);
+          setExpandedWorkspaces(wsExpanded);
+
+          if (selectedFolderId) {
+            const fExpanded = new Set(expandedFolders);
+            fExpanded.add(selectedFolderId);
+            setExpandedFolders(fExpanded);
+          }
+
+          setSelectedListId(l.id);
+        }
       } else if (creationModal.mode === 'tarea' || !creationModal.mode) {
         await createTask({ 
           title: newItemName, 
