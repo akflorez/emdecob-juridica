@@ -121,8 +121,8 @@ export default function ProjectDashboardPage() {
     getUsers().then(setUsers).catch(console.error);
   }, []);
 
-  const fetchInitialData = async () => {
-    setIsLoading(true);
+  const fetchInitialData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const [wsData, taskData] = await Promise.all([
         getWorkspaces(),
@@ -134,7 +134,7 @@ export default function ProjectDashboardPage() {
     } catch (error) {
       toast.error("Error al cargar proyectos");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -328,6 +328,17 @@ export default function ProjectDashboardPage() {
       if (creationModal.mode === 'espacio') {
         const ws = await createWorkspace({ name: newItemName });
         if (ws && ws.id) {
+          const newWS = {
+            id: ws.id,
+            name: ws.name,
+            visibility: ws.visibility || 'TEAM_COLLABORATION',
+            folders: [],
+            lists: []
+          };
+          setWorkspaces(prev => {
+            const unique = prev.filter(item => item.id !== ws.id);
+            return [...unique, newWS];
+          });
           const expanded = new Set(expandedWorkspaces);
           expanded.add(ws.id);
           setExpandedWorkspaces(expanded);
@@ -342,6 +353,18 @@ export default function ProjectDashboardPage() {
       } else if (creationModal.mode === 'carpeta' && selectedWorkspaceId) {
         const f = await createFolder({ name: newItemName, workspace_id: selectedWorkspaceId });
         if (f && f.id) {
+          const newFolder = { id: f.id, name: f.name, lists: [] };
+          setWorkspaces(prev => prev.map(ws => {
+            if (ws.id === selectedWorkspaceId) {
+              const folders = ws.folders || [];
+              const uniqueFolders = folders.filter(item => item.id !== f.id);
+              return {
+                ...ws,
+                folders: [...uniqueFolders, newFolder]
+              };
+            }
+            return ws;
+          }));
           const wsExpanded = new Set(expandedWorkspaces);
           wsExpanded.add(selectedWorkspaceId);
           setExpandedWorkspaces(wsExpanded);
@@ -356,6 +379,35 @@ export default function ProjectDashboardPage() {
       } else if (creationModal.mode === 'lista' && (selectedFolderId || selectedWorkspaceId)) {
         const l = await createList({ name: newItemName, workspace_id: selectedWorkspaceId!, folder_id: selectedFolderId || undefined });
         if (l && l.id) {
+          const newList = { id: l.id, name: l.name };
+          setWorkspaces(prev => prev.map(ws => {
+            if (ws.id === selectedWorkspaceId) {
+              if (selectedFolderId) {
+                return {
+                  ...ws,
+                  folders: (ws.folders || []).map(folder => {
+                    if (folder.id === selectedFolderId) {
+                      const lists = folder.lists || [];
+                      const uniqueLists = lists.filter(item => item.id !== l.id);
+                      return {
+                        ...folder,
+                        lists: [...uniqueLists, newList]
+                      };
+                    }
+                    return folder;
+                  })
+                };
+              } else {
+                const lists = ws.lists || [];
+                const uniqueLists = lists.filter(item => item.id !== l.id);
+                return {
+                  ...ws,
+                  lists: [...uniqueLists, newList]
+                };
+              }
+            }
+            return ws;
+          }));
           const wsExpanded = new Set(expandedWorkspaces);
           wsExpanded.add(selectedWorkspaceId!);
           setExpandedWorkspaces(wsExpanded);
@@ -381,7 +433,7 @@ export default function ProjectDashboardPage() {
       setCreationModal({ open: false, mode: '', title: '' });
       setNewItemName('');
       setNewDueDate('');
-      await fetchInitialData();
+      await fetchInitialData(true);
     } catch (error: any) {
       toast.error("Error al crear el elemento", { description: error.message });
     } finally {
