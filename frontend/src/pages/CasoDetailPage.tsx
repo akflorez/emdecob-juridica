@@ -22,6 +22,7 @@ import {
   getCaseTasks,
   getTasks,
   getUsers,
+  getWorkspaces,
   updateCaseLawyer,
   getDocumentosActuacion,
   createTask,
@@ -31,6 +32,7 @@ import {
   type User,
   type Task as TaskType,
   type CasePublication,
+  type Workspace,
   apiFetch
 } from '@/services/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,6 +79,18 @@ export default function CasoDetailPage() {
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [systemUsers, setSystemUsers] = useState<User[]>([]);
   const [clickupToken, setClickupToken] = useState<string | null>(null);
+
+  // Workspaces and lists state for task destination
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | undefined>(undefined);
+  const [selectedListId, setSelectedListId] = useState<number | undefined>(undefined);
+
+  const getWorkspaceLists = (ws: Workspace) => {
+    const directLists = ws.lists || [];
+    const folderLists = (ws.folders || []).flatMap(f => f.lists || []);
+    const allLists = [...directLists, ...folderLists];
+    return Array.from(new Map(allLists.map(l => [l.id, l])).values());
+  };
 
   // Inline task creation form states
   const [showCreateTaskForm, setShowCreateTaskForm] = useState(false);
@@ -219,6 +233,17 @@ export default function CasoDetailPage() {
 
     fetchData();
     getUsers().then(setSystemUsers).catch(console.error);
+    getWorkspaces().then(wsList => {
+      const uniqueWS = Array.from(new Map(wsList.map(ws => [ws.id, ws])).values());
+      setWorkspaces(uniqueWS);
+      if (uniqueWS.length > 0) {
+        setSelectedWorkspaceId(uniqueWS[0].id);
+        const wsLists = getWorkspaceLists(uniqueWS[0]);
+        if (wsLists.length > 0) {
+          setSelectedListId(wsLists[0].id);
+        }
+      }
+    }).catch(console.error);
   }, [radicado, id, toast]);
 
   const fetchMultisourceChecks = async (caseId: number) => {
@@ -532,6 +557,11 @@ export default function CasoDetailPage() {
       return;
     }
 
+    if (!selectedListId) {
+      toast({ title: 'Selecciona una lista de destino', description: 'Por favor elige el espacio y la lista donde se guardará la tarea.', variant: 'destructive' });
+      return;
+    }
+
     try {
       // 1. Crear tarea padre
       const parentTask = await createTask({
@@ -541,7 +571,7 @@ export default function CasoDetailPage() {
         priority: 'normal',
         case_id: caseData.id,
         assignee_id: newTaskAssigneeId,
-        list_id: 1
+        list_id: selectedListId
       });
 
       // 2. Crear cada gestión como subtarea
@@ -1167,6 +1197,61 @@ export default function CasoDetailPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {systemUsers.map(u => <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Espacio y Lista de destino */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Espacio de Trabajo (ClickUp)</label>
+                      <Select 
+                        value={selectedWorkspaceId?.toString() || ''} 
+                        onValueChange={(v) => {
+                          const wsId = v ? parseInt(v) : undefined;
+                          setSelectedWorkspaceId(wsId);
+                          if (wsId) {
+                            const ws = workspaces.find(w => w.id === wsId);
+                            if (ws) {
+                              const wsLists = getWorkspaceLists(ws);
+                              setSelectedListId(wsLists[0]?.id);
+                            }
+                          } else {
+                            setSelectedListId(undefined);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                          <SelectValue placeholder="Seleccionar Espacio..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workspaces.map(ws => (
+                            <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
+                      <Select 
+                        value={selectedListId?.toString() || ''} 
+                        onValueChange={(v) => setSelectedListId(v ? parseInt(v) : undefined)}
+                        disabled={!selectedWorkspaceId}
+                      >
+                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                          <SelectValue placeholder="Seleccionar Lista..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            if (!selectedWorkspaceId) return null;
+                            const ws = workspaces.find(w => w.id === selectedWorkspaceId);
+                            if (!ws) return null;
+                            const lists = getWorkspaceLists(ws);
+                            return lists.map(l => (
+                              <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>
+                            ));
+                          })()}
                         </SelectContent>
                       </Select>
                     </div>
