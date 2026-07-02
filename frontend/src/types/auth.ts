@@ -11,6 +11,8 @@ export interface User {
   company_id?: number | null;
   roles?: string[];
   permissions?: string[];
+  sync_with_clickup?: boolean;
+  clickup_api_token?: string | null;
 }
 
 export interface LoginCredentials {

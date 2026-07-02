@@ -1179,6 +1179,40 @@ async def lifespan(app: FastAPI):
                 print("Migración: Columna assignee_name añadida")
             conn.commit()
             
+            # Verificar columnas de ClickUp en la tabla de usuarios
+            user_cols = [c['name'] for c in inspector.get_columns('users')]
+            with engine.connect() as conn:
+                if 'sync_with_clickup' not in user_cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN sync_with_clickup BOOLEAN DEFAULT TRUE"))
+                    print("Migración: Columna sync_with_clickup añadida a users")
+                if 'clickup_api_token' not in user_cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN clickup_api_token VARCHAR(255)"))
+                    print("Migración: Columna clickup_api_token añadida a users")
+                conn.commit()
+
+            # Configurar sync_with_clickup inicial para usuarios
+            from backend.models import User
+            from backend.db import SessionLocal
+            db_init = SessionLocal()
+            try:
+                for u in db_init.query(User).all():
+                    uname = (u.username or "").lower()
+                    name = (u.nombre or "").lower()
+                    is_special = (
+                        "jurico" in uname or 
+                        "juricob" in uname or
+                        "julian" in uname or "cuartas" in uname or
+                        "heriberto" in uname or "hereiberto" in uname or "montealegre" in uname or
+                        "valentina" in uname or "patino" in uname or "pati" in uname
+                    )
+                    u.sync_with_clickup = not is_special
+                db_init.commit()
+                print("[lifespan] Inicialización de sync_with_clickup completada.")
+            except Exception as ex:
+                print(f"[lifespan] Error inicializando sync_with_clickup: {ex}")
+            finally:
+                db_init.close()
+            
     except Exception as e:
         print(f"[DB] Error en migraciones de tareas antiguas: {e}")
         
@@ -3076,6 +3110,8 @@ def login(data: LoginRequest):
                     "is_superadmin": is_global_superadmin(user_db),
                     "company_id": user_db.company_id,
                     "email": getattr(user_db, 'email', None),
+                    "sync_with_clickup": getattr(user_db, 'sync_with_clickup', True),
+                    "clickup_api_token": getattr(user_db, 'clickup_api_token', None),
                 }
             }
     except Exception as e:
@@ -3106,6 +3142,8 @@ def login(data: LoginRequest):
                 "nombre": hc.get("nombre", username),
                 "company_id": user_db.company_id if user_db else None,
                 "email": getattr(user_db, 'email', None) if user_db else None,
+                "sync_with_clickup": getattr(user_db, 'sync_with_clickup', True) if user_db else True,
+                "clickup_api_token": getattr(user_db, 'clickup_api_token', None) if user_db else None,
             }
         }
 
@@ -3450,7 +3488,9 @@ def get_me(current_user: User = Depends(get_current_user)):
         "role": role_str,
         "cases_view_scope": scope,
         "permissions": permissions,
-        "is_active": current_user.is_active
+        "is_active": current_user.is_active,
+        "sync_with_clickup": getattr(current_user, 'sync_with_clickup', True),
+        "clickup_api_token": getattr(current_user, 'clickup_api_token', None)
     }
 
 
@@ -8936,6 +8976,8 @@ class UserCreateRequest(BaseModel):
     is_admin: bool = False
     role: Optional[str] = "USER"
     cases_view_scope: Optional[str] = "OWN"
+    sync_with_clickup: Optional[bool] = True
+    clickup_api_token: Optional[str] = None
 
 class UserAdminUpdateRequest(BaseModel):
     username: Optional[str] = None
@@ -8947,6 +8989,8 @@ class UserAdminUpdateRequest(BaseModel):
     role: Optional[str] = None
     cases_view_scope: Optional[str] = None
     is_active: Optional[bool] = None
+    sync_with_clickup: Optional[bool] = None
+    clickup_api_token: Optional[str] = None
 
 class JudicialSourcesDebugRequest(BaseModel):
     radicado: str
@@ -9101,7 +9145,9 @@ async def get_admin_users(
                 "is_active": u.is_active,
                 "last_login": None,
                 "created_at": str(u.created_at) if u.created_at else None,
-                "cases_view_scope": u.cases_view_scope or ("GLOBAL" if u_is_sa else ("COMPANY" if u.is_admin else "OWN"))
+                "cases_view_scope": u.cases_view_scope or ("GLOBAL" if u_is_sa else ("COMPANY" if u.is_admin else "OWN")),
+                "sync_with_clickup": getattr(u, 'sync_with_clickup', True),
+                "clickup_api_token": getattr(u, 'clickup_api_token', None)
             })
         return results
     except Exception as e:
@@ -9188,7 +9234,9 @@ async def create_admin_user(
             is_superadmin=u_is_sa,
             role=role_upper,
             cases_view_scope=u_scope,
-            is_active=True
+            is_active=True,
+            sync_with_clickup=data.sync_with_clickup if data.sync_with_clickup is not None else True,
+            clickup_api_token=data.clickup_api_token
         )
         db.add(new_user)
         db.commit()
@@ -9215,7 +9263,9 @@ async def create_admin_user(
             "is_superadmin": new_user.is_superadmin,
             "role": new_user.role,
             "cases_view_scope": new_user.cases_view_scope,
-            "is_active": new_user.is_active
+            "is_active": new_user.is_active,
+            "sync_with_clickup": new_user.sync_with_clickup,
+            "clickup_api_token": new_user.clickup_api_token
         }
     except HTTPException:
         raise
@@ -9362,6 +9412,14 @@ async def admin_update_user(
         if final_role == "USER" and final_scope != "OWN":
             raise HTTPException(status_code=400, detail="Los usuarios estándar solo pueden tener alcance OWN.")
 
+        if data.sync_with_clickup is not None:
+            changes["sync_with_clickup"] = data.sync_with_clickup
+            user.sync_with_clickup = data.sync_with_clickup
+            
+        if data.clickup_api_token is not None:
+            changes["clickup_api_token"] = "[MODIFICADA]" if data.clickup_api_token else None
+            user.clickup_api_token = data.clickup_api_token if data.clickup_api_token else None
+
         db.commit()
         db.refresh(user)
         
@@ -9400,7 +9458,9 @@ async def admin_update_user(
             "role": user.role,
             "company_id": user.company_id,
             "cases_view_scope": user.cases_view_scope,
-            "is_active": user.is_active
+            "is_active": user.is_active,
+            "sync_with_clickup": user.sync_with_clickup,
+            "clickup_api_token": user.clickup_api_token
         }
     except HTTPException:
         raise

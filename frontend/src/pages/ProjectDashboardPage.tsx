@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   LayoutDashboard, FolderPlus, ListPlus, Plus, RefreshCw, Search, 
   Filter, MoreVertical, ChevronRight, MessageSquare, 
@@ -71,6 +72,7 @@ const localizer = momentLocalizer(moment);
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#6366f1'];
 
 export default function ProjectDashboardPage() {
+  const { user } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
@@ -371,32 +373,38 @@ export default function ProjectDashboardPage() {
         </div>
         
         <div className="flex items-center gap-3">
-           <DropdownMenu>
-             <DropdownMenuTrigger asChild>
-               <Button variant="outline" size="sm" className="rounded-lg h-9 bg-accent/50 border-border/40 font-bold text-xs">
-                 <Layers className="mr-2 h-3.5 w-3.5" /> Operaciones
-               </Button>
-             </DropdownMenuTrigger>
-             <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
-               <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Operativa</DropdownMenuLabel>
-               <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('espacio', 'Nuevo Espacio')}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('carpeta', 'Nueva Carpeta')}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('lista', 'Nueva Lista')}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
-               <DropdownMenuSeparator />
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('plantilla', 'Gestionar Plantilla')}><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('equipo', 'Gestionar Equipo')}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
-               <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('pref', 'Configuración')}><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
-             </DropdownMenuContent>
-           </DropdownMenu>
+            {!user?.sync_with_clickup && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="rounded-lg h-9 bg-accent/50 border-border/40 font-bold text-xs">
+                    <Layers className="mr-2 h-3.5 w-3.5" /> Operaciones
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 bg-background border-border shadow-2xl rounded-xl">
+                  <DropdownMenuLabel className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Gestión Operativa</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('espacio', 'Nuevo Espacio')}><Plus className="mr-2 h-4 w-4" /> Nuevo Espacio</DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('carpeta', 'Nueva Carpeta')}><FolderPlus className="mr-2 h-4 w-4" /> Nueva Carpeta</DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('lista', 'Nueva Lista')}><ListPlus className="mr-2 h-4 w-4" /> Nueva Lista</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('plantilla', 'Gestionar Plantilla')}><Database className="mr-2 h-4 w-4" /> Plantillas</DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('equipo', 'Gestionar Equipo')}><Users2 className="mr-2 h-4 w-4" /> Equipos</DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => handleActionClick('pref', 'Configuración')}><Settings className="mr-2 h-4 w-4" /> Preferencias</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
-           <Button variant="ghost" onClick={handleSync} disabled={isSyncing} className="rounded-lg h-9 bg-accent/50 hover:bg-accent border border-border/40 text-xs px-4 font-bold">
-             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} /> Sincronizar
-           </Button>
-           
-           <Button onClick={() => setSelectedTask({ title: '', status: 'ABIERTO', priority: 'normal', list_id: selectedListId } as any)} className="rounded-lg h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-black text-[11px] px-6 shadow-lg shadow-primary/20 uppercase tracking-wider">
-             <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
-           </Button>
+            {user?.sync_with_clickup && (
+              <Button variant="ghost" onClick={handleSync} disabled={isSyncing} className="rounded-lg h-9 bg-accent/50 hover:bg-accent border border-border/40 text-xs px-4 font-bold">
+                <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} /> Sincronizar
+              </Button>
+            )}
+            
+            {!user?.sync_with_clickup && (
+              <Button onClick={() => setSelectedTask({ title: '', status: 'ABIERTO', priority: 'normal', list_id: selectedListId } as any)} className="rounded-lg h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-black text-[11px] px-6 shadow-lg shadow-primary/20 uppercase tracking-wider">
+                <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
+              </Button>
+            )}
         </div>
       </motion.div>
 

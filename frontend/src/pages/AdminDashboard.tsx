@@ -49,7 +49,9 @@ export default function AdminDashboard() {
     role: 'USER',
     cases_view_scope: 'OWN',
     password: '',
-    company_id: ''
+    company_id: '',
+    sync_with_clickup: true,
+    clickup_api_token: ''
   });
 
   // Suspend Company State
@@ -67,7 +69,9 @@ export default function AdminDashboard() {
     email: '',
     is_admin: false,
     role: 'USER',
-    cases_view_scope: 'OWN'
+    cases_view_scope: 'OWN',
+    sync_with_clickup: true,
+    clickup_api_token: ''
   });
 
   useEffect(() => {
@@ -123,7 +127,9 @@ export default function AdminDashboard() {
         is_admin: isGlobal || newUser.role === 'COMPANY_ADMIN',
         email: newUser.email || undefined,
         role: isGlobal ? 'SUPERADMIN' : newUser.role,
-        cases_view_scope: isGlobal ? 'GLOBAL' : newUser.cases_view_scope
+        cases_view_scope: isGlobal ? 'GLOBAL' : newUser.cases_view_scope,
+        sync_with_clickup: newUser.sync_with_clickup,
+        clickup_api_token: newUser.clickup_api_token || null
       };
       const res = await apiFetch<any>('/api/admin/users', {
         method: 'POST',
@@ -139,7 +145,9 @@ export default function AdminDashboard() {
         email: '',
         is_admin: false,
         role: 'USER',
-        cases_view_scope: 'OWN'
+        cases_view_scope: 'OWN',
+        sync_with_clickup: true,
+        clickup_api_token: ''
       });
       toast({ title: "Usuario creado", description: "El usuario se creó correctamente." });
       fetchData();
@@ -170,7 +178,9 @@ export default function AdminDashboard() {
         email: editUserForm.email || null,
         role: isGlobal ? 'SUPERADMIN' : editUserForm.role,
         cases_view_scope: isGlobal ? 'GLOBAL' : editUserForm.cases_view_scope,
-        company_id: isGlobal ? -1 : parseInt(editUserForm.company_id)
+        company_id: isGlobal ? -1 : parseInt(editUserForm.company_id),
+        sync_with_clickup: editUserForm.sync_with_clickup,
+        clickup_api_token: editUserForm.clickup_api_token || null
       };
       if (editUserForm.password) {
         payload.password = editUserForm.password;
@@ -897,6 +907,29 @@ export default function AdminDashboard() {
                 </div>
               </>
             )}
+            {/* ClickUp Sync options */}
+            <div className="flex items-center justify-between p-3.5 bg-slate-50/50 border border-slate-100 rounded-xl mt-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-bold text-slate-700">Sincronizar con ClickUp</Label>
+                <p className="text-[10px] text-muted-foreground leading-normal">Si está activo, este usuario solo podrá sincronizar con ClickUp y no creará elementos locales de cero.</p>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={newUser.sync_with_clickup} 
+                onChange={e => setNewUser({...newUser, sync_with_clickup: e.target.checked})}
+                className="h-4.5 w-4.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <Label>ClickUp API Token (Opcional)</Label>
+              <Input 
+                value={newUser.clickup_api_token} 
+                onChange={e => setNewUser({...newUser, clickup_api_token: e.target.value})} 
+                placeholder="Token ClickUp para este usuario..."
+                type="password"
+                className="mt-1"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button>
@@ -1001,6 +1034,29 @@ export default function AdminDashboard() {
                 </div>
               </>
             )}
+            {/* ClickUp Sync options */}
+            <div className="flex items-center justify-between p-3.5 bg-slate-50/50 border border-slate-100 rounded-xl mt-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-bold text-slate-700">Sincronizar con ClickUp</Label>
+                <p className="text-[10px] text-muted-foreground leading-normal">Si está activo, este usuario solo podrá sincronizar con ClickUp y no creará elementos locales de cero.</p>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={editUserForm.sync_with_clickup} 
+                onChange={e => setEditUserForm({...editUserForm, sync_with_clickup: e.target.checked})}
+                className="h-4.5 w-4.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <Label>ClickUp API Token (Opcional)</Label>
+              <Input 
+                value={editUserForm.clickup_api_token} 
+                onChange={e => setEditUserForm({...editUserForm, clickup_api_token: e.target.value})} 
+                placeholder="Dejar vacío o ingresar nuevo token..."
+                type="password"
+                className="mt-1"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {

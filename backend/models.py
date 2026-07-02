@@ -268,6 +268,8 @@ class User(Base):
     is_superadmin = Column(Boolean, default=False)
     role = Column(String(100), default="USER")
     cases_view_scope = Column(String(50), default="OWN")
+    sync_with_clickup = Column(Boolean, default=True, nullable=False)
+    clickup_api_token = Column(String(255), nullable=True)
     
     company = relationship("Company", back_populates="users")
     roles = relationship("Role", secondary=user_roles, backref="users")

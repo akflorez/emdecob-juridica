@@ -1164,10 +1164,12 @@ export default function CasoDetailPage() {
                 </CardTitle>
                 <CardDescription>Seguimiento de gestión para este radicado</CardDescription>
               </div>
-              <Button size="sm" onClick={handleCreateTask} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all">
-                <ListPlus className="h-4 w-4 mr-2" />
-                Lanzar Tarea
-              </Button>
+              {!user?.sync_with_clickup && (
+                <Button size="sm" onClick={handleCreateTask} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all">
+                  <ListPlus className="h-4 w-4 mr-2" />
+                  Lanzar Tarea
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {/* Formulario inline de creación de tarea + gestiones */}
