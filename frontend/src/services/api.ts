@@ -152,6 +152,8 @@ export type CaseByRadicadoResponse = {
   unread?: boolean;
   has_documents?: boolean;
   note?: string | null;
+  is_active?: boolean;
+  company_id?: number | null;
   
   despacho?: string | null;
   clase_proceso?: string | null;
@@ -1221,5 +1223,12 @@ export function buscarNuevamente(radicado: string, companyId?: number) {
   return apiFetch<any>(`/cases/${r}/buscar-nuevamente`, {
     method: "POST",
     body: JSON.stringify({ company_id: companyId }),
+  });
+}
+
+export function updateCaseActiveStatus(caseId: number, isActive: boolean, motivo?: string) {
+  return apiFetch<{ ok: boolean; is_active: boolean; message: string }>(`/cases/${caseId}/active`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive, motivo }),
   });
 }

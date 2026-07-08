@@ -29,6 +29,7 @@ import {
   getCaseSourcesHistory,
   buscarNuevamente,
   markCaseRead,
+  updateCaseActiveStatus,
   type User,
   type Task as TaskType,
   type CasePublication,
@@ -84,6 +85,8 @@ export default function CasoDetailPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | undefined>(undefined);
   const [selectedListId, setSelectedListId] = useState<number | undefined>(undefined);
+  const [isRetiring, setIsRetiring] = useState(false);
+  const [retiroMotivo, setRetiroMotivo] = useState('');
 
   const getWorkspaceLists = (ws: Workspace) => {
     const directLists = ws.lists || [];
@@ -236,11 +239,16 @@ export default function CasoDetailPage() {
     getWorkspaces().then(wsList => {
       const uniqueWS = Array.from(new Map(wsList.map(ws => [ws.id, ws])).values());
       setWorkspaces(uniqueWS);
+      // Auto-seleccionar el primer workspace y su primera lista disponible (directa o en carpeta)
       if (uniqueWS.length > 0) {
-        setSelectedWorkspaceId(uniqueWS[0].id);
-        const wsLists = getWorkspaceLists(uniqueWS[0]);
-        if (wsLists.length > 0) {
-          setSelectedListId(wsLists[0].id);
+        const firstWS = uniqueWS[0];
+        setSelectedWorkspaceId(firstWS.id);
+        const directLists = firstWS.lists || [];
+        const folderLists = (firstWS.folders || []).flatMap(f => f.lists || []);
+        const allLists = [...directLists, ...folderLists];
+        const uniqueLists = Array.from(new Map(allLists.map(l => [l.id, l])).values());
+        if (uniqueLists.length > 0) {
+          setSelectedListId(uniqueLists[0].id);
         }
       }
     }).catch(console.error);
@@ -914,7 +922,7 @@ export default function CasoDetailPage() {
 
       {/* Contenido con Tabs */}
       <Tabs defaultValue="actuaciones" className="w-full">
-        <TabsList className="grid w-full max-w-[800px] grid-cols-4 mb-4">
+        <TabsList className="grid w-full max-w-[1000px] grid-cols-5 mb-4">
           <TabsTrigger value="actuaciones" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Actuaciones
@@ -930,6 +938,10 @@ export default function CasoDetailPage() {
           <TabsTrigger value="multifuente" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
             Fuentes Consultadas
+          </TabsTrigger>
+          <TabsTrigger value="retirar" className="flex items-center gap-2 data-[state=active]:text-amber-600 data-[state=active]:border-amber-500">
+            <ArrowLeft className="h-4 w-4" />
+            {caseData?.is_active === false ? 'Radicado Retirado' : 'Retirar Radicado'}
           </TabsTrigger>
         </TabsList>
 
@@ -1664,6 +1676,115 @@ export default function CasoDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* === PESTAÑA: RETIRAR / REACTIVAR RADICADO === */}
+        <TabsContent value="retirar">
+          <Card className="border-amber-500/30 shadow-md">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ArrowLeft className="h-5 w-5 text-amber-500" />
+                {caseData?.is_active === false ? 'Radicado Retirado de Gestión' : 'Retirar Radicado de Gestión'}
+              </CardTitle>
+              <CardDescription>
+                {caseData?.is_active === false
+                  ? 'Este radicado está actualmente retirado de la gestión activa. Puedes reactivarlo en cualquier momento.'
+                  : 'Al retirar un radicado, este dejará de aparecer en la lista principal de casos activos. El historial de actuaciones, publicaciones, tareas y fuentes consultadas se conserva íntegro en esta pestaña.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+
+              {/* Banner de estado */}
+              {caseData?.is_active === false ? (
+                <div className="flex items-start gap-4 p-5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                  <AlertCircle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-amber-700 dark:text-amber-400">Este radicado está retirado de gestión activa</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No aparece en la lista principal de casos. Todo el historial se conserva y puedes consultarlo desde esta misma pestaña.
+                      Puedes reactivarlo en cualquier momento sin perder ningún dato.
+                    </p>
+                    <Button
+                      className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-500/20"
+                      disabled={isRetiring}
+                      onClick={async () => {
+                        if (!caseData?.id) return;
+                        setIsRetiring(true);
+                        try {
+                          await updateCaseActiveStatus(caseData.id, true);
+                          setCaseData(prev => prev ? { ...prev, is_active: true } : prev);
+                          toast({ title: 'Radicado reactivado', description: 'El radicado vuelve a aparecer en la gestión activa.' });
+                        } catch (e: any) {
+                          toast({ title: 'Error al reactivar', description: e?.message || 'Ocurrió un error', variant: 'destructive' });
+                        } finally {
+                          setIsRetiring(false);
+                        }
+                      }}
+                    >
+                      {isRetiring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                      Reactivar Radicado
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Aviso informativo */}
+                  <div className="flex items-start gap-4 p-5 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                    <AlertCircle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-amber-700 dark:text-amber-400">Antes de continuar</p>
+                      <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc list-inside">
+                        <li>El radicado <span className="font-mono font-bold text-foreground">{caseData?.radicado}</span> dejará de aparecer en la lista principal de casos activos.</li>
+                        <li>Toda la información (actuaciones, publicaciones, tareas y fuentes) se conserva sin cambios.</li>
+                        <li>Podrás reactivarlo en cualquier momento desde esta misma pestaña.</li>
+                        <li>El historial <strong>no puede eliminarse</strong> a través de esta opción.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Campo de motivo (opcional) */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Motivo del retiro (opcional)</label>
+                    <Input
+                      id="retiro-motivo"
+                      placeholder="Ej: Proceso terminado, Caso archivado, Error de radicación..."
+                      value={retiroMotivo}
+                      onChange={e => setRetiroMotivo(e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+
+                  {/* Botón de retiro */}
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      variant="outline"
+                      className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500 font-bold rounded-xl px-8"
+                      disabled={isRetiring}
+                      onClick={async () => {
+                        if (!caseData?.id) return;
+                        setIsRetiring(true);
+                        try {
+                          await updateCaseActiveStatus(caseData.id, false, retiroMotivo || undefined);
+                          setCaseData(prev => prev ? { ...prev, is_active: false } : prev);
+                          toast({ title: 'Radicado retirado', description: 'Ya no aparece en la lista de gestión activa. El historial se conserva en esta pestaña.' });
+                          setRetiroMotivo('');
+                        } catch (e: any) {
+                          toast({ title: 'Error al retirar', description: e?.message || 'Ocurrió un error', variant: 'destructive' });
+                        } finally {
+                          setIsRetiring(false);
+                        }
+                      }}
+                    >
+                      {isRetiring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowLeft className="h-4 w-4 mr-2" />}
+                      Confirmar Retiro de Gestión
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
 
       {/* Línea de tiempo */}

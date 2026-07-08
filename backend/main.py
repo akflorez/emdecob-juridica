@@ -8824,6 +8824,28 @@ class LawyerBulkAssign(BaseModel):
     case_ids: List[int]
     abogado: str
 
+class CaseActiveUpdate(BaseModel):
+    is_active: bool
+    motivo: Optional[str] = None
+
+@app.patch("/cases/{case_id}/active")
+async def update_case_active_status(
+    case_id: int,
+    data: CaseActiveUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retira o reactiva un radicado de gestión activa sin eliminar su historial."""
+    cs = db.query(Case).filter(Case.id == case_id).first()
+    if not cs:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    if not is_global_superadmin(current_user) and cs.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
+    cs.is_active = data.is_active
+    db.commit()
+    accion = "reactivado" if data.is_active else "retirado de gestión"
+    return {"ok": True, "is_active": cs.is_active, "message": f"Radicado {accion} correctamente."}
+
 @app.patch("/cases/{case_id}/lawyer")
 async def update_case_lawyer(
     case_id: int,
