@@ -1130,9 +1130,12 @@ export function deleteTask(taskId: number) {
   });
 }
 
-export function addComment(taskId: number, content: string) {
+export function addComment(taskId: number, content: string, token?: string) {
+  const headers: any = {};
+  if (token) headers["X-ClickUp-Token"] = token;
   return apiFetch<TaskComment>(`/projects/tasks/${taskId}/comments`, {
     method: "POST",
+    headers,
     body: JSON.stringify({ content }),
   });
 }

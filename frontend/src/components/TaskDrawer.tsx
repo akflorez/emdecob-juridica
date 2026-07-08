@@ -227,7 +227,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
   const handleAddComment = async () => {
     if (!displayTask || !newComment.trim()) return;
     try {
-      await addComment(displayTask.id, newComment);
+      await addComment(displayTask.id, newComment, clickupToken);
       setNewComment('');
       refreshTask();
     } catch (error) {

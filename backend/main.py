@@ -8566,6 +8566,7 @@ async def delete_task(
 async def add_task_comment(
     task_id: int,
     data: dict,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -8585,6 +8586,30 @@ async def add_task_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+
+    # Sincronización con ClickUp si la tarea tiene clickup_id
+    if task.clickup_id:
+        api_token = request.headers.get("X-ClickUp-Token") or getattr(current_user, 'clickup_api_token', None)
+        if api_token:
+            try:
+                import httpx
+                url = f"https://api.clickup.com/api/v2/task/{task.clickup_id}/comment"
+                headers = {
+                    "Authorization": api_token,
+                    "Content-Type": "application/json"
+                }
+                body = {
+                    "comment_text": data.get("content")
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=body)
+                    if resp.status_code != 200:
+                        print(f"[CLICKUP SYNC COMMENT ERROR] Code: {resp.status_code}, Body: {resp.text}")
+                    else:
+                        print(f"[CLICKUP SYNC COMMENT SUCCESS] Comment created in ClickUp for task {task.clickup_id}")
+            except Exception as e:
+                print(f"[CLICKUP SYNC COMMENT EXCEPTION] Failed to sync comment with ClickUp: {e}")
+
     return comment
 
 @app.post("/projects/tasks/{task_id}/checklists")

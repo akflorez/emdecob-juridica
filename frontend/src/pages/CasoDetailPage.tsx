@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { 
   getCaseByRadicado, 
@@ -98,6 +99,7 @@ export default function CasoDetailPage() {
   // Inline task creation form states
   const [showCreateTaskForm, setShowCreateTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<number | undefined>(undefined);
   const [newTaskGestiones, setNewTaskGestiones] = useState<Array<{
     title: string;
@@ -608,7 +610,7 @@ export default function CasoDetailPage() {
       // 1. Crear tarea padre
       const parentTask = await createTask({
         title: newTaskTitle || `Gestión para Radicado: ${caseData.radicado}`,
-        description: `Gestión para Radicado: ${caseData.radicado}`,
+        description: newTaskDescription || `Gestión para Radicado: ${caseData.radicado}`,
         status: 'to do',
         priority: 'normal',
         case_id: caseData.id,
@@ -637,6 +639,7 @@ export default function CasoDetailPage() {
       // 4. Limpiar formulario
       setShowCreateTaskForm(false);
       setNewTaskTitle('');
+      setNewTaskDescription('');
       setNewTaskGestiones([{ title: '', due_date: '', priority: 'normal', assignee_id: undefined }]);
 
       toast({ title: '✅ Tarea creada', description: `Se creó la tarea con ${validGestiones.length} gestión(es) técnica(s).` });
@@ -1250,6 +1253,17 @@ export default function CasoDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  {/* Descripción de la tarea / proceso */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Descripción del proceso / tarea</label>
+                    <Textarea 
+                      value={newTaskDescription} 
+                      onChange={(e) => setNewTaskDescription(e.target.value)} 
+                      placeholder="Escribe detalles adicionales sobre este proceso o las gestiones a realizar..." 
+                      className="min-h-[80px] bg-background border-border/60 rounded-xl text-sm font-semibold p-3" 
+                    />
                   </div>
 
                   {/* Espacio y Lista de destino */}
