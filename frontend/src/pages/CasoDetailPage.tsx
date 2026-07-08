@@ -856,14 +856,16 @@ export default function CasoDetailPage() {
                 onChange={(e) => handleUpdateLawyer(e.target.value)}
               >
                 <option value="">Sin asignar</option>
-                {/* Prioridad: Abogados de las tareas vinculadas */}
-                {Array.from(new Set(tasks.map(t => t.assignee_name).filter(Boolean))).map(name => (
-                  <option key={name!} value={name!}>{name}</option>
-                ))}
-                {/* Fallback: Usuarios del sistema que no sean admin */}
-                {systemUsers.filter(u => u.rol !== 'admin' && !tasks.some(t => t.assignee_name === (u.nombre || u.username))).map(u => (
-                  <option key={u.id} value={u.nombre || u.username}>{u.nombre || u.username}</option>
-                ))}
+                {(() => {
+                  const uniqueLawyers = Array.from(new Set([
+                    caseData.abogado,
+                    ...tasks.map(t => t.assignee_name),
+                    ...systemUsers.map(u => u.nombre || u.username)
+                  ].filter(Boolean) as string[]));
+                  return uniqueLawyers.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ));
+                })()}
               </select>
             </div>
 
