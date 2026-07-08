@@ -550,6 +550,20 @@ export default function CasoDetailPage() {
       if (match) assigneeId = match.id;
     }
 
+    // Asegurar que haya workspace y lista seleccionados al abrir el formulario
+    if (workspaces.length > 0) {
+      const currentWsId = selectedWorkspaceId ?? workspaces[0].id;
+      setSelectedWorkspaceId(currentWsId);
+      if (!selectedListId) {
+        const ws = workspaces.find(w => w.id === currentWsId) || workspaces[0];
+        const direct = ws.lists || [];
+        const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+        const allLists = [...direct, ...fromFolders];
+        const unique = Array.from(new Map(allLists.map(l => [l.id, l])).values());
+        if (unique.length > 0) setSelectedListId(unique[0].id);
+      }
+    }
+
     setNewTaskTitle(`Gestión para Radicado: ${caseData.radicado}`);
     setNewTaskAssigneeId(assigneeId);
     setNewTaskGestiones([{ title: '', due_date: '', priority: 'normal', assignee_id: assigneeId }]);
@@ -565,8 +579,28 @@ export default function CasoDetailPage() {
       return;
     }
 
-    if (!selectedListId) {
-      toast({ title: 'Selecciona una lista de destino', description: 'Por favor elige el espacio y la lista donde se guardará la tarea.', variant: 'destructive' });
+    // Intentar auto-seleccionar lista si no hay una seleccionada
+    let listIdToUse = selectedListId;
+    if (!listIdToUse && workspaces.length > 0) {
+      const ws = workspaces.find(w => w.id === selectedWorkspaceId) || workspaces[0];
+      if (!selectedWorkspaceId) setSelectedWorkspaceId(ws.id);
+      const direct = ws.lists || [];
+      const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+      const allLists = Array.from(new Map([...direct, ...fromFolders].map(l => [l.id, l])).values());
+      if (allLists.length > 0) {
+        listIdToUse = allLists[0].id;
+        setSelectedListId(listIdToUse);
+      }
+    }
+
+    if (!listIdToUse) {
+      toast({ 
+        title: 'Selecciona una lista de destino', 
+        description: workspaces.length === 0 
+          ? 'No hay espacios de trabajo creados. Ve a Proyectos y crea un espacio con al menos una lista.'
+          : 'El espacio seleccionado no tiene listas. Por favor crea una lista en ese espacio.',
+        variant: 'destructive' 
+      });
       return;
     }
 
@@ -579,7 +613,7 @@ export default function CasoDetailPage() {
         priority: 'normal',
         case_id: caseData.id,
         assignee_id: newTaskAssigneeId,
-        list_id: selectedListId
+        list_id: listIdToUse
       });
 
       // 2. Crear cada gestión como subtarea

@@ -347,6 +347,7 @@ export type GetCasesParams = {
   solo_pendientes?: boolean;
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
+  solo_retirados?: boolean;
   con_documentos?: boolean;
   cedula?: string;
   abogado?: string;
@@ -363,6 +364,7 @@ export function getCases(params: GetCasesParams) {
   if (params.solo_pendientes) qs.set("solo_pendientes", "true");
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
+  if (params.solo_retirados) qs.set("solo_retirados", "true");
   if (params.con_documentos !== undefined) qs.set("con_documentos", String(params.con_documentos));
   if (params.cedula) qs.set("cedula", params.cedula);
   if (params.abogado) qs.set("abogado", params.abogado);
@@ -371,6 +373,7 @@ export function getCases(params: GetCasesParams) {
   const q = qs.toString();
   return apiFetch<CasesResponse>(`/cases${q ? `?${q}` : ""}`);
 }
+
 
 /** ---------------------------
  * LISTAR ABOGADOS (SUGERENCIAS)

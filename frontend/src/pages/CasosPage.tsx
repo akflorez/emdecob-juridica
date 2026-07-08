@@ -18,6 +18,7 @@ import {
   Clock,
   Upload,
   ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,7 +82,7 @@ import {
 } from "@/services/api";
 import { LawyerCombobox } from "@/components/LawyerCombobox";
 
-type FilterTab = "todos" | "pendientes" | "no_leidos" | "hoy" | "no_encontrados";
+type FilterTab = "todos" | "pendientes" | "no_leidos" | "hoy" | "no_encontrados" | "retirados";
 
 const generateMonthOptions = () => {
   const options = [];
@@ -229,10 +230,11 @@ export default function CasosPage() {
         search: appliedSearch,
         juzgado: appliedJuzgado,
         mes_actuacion: appliedMonth,
-        solo_validos: activeTab !== "pendientes",
+        solo_validos: activeTab !== "pendientes" && activeTab !== "retirados",
         solo_pendientes: activeTab === "pendientes",
         solo_no_leidos: activeTab === "no_leidos",
         solo_actualizados_hoy: activeTab === "hoy",
+        solo_retirados: activeTab === "retirados",
         cedula: appliedCedula,
         abogado: appliedAbogado,
         page,
@@ -307,10 +309,11 @@ export default function CasosPage() {
             search: appliedSearch,
             juzgado: appliedJuzgado,
             mes_actuacion: appliedMonth,
-            solo_validos: activeTab !== "pendientes",
+            solo_validos: activeTab !== "pendientes" && activeTab !== "retirados",
             solo_pendientes: activeTab === "pendientes",
             solo_no_leidos: activeTab === "no_leidos",
             solo_actualizados_hoy: activeTab === "hoy",
+            solo_retirados: activeTab === "retirados",
             cedula: appliedCedula,
             abogado: appliedAbogado,
             page,
@@ -714,11 +717,12 @@ export default function CasosPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Todos los Casos</h1>
           <p className="text-muted-foreground mt-2">
-            {activeTab === "todos" && "Todos los procesos válidos encontrados en Rama Judicial"}
+                      {activeTab === "todos" && "Todos los procesos válidos encontrados en Rama Judicial"}
             {activeTab === "pendientes" && "Radicados importados pendientes de validar"}
             {activeTab === "no_leidos" && "Procesos con actuaciones pendientes por revisar"}
             {activeTab === "hoy" && "Procesos con actuaciones del día de hoy"}
             {activeTab === "no_encontrados" && "Radicados que no se encontraron en Rama Judicial"}
+            {activeTab === "retirados" && "Radicados retirados de gestión activa — el historial se conserva"}
           </p>
         </div>
 
@@ -821,7 +825,7 @@ export default function CasosPage() {
       </div>
 
       {showStats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
           <Button variant={activeTab === "todos" ? "default" : "outline"} className="h-auto py-4 flex flex-col items-center gap-2" onClick={() => handleTabChange("todos")}>
             <List className="h-6 w-6 text-primary" />
             <div className="text-center">
@@ -859,6 +863,22 @@ export default function CasosPage() {
             <div className="text-center">
               <div className="text-sm font-medium">No Encontrados</div>
               <div className="text-lg font-bold opacity-90">{stats?.total_invalidos || 0}</div>
+            </div>
+          </Button>
+
+          <Button
+            variant={activeTab === "retirados" ? "secondary" : "outline"}
+            className={`h-auto py-4 flex flex-col items-center gap-2 ${
+              activeTab === "retirados"
+                ? "bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-300"
+                : "border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/60"
+            }`}
+            onClick={() => handleTabChange("retirados")}
+          >
+            <ArrowLeft className="h-6 w-6 text-amber-500" />
+            <div className="text-center">
+              <div className="text-sm font-medium">Retirados</div>
+              <div className="text-lg font-bold opacity-90">—</div>
             </div>
           </Button>
         </div>
@@ -941,6 +961,7 @@ export default function CasosPage() {
                 {activeTab === "no_leidos" && `Casos sin leer (${total})`}
                 {activeTab === "hoy" && `Actualizados hoy (${total})`}
                 {activeTab === "no_encontrados" && `No encontrados (${invalidTotal})`}
+                {activeTab === "retirados" && `Radicados retirados (${total})`}
               </CardTitle>
               <span className="text-sm text-muted-foreground">Mostrando {showingFrom}-{showingTo} de {currentTotal}</span>
             </div>

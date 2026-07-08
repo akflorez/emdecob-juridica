@@ -4115,12 +4115,25 @@ def delete_all_invalid_radicados(db: Session = Depends(get_db)):
 # ABOGADOS LIST
 # =========================
 @app.get("/cases/abogados")
-def list_abogados(db: Session = Depends(get_db)):
-    """Retorna una lista nica de nombres de abogados para sugerencias en el filtro."""
-    results = db.query(Case.abogado).filter(Case.abogado.isnot(None), Case.abogado != "").distinct().all()
-    # extraemos el primer elemento de cada tupla y filtramos vacos
-    names = sorted([r[0] for r in results if r[0]])
-    return names
+def list_abogados(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna lista única de abogados: nombres de usuarios activos + valores únicos en Case.abogado, filtrado por empresa."""
+    is_sa = is_global_superadmin(current_user)
+
+    # 1. Abogados registrados en casos
+    q_cases = db.query(Case.abogado).filter(Case.abogado.isnot(None), Case.abogado != "")
+    if not is_sa:
+        q_cases = q_cases.filter(Case.company_id == current_user.company_id)
+    case_names = [r[0] for r in q_cases.distinct().all() if r[0]]
+
+    # 2. Nombres de usuarios activos de la empresa (para incluir abogados sin casos aún)
+    q_users = db.query(User.nombre).filter(User.is_active == True, User.nombre.isnot(None), User.nombre != "")
+    if not is_sa:
+        q_users = q_users.filter(User.company_id == current_user.company_id)
+    user_names = [r[0] for r in q_users.distinct().all() if r[0]]
+
+    # 3. Combinar, deduplicar y ordenar
+    all_names = sorted(set(case_names + user_names))
+    return all_names
 
 # =========================
 # CASES LIST
@@ -4141,6 +4154,7 @@ def list_cases(
     solo_pendientes: bool = Query(default=False),
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
+    solo_retirados: bool = Query(default=False),
     con_documentos: Optional[bool] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=2000),
@@ -4153,6 +4167,13 @@ def list_cases(
             pass # SuperAdmin ve todo
         else:
             q = q.filter(Case.company_id == current_user.company_id)
+
+        # Filtro de retirados vs activos
+        if solo_retirados:
+            q = q.filter(Case.is_active == False)
+        else:
+            # En la lista normal, excluir los radicados retirados
+            q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
 
         if solo_pendientes:
             q = q.filter(Case.juzgado.is_(None))
