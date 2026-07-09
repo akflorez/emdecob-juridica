@@ -421,11 +421,14 @@ export function deleteCase(caseId: number) {
   });
 }
 
-/** ---------------------------
- * MARCAR COMO LEÍDO (uno)
- * -------------------------- */
 export function markCaseRead(caseId: number) {
   return apiFetch<{ ok: boolean; id: number }>(`/cases/${caseId}/mark-read`, {
+    method: "POST",
+  });
+}
+
+export function markCaseUnread(caseId: number) {
+  return apiFetch<{ ok: boolean; id: number }>(`/cases/${caseId}/mark-unread`, {
     method: "POST",
   });
 }

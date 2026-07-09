@@ -19,6 +19,8 @@ import {
   Upload,
   ChevronDown,
   ArrowLeft,
+  Mail,
+  MailOpen,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +59,7 @@ import {
 import {
   getCases,
   markCaseRead,
+  markCaseUnread,
   markReadAll,
   downloadMultipleEventsExcel,
   refreshAllCases,
@@ -500,6 +503,26 @@ export default function CasosPage() {
       } catch {}
     }
     window.open(`/casos/id/${c.id}`, "_blank");
+  };
+
+  const onToggleReadStatus = async (c: CaseRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (c.unread) {
+        await markCaseRead(c.id);
+        setRows((prev) => prev.map((x) => (x.id === c.id ? { ...x, unread: false } : x)));
+        setUnreadCount((n) => Math.max(0, n - 1));
+        toast({ title: "Marcado como leído", description: `El radicado ${c.radicado} ahora está marcado como leído.` });
+      } else {
+        await markCaseUnread(c.id);
+        setRows((prev) => prev.map((x) => (x.id === c.id ? { ...x, unread: true } : x)));
+        setUnreadCount((n) => n + 1);
+        toast({ title: "Marcado como no leído", description: `El radicado ${c.radicado} ahora está marcado como no leído.` });
+      }
+      fetchStats();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "No se pudo cambiar el estado", variant: "destructive" });
+    }
   };
 
   const toggleSelect = (id: number) => {
@@ -1178,10 +1201,19 @@ export default function CasosPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)}>
+                          <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)} title="Abrir caso">
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(row)}>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className={`h-8 px-2 ${row.unread ? "text-primary border-primary/30 hover:bg-primary/5 bg-primary/5" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={(e) => onToggleReadStatus(row, e)}
+                            title={row.unread ? "Marcar como leído" : "Marcar como no leído"}
+                          >
+                            {row.unread ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-8 px-2 text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setCaseToDelete(row)} title="Eliminar caso">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>

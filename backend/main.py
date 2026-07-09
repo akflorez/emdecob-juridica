@@ -4471,6 +4471,18 @@ def mark_case_read(case_id: int, db: Session = Depends(get_db), current_user: Us
     db.commit()
     return {"ok": True, "id": c.id}
 
+@app.post("/api/cases/{case_id}/mark-unread")
+@app.post("/cases/{case_id}/mark-unread")
+def mark_case_unread(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    c = db.query(Case).filter(Case.id == case_id).first()
+    if not c:
+        raise HTTPException(404, "Caso no encontrado")
+    if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
+        raise HTTPException(403, "No tienes permisos sobre este caso")
+    c.last_hash = "unread_manually"
+    db.commit()
+    return {"ok": True, "id": c.id}
+
 @app.post("/cases/mark-read-bulk")
 def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ids = [int(x) for x in (data.case_ids or [])]
@@ -7851,34 +7863,21 @@ async def get_workspaces(
     current_user: User = Depends(get_current_user)
 ):
     """Retorna la jerarquia completa de espacios para el usuario."""
-    if current_user.is_admin:
+    # 1. Determinar qué espacios puede ver el usuario
+    if is_global_superadmin(current_user):
+        # SuperAdmin ve todos los espacios
         workspaces = db.query(Workspace).options(
             selectinload(Workspace.folders).selectinload(Folder.lists),
             selectinload(Workspace.lists)
         ).all()
-        
-        # Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
-        if not workspaces:
-            print("[PROJECTS] Creando estructura basica de proyectos local...")
-            ws = Workspace(name="Espacio Interno EMDECOB", visibility="TEAM_COLLABORATION", owner_id=current_user.id)
-            db.add(ws)
-            db.commit()
-            db.refresh(ws)
-            
-            f = Folder(name="Proyectos y Casos", workspace_id=ws.id)
-            db.add(f)
-            db.commit()
-            db.refresh(f)
-            
-            l = ProjectList(name="Tareas Pendientes", folder_id=f.id, workspace_id=ws.id)
-            db.add(l)
-            db.commit()
-            
-            workspaces = [ws]
     else:
-        # User sees workspaces where they are member OR owner
+        # Los usuarios (incluyendo admins de empresa y regulares) ven:
+        # - Los espacios asociados a su company_id
+        # - O los espacios que son dueños
+        # - O los espacios donde son miembros explícitos
         workspaces = db.query(Workspace).outerjoin(WorkspaceMember).filter(
             or_(
+                Workspace.company_id == current_user.company_id,
                 Workspace.owner_id == current_user.id,
                 WorkspaceMember.user_id == current_user.id
             )
@@ -7886,6 +7885,34 @@ async def get_workspaces(
             selectinload(Workspace.folders).selectinload(Folder.lists),
             selectinload(Workspace.lists)
         ).all()
+
+    # 2. Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
+    if not workspaces and not is_global_superadmin(current_user):
+        print("[PROJECTS] Creando estructura basica de proyectos local...")
+        ws = Workspace(
+            name="Espacio Interno EMDECOB", 
+            visibility="TEAM_COLLABORATION", 
+            owner_id=current_user.id, 
+            company_id=current_user.company_id
+        )
+        db.add(ws)
+        db.commit()
+        db.refresh(ws)
+        
+        f = Folder(name="Proyectos y Casos", workspace_id=ws.id)
+        db.add(f)
+        db.commit()
+        db.refresh(f)
+        
+        l = ProjectList(name="Tareas Pendientes", folder_id=f.id, workspace_id=ws.id)
+        db.add(l)
+        db.commit()
+        
+        # Recargar para asegurar relaciones cargadas
+        workspaces = [db.query(Workspace).options(
+            selectinload(Workspace.folders).selectinload(Folder.lists),
+            selectinload(Workspace.lists)
+        ).filter(Workspace.id == ws.id).first()]
     
     results = []
     for ws in workspaces:
