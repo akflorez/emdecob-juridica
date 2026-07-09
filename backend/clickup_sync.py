@@ -298,9 +298,13 @@ async def migrate_clickup_to_emdecob(api_token: str, db: Session, owner_id: int)
 
             db_ws = db.query(Workspace).filter(Workspace.clickup_id == team['id']).first()
             if not db_ws:
-                db_ws = Workspace(name=team['name'], clickup_id=team['id'], owner_id=owner_id)
+                db_ws = Workspace(name=team['name'], clickup_id=team['id'], owner_id=owner_id, company_id=owner_company_id)
                 db.add(db_ws)
                 db.flush()
+            else:
+                # Actualizar company_id si no estaba asignado
+                if db_ws.company_id is None and owner_company_id:
+                    db_ws.company_id = owner_company_id
 
             # 2. Spaces
             spaces_data = await fetch_clickup(f"team/{team['id']}/space", api_token)

@@ -7863,6 +7863,25 @@ async def get_workspaces(
     current_user: User = Depends(get_current_user)
 ):
     """Retorna la jerarquia completa de espacios para el usuario."""
+    
+    # 0. AUTO-REPARACION: Asignar company_id a workspaces que no lo tienen,
+    #    basado en el company_id del owner. Esto soluciona workspaces importados
+    #    desde ClickUp que se crearon sin company_id.
+    if current_user.company_id:
+        orphan_ws = db.query(Workspace).filter(
+            Workspace.company_id.is_(None),
+            Workspace.owner_id.isnot(None)
+        ).all()
+        repaired = 0
+        for ows in orphan_ws:
+            owner = db.query(User).filter(User.id == ows.owner_id).first()
+            if owner and owner.company_id == current_user.company_id:
+                ows.company_id = current_user.company_id
+                repaired += 1
+        if repaired > 0:
+            db.commit()
+            print(f"[PROJECTS] Auto-reparados {repaired} workspaces sin company_id")
+
     # 1. Determinar qué espacios puede ver el usuario
     if is_global_superadmin(current_user):
         # SuperAdmin ve todos los espacios
@@ -7871,22 +7890,25 @@ async def get_workspaces(
             selectinload(Workspace.lists)
         ).all()
     else:
-        # Los usuarios (incluyendo admins de empresa y regulares) ven:
-        # - Los espacios asociados a su company_id
-        # - O los espacios que son dueños
-        # - O los espacios donde son miembros explícitos
-        workspaces = db.query(Workspace).outerjoin(WorkspaceMember).filter(
+        # Los usuarios ven los espacios de su empresa, los que son dueños,
+        # o aquellos donde son miembros explícitos.
+        # Usamos subquery para evitar duplicados con el outerjoin de WorkspaceMember.
+        member_ws_ids = db.query(WorkspaceMember.workspace_id).filter(
+            WorkspaceMember.user_id == current_user.id
+        ).subquery()
+        
+        workspaces = db.query(Workspace).filter(
             or_(
                 Workspace.company_id == current_user.company_id,
                 Workspace.owner_id == current_user.id,
-                WorkspaceMember.user_id == current_user.id
+                Workspace.id.in_(member_ws_ids)
             )
         ).options(
             selectinload(Workspace.folders).selectinload(Folder.lists),
             selectinload(Workspace.lists)
         ).all()
 
-    # 2. Solo para modo local: si no hay espacios, crear un flujo local mínimo por defecto
+    # 2. Fallback local: si no hay espacios, crear estructura mínima
     if not workspaces and not is_global_superadmin(current_user):
         print("[PROJECTS] Creando estructura basica de proyectos local...")
         ws = Workspace(
@@ -7908,14 +7930,17 @@ async def get_workspaces(
         db.add(l)
         db.commit()
         
-        # Recargar para asegurar relaciones cargadas
         workspaces = [db.query(Workspace).options(
             selectinload(Workspace.folders).selectinload(Folder.lists),
             selectinload(Workspace.lists)
         ).filter(Workspace.id == ws.id).first()]
     
     results = []
+    seen_ids = set()
     for ws in workspaces:
+        if ws.id in seen_ids:
+            continue
+        seen_ids.add(ws.id)
         folders = []
         for f in ws.folders:
             lists = [{"id": l.id, "name": l.name} for l in f.lists]
