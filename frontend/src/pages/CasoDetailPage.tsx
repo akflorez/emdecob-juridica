@@ -96,6 +96,39 @@ export default function CasoDetailPage() {
     return Array.from(new Map(allLists.map(l => [l.id, l])).values());
   };
 
+  const getAllWorkspaceListsSorted = () => {
+    const allLists: Array<{ id: number; name: string; wsId: number; wsName: string; isCurrentWs: boolean }> = [];
+    workspaces.forEach(ws => {
+      const isCurrentWs = ws.id === selectedWorkspaceId;
+      const direct = ws.lists || [];
+      const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+      
+      direct.forEach(l => {
+        allLists.push({ id: l.id, name: l.name, wsId: ws.id, wsName: ws.name, isCurrentWs });
+      });
+      fromFolders.forEach(l => {
+        allLists.push({ id: l.id, name: l.name, wsId: ws.id, wsName: ws.name, isCurrentWs });
+      });
+    });
+
+    // Sort: Prioritize current workspace lists first, then alphabetically by workspace and list name
+    allLists.sort((a, b) => {
+      if (a.isCurrentWs && !b.isCurrentWs) return -1;
+      if (!a.isCurrentWs && b.isCurrentWs) return 1;
+      const wsComp = a.wsName.localeCompare(b.wsName);
+      if (wsComp !== 0) return wsComp;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Deduplicate by list ID
+    const seen = new Set();
+    return allLists.filter(item => {
+      const duplicate = seen.has(item.id);
+      seen.add(item.id);
+      return !duplicate;
+    });
+  };
+
   // Inline task creation form states
   const [showCreateTaskForm, setShowCreateTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -241,16 +274,25 @@ export default function CasoDetailPage() {
     getWorkspaces().then(wsList => {
       const uniqueWS = Array.from(new Map(wsList.map(ws => [ws.id, ws])).values());
       setWorkspaces(uniqueWS);
-      // Auto-seleccionar el primer workspace y su primera lista disponible (directa o en carpeta)
       if (uniqueWS.length > 0) {
-        const firstWS = uniqueWS[0];
-        setSelectedWorkspaceId(firstWS.id);
-        const directLists = firstWS.lists || [];
-        const folderLists = (firstWS.folders || []).flatMap(f => f.lists || []);
-        const allLists = [...directLists, ...folderLists];
-        const uniqueLists = Array.from(new Map(allLists.map(l => [l.id, l])).values());
-        if (uniqueLists.length > 0) {
-          setSelectedListId(uniqueLists[0].id);
+        // Encontrar la primera lista disponible en cualquier workspace
+        let defaultListId: number | undefined = undefined;
+        let defaultWsId = uniqueWS[0].id;
+        
+        for (const ws of uniqueWS) {
+          const direct = ws.lists || [];
+          const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+          const wsLists = [...direct, ...fromFolders];
+          if (wsLists.length > 0) {
+            defaultListId = wsLists[0].id;
+            defaultWsId = ws.id;
+            break;
+          }
+        }
+        
+        setSelectedWorkspaceId(defaultWsId);
+        if (defaultListId) {
+          setSelectedListId(defaultListId);
         }
       }
     }).catch(console.error);
@@ -557,12 +599,24 @@ export default function CasoDetailPage() {
       const currentWsId = selectedWorkspaceId ?? workspaces[0].id;
       setSelectedWorkspaceId(currentWsId);
       if (!selectedListId) {
-        const ws = workspaces.find(w => w.id === currentWsId) || workspaces[0];
-        const direct = ws.lists || [];
-        const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
-        const allLists = [...direct, ...fromFolders];
-        const unique = Array.from(new Map(allLists.map(l => [l.id, l])).values());
-        if (unique.length > 0) setSelectedListId(unique[0].id);
+        let defaultListId: number | undefined = undefined;
+        let defaultWsId = currentWsId;
+        
+        for (const ws of workspaces) {
+          const direct = ws.lists || [];
+          const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+          const wsLists = [...direct, ...fromFolders];
+          if (wsLists.length > 0) {
+            defaultListId = wsLists[0].id;
+            defaultWsId = ws.id;
+            break;
+          }
+        }
+        
+        setSelectedWorkspaceId(defaultWsId);
+        if (defaultListId) {
+          setSelectedListId(defaultListId);
+        }
       }
     }
 
@@ -584,14 +638,24 @@ export default function CasoDetailPage() {
     // Intentar auto-seleccionar lista si no hay una seleccionada
     let listIdToUse = selectedListId;
     if (!listIdToUse && workspaces.length > 0) {
-      const ws = workspaces.find(w => w.id === selectedWorkspaceId) || workspaces[0];
-      if (!selectedWorkspaceId) setSelectedWorkspaceId(ws.id);
-      const direct = ws.lists || [];
-      const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
-      const allLists = Array.from(new Map([...direct, ...fromFolders].map(l => [l.id, l])).values());
-      if (allLists.length > 0) {
-        listIdToUse = allLists[0].id;
+      let defaultListId: number | undefined = undefined;
+      let defaultWsId = selectedWorkspaceId ?? workspaces[0].id;
+      
+      for (const ws of workspaces) {
+        const direct = ws.lists || [];
+        const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
+        const wsLists = [...direct, ...fromFolders];
+        if (wsLists.length > 0) {
+          defaultListId = wsLists[0].id;
+          defaultWsId = ws.id;
+          break;
+        }
+      }
+      
+      listIdToUse = defaultListId;
+      if (listIdToUse) {
         setSelectedListId(listIdToUse);
+        setSelectedWorkspaceId(defaultWsId);
       }
     }
 
@@ -1279,10 +1343,10 @@ export default function CasoDetailPage() {
                             const ws = workspaces.find(w => w.id === wsId);
                             if (ws) {
                               const wsLists = getWorkspaceLists(ws);
-                              setSelectedListId(wsLists[0]?.id);
+                              if (wsLists.length > 0) {
+                                setSelectedListId(wsLists[0].id);
+                              }
                             }
-                          } else {
-                            setSelectedListId(undefined);
                           }
                         }}
                       >
@@ -1300,20 +1364,28 @@ export default function CasoDetailPage() {
                       <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
                       <Select 
                         value={selectedListId?.toString() || ''} 
-                        onValueChange={(v) => setSelectedListId(v ? parseInt(v) : undefined)}
-                        disabled={!selectedWorkspaceId}
+                        onValueChange={(v) => {
+                          const listId = v ? parseInt(v) : undefined;
+                          setSelectedListId(listId);
+                          if (listId) {
+                            const lists = getAllWorkspaceListsSorted();
+                            const matched = lists.find(l => l.id === listId);
+                            if (matched) {
+                              setSelectedWorkspaceId(matched.wsId);
+                            }
+                          }
+                        }}
                       >
                         <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
                           <SelectValue placeholder="Seleccionar Lista..." />
                         </SelectTrigger>
                         <SelectContent>
                           {(() => {
-                            if (!selectedWorkspaceId) return null;
-                            const ws = workspaces.find(w => w.id === selectedWorkspaceId);
-                            if (!ws) return null;
-                            const lists = getWorkspaceLists(ws);
+                            const lists = getAllWorkspaceListsSorted();
                             return lists.map(l => (
-                              <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>
+                              <SelectItem key={l.id} value={l.id.toString()}>
+                                {l.isCurrentWs ? l.name : `[${l.wsName}] ${l.name}`}
+                              </SelectItem>
                             ));
                           })()}
                         </SelectContent>
