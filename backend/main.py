@@ -5894,38 +5894,90 @@ async def import_excel(
         content = await file.read()
         is_csv = name.endswith(".csv")
 
-        # Registrar job de importacion
-        job = ExcelImportJob(
-            company_id=current_user.company_id,
-            usuario_username=current_user.username,
-            estado="pendiente",
-            total_filas=0
-        )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
+        # Parsear DataFrame
+        if is_csv:
+            df = pd.read_csv(BytesIO(content))
+        else:
+            df = pd.read_excel(BytesIO(content))
 
-        loop = asyncio.get_running_loop()
-        # Encolar procesamiento en segundo plano no bloqueante usando asyncio.to_thread
-        background_tasks.add_task(
-            lambda: asyncio.run(
-                asyncio.to_thread(
-                    process_excel_import_task,
-                    job.id,
-                    content,
-                    is_csv,
-                    current_user.company_id,
-                    current_user.id,
-                    loop
-                )
-            )
-        )
+        df.columns = [str(c).strip() for c in df.columns]
+        cols_lower = {c.lower(): c for c in df.columns}
+        rad_col = next((cols_lower[k] for k in ["radicado", "numero", "proceso"] if k in cols_lower), None)
+        ced_col = next((cols_lower[k] for k in ["cedula", "identificacion", "documento"] if k in cols_lower), None)
+        abo_col = next((cols_lower[k] for k in ["abogado", "apoderado"] if k in cols_lower), None)
+
+        if not rad_col:
+            raise HTTPException(400, "Falta la columna 'Radicado' en el archivo.")
+
+        # Limpiar y preparar filas
+        rows_to_process = []
+        for index, row in df.iterrows():
+            radicado = clean_str(row.get(rad_col))
+            if not radicado:
+                continue
+            cedula = str(row.get(ced_col)).strip() if ced_col and pd.notna(row.get(ced_col)) else None
+            abogado = str(row.get(abo_col)).strip() if abo_col and pd.notna(row.get(abo_col)) else None
+            
+            if cedula and (cedula.lower() == "nan" or cedula == ""): 
+                cedula = None
+            if abogado and (abogado.lower() == "nan" or abogado == ""): 
+                abogado = None
+                
+            rows_to_process.append((radicado, cedula, abogado))
+
+        created = 0
+        updated = 0
+        skipped = 0
+        comp_id = current_user.company_id
+
+        # Procesamos las filas
+        for radicado, cedula, abogado in rows_to_process:
+            try:
+                # Tenant isolation en busqueda de caso
+                q_case = db.query(Case).filter(Case.radicado == radicado)
+                if comp_id:
+                    q_case = q_case.filter(Case.company_id == comp_id)
+                existing_cases = q_case.all()
+                
+                if existing_cases:
+                    for c in existing_cases:
+                        c.cedula = cedula or c.cedula
+                        c.abogado = abogado or c.abogado
+                    updated += 1
+                else:
+                    # Limpiar de invalid_radicados si existia en la misma empresa
+                    q_inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado)
+                    if comp_id:
+                        q_inv = q_inv.filter(InvalidRadicado.company_id == comp_id)
+                    existing_invalid = q_inv.first()
+                    if existing_invalid:
+                        db.delete(existing_invalid)
+                        db.flush()
+
+                    db.add(Case(
+                        radicado=radicado, 
+                        cedula=cedula, 
+                        abogado=abogado, 
+                        user_id=current_user.id,
+                        company_id=comp_id
+                    ))
+                    created += 1
+            except Exception as row_err:
+                print(f"Error procesando fila {radicado}: {row_err}")
+                skipped += 1
+
+        db.commit()
+
+        # Disparar validacion asincrona en segundo plano si hay nuevos casos
+        if created > 0:
+            background_tasks.add_task(_background_validate_pendientes)
 
         return {
             "ok": True,
-            "job_id": job.id,
-            "estado": job.estado,
-            "message": "Importación iniciada en segundo plano."
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "invalid_count": 0
         }
     except HTTPException:
         raise
@@ -5933,7 +5985,7 @@ async def import_excel(
         db.rollback()
         import traceback
         traceback.print_exc()
-        raise HTTPException(500, f"Error iniciando importación: {str(e)}")
+        raise HTTPException(500, f"Error al importar archivo: {str(e)}")
 
 
 @app.get("/cases/import-excel/status/{job_id}")
