@@ -659,16 +659,8 @@ export default function CasoDetailPage() {
       }
     }
 
-    if (!listIdToUse) {
-      toast({ 
-        title: 'Selecciona una lista de destino', 
-        description: workspaces.length === 0 
-          ? 'No hay espacios de trabajo creados. Ve a Proyectos y crea un espacio con al menos una lista.'
-          : 'El espacio seleccionado no tiene listas. Por favor crea una lista en ese espacio.',
-        variant: 'destructive' 
-      });
-      return;
-    }
+    // Si no hay lista de destino asignada, el backend se encargará de buscar o crear 
+    // automáticamente una lista y un espacio por defecto ("Espacio Interno EMDECOB").
 
     try {
       // 1. Crear tarea padre
@@ -1331,67 +1323,73 @@ export default function CasoDetailPage() {
                   </div>
 
                   {/* Espacio y Lista de destino */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Espacio de Trabajo (ClickUp)</label>
-                      <Select 
-                        value={selectedWorkspaceId?.toString() || ''} 
-                        onValueChange={(v) => {
-                          const wsId = v ? parseInt(v) : undefined;
-                          setSelectedWorkspaceId(wsId);
-                          if (wsId) {
-                            const ws = workspaces.find(w => w.id === wsId);
-                            if (ws) {
-                              const wsLists = getWorkspaceLists(ws);
-                              if (wsLists.length > 0) {
-                                setSelectedListId(wsLists[0].id);
+                  {workspaces.length === 0 ? (
+                    <div className="p-3.5 bg-sky-500/10 border border-sky-500/25 rounded-2xl text-[11px] text-sky-700 dark:text-sky-300 font-semibold leading-relaxed">
+                      💡 No tienes espacios de trabajo o listas creadas. Se creará automáticamente un espacio interno ("Espacio Interno EMDECOB") y una lista de tareas para almacenar esta gestión de forma organizada.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Espacio de Trabajo (ClickUp)</label>
+                        <Select 
+                          value={selectedWorkspaceId?.toString() || ''} 
+                          onValueChange={(v) => {
+                            const wsId = v ? parseInt(v) : undefined;
+                            setSelectedWorkspaceId(wsId);
+                            if (wsId) {
+                              const ws = workspaces.find(w => w.id === wsId);
+                              if (ws) {
+                                const wsLists = getWorkspaceLists(ws);
+                                if (wsLists.length > 0) {
+                                  setSelectedListId(wsLists[0].id);
+                                }
                               }
                             }
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
-                          <SelectValue placeholder="Seleccionar Espacio..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {workspaces.map(ws => (
-                            <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
-                      <Select 
-                        value={selectedListId?.toString() || ''} 
-                        onValueChange={(v) => {
-                          const listId = v ? parseInt(v) : undefined;
-                          setSelectedListId(listId);
-                          if (listId) {
-                            const lists = getAllWorkspaceListsSorted();
-                            const matched = lists.find(l => l.id === listId);
-                            if (matched) {
-                              setSelectedWorkspaceId(matched.wsId);
+                          }}
+                        >
+                          <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                            <SelectValue placeholder="Seleccionar Espacio..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {workspaces.map(ws => (
+                              <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
+                        <Select 
+                          value={selectedListId?.toString() || ''} 
+                          onValueChange={(v) => {
+                            const listId = v ? parseInt(v) : undefined;
+                            setSelectedListId(listId);
+                            if (listId) {
+                              const lists = getAllWorkspaceListsSorted();
+                              const matched = lists.find(l => l.id === listId);
+                              if (matched) {
+                                setSelectedWorkspaceId(matched.wsId);
+                              }
                             }
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
-                          <SelectValue placeholder="Seleccionar Lista..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(() => {
-                            const lists = getAllWorkspaceListsSorted();
-                            return lists.map(l => (
-                              <SelectItem key={l.id} value={l.id.toString()}>
-                                {l.isCurrentWs ? l.name : `[${l.wsName}] ${l.name}`}
-                              </SelectItem>
-                            ));
-                          })()}
-                        </SelectContent>
-                      </Select>
+                          }}
+                        >
+                          <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                            <SelectValue placeholder="Seleccionar Lista..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(() => {
+                              const lists = getAllWorkspaceListsSorted();
+                              return lists.map(l => (
+                                <SelectItem key={l.id} value={l.id.toString()}>
+                                  {l.isCurrentWs ? l.name : `[${l.wsName}] ${l.name}`}
+                                </SelectItem>
+                              ));
+                            })()}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Gestiones técnicas */}
                   <div className="space-y-3 pt-2">

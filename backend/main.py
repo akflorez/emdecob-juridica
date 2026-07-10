@@ -8498,37 +8498,7 @@ async def create_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lid = t_data.list_id
-    list_exists = False
-    if lid is not None:
-        list_exists = db.query(ProjectList).filter(ProjectList.id == lid).count() > 0
-        
-    if not list_exists:
-        # Intentar buscar lista del abogado del caso
-        if t_data.case_id:
-            case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
-            if case_obj and case_obj.abogado:
-                # Buscar lista que coincida con el nombre del abogado
-                lawyer_list = db.query(ProjectList).filter(ProjectList.name.ilike(f"%{case_obj.abogado}%")).first()
-                if lawyer_list:
-                    lid = lawyer_list.id
-                    list_exists = True
-                    print(f" [TASK] Reasignando list_id invalido ({t_data.list_id}) a la lista del abogado: {lawyer_list.name} (ID {lid})")
-        
-        if not list_exists:
-            # Buscar "BANDEJA DE ENTRADA" o similar
-            default_list = db.query(ProjectList).filter(ProjectList.name.ilike("%bandeja%")).first()
-            if not default_list:
-                default_list = db.query(ProjectList).first()
-            
-            if default_list:
-                lid = default_list.id
-                list_exists = True
-                print(f" [TASK] Reasignando list_id invalido ({t_data.list_id}) a la lista por defecto: {default_list.name} (ID {lid})")
-            else:
-                raise HTTPException(status_code=400, detail="No existe ninguna lista de proyectos en la base de datos para asignar la tarea.")
-
-    # Validaciones multiempresa al crear tarea
+    # Determinar el company_id de la tarea
     comp_id = current_user.company_id
     if t_data.case_id:
         case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
@@ -8536,10 +8506,91 @@ async def create_task(
             raise HTTPException(status_code=404, detail="Caso no encontrado")
         if not is_global_superadmin(current_user) and case_obj.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="No tienes acceso a este caso.")
-        comp_id = case_obj.company_id
+        comp_id = case_obj.company_id or comp_id
     else:
         if not is_global_superadmin(current_user) and current_user.company_id is None:
             raise HTTPException(status_code=403, detail="No se pudo determinar la empresa del usuario.")
+
+    lid = t_data.list_id
+    list_exists = False
+    
+    # 1. Si se especificó una lista, verificar que exista y pertenezca a la empresa del usuario
+    if lid is not None:
+        if is_global_superadmin(current_user):
+            list_exists = db.query(ProjectList).filter(ProjectList.id == lid).count() > 0
+        else:
+            list_exists = db.query(ProjectList).join(Workspace).filter(
+                ProjectList.id == lid,
+                Workspace.company_id == comp_id
+            ).count() > 0
+        
+    if not list_exists:
+        # 2. Intentar buscar lista del abogado del caso dentro de la misma empresa
+        if t_data.case_id:
+            case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
+            if case_obj and case_obj.abogado:
+                lawyer_list = db.query(ProjectList).join(Workspace).filter(
+                    Workspace.company_id == comp_id,
+                    ProjectList.name.ilike(f"%{case_obj.abogado}%")
+                ).first()
+                if lawyer_list:
+                    lid = lawyer_list.id
+                    list_exists = True
+                    print(f" [TASK] Reasignando list_id invalido a la lista del abogado de la empresa: {lawyer_list.name} (ID {lid})")
+        
+        # 3. Intentar buscar "BANDEJA DE ENTRADA" o cualquier lista existente de la misma empresa
+        if not list_exists:
+            default_list = db.query(ProjectList).join(Workspace).filter(
+                Workspace.company_id == comp_id,
+                ProjectList.name.ilike("%bandeja%")
+            ).first()
+            if not default_list:
+                default_list = db.query(ProjectList).join(Workspace).filter(
+                    Workspace.company_id == comp_id
+                ).first()
+            
+            if default_list:
+                lid = default_list.id
+                list_exists = True
+                print(f" [TASK] Reasignando list_id a lista por defecto de la empresa: {default_list.name} (ID {lid})")
+            
+        # 4. Si la empresa no tiene NINGÚN espacio o lista de trabajo, creamos uno al vuelo automáticamente
+        if not list_exists:
+            print(f" [TASK] Creando Workspace y List por defecto al vuelo para la empresa {comp_id}...")
+            try:
+                ws = Workspace(
+                    name="Espacio Interno EMDECOB", 
+                    visibility="TEAM_COLLABORATION", 
+                    owner_id=current_user.id, 
+                    company_id=comp_id
+                )
+                db.add(ws)
+                db.commit()
+                db.refresh(ws)
+                
+                f = Folder(name="Proyectos y Casos", workspace_id=ws.id)
+                db.add(f)
+                db.commit()
+                db.refresh(f)
+                
+                l = ProjectList(name="Tareas Pendientes", folder_id=f.id, workspace_id=ws.id)
+                db.add(l)
+                db.commit()
+                db.refresh(l)
+                
+                lid = l.id
+                list_exists = True
+                print(f" [TASK] Creado y asignado list_id por defecto ({lid}) exitosamente.")
+            except Exception as e:
+                db.rollback()
+                print(f"[ERROR] Auto-creando workspace y list en create_task: {str(e)}")
+                # Si falla la creación, intentar usar cualquier lista global como último recurso
+                fallback_list = db.query(ProjectList).first()
+                if fallback_list:
+                    lid = fallback_list.id
+                    list_exists = True
+                else:
+                    raise HTTPException(status_code=400, detail=f"No se pudo crear ni asignar una lista para la tarea: {str(e)}")
 
     print(f"[DEBUG] Creating task: title={t_data.title}, parent_id={t_data.parent_id}, case_id={t_data.case_id}")
     try:
