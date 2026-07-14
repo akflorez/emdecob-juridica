@@ -3099,10 +3099,11 @@ def login(data: LoginRequest):
             # Validar suspensión de la empresa (Excepto Superadmin)
             if user_db.company_id is not None and user_db.company:
                 if user_db.company.estado in ["suspendida_pago", "inactiva", "vencida"]:
+                    db.close()
                     raise HTTPException(status_code=403, detail="Tu empresa se encuentra suspendida. Por favor contacta al administrador.")
                     
             token = create_access_token(user_db.id)
-            return {
+            res_payload = {
                 "token": token,
                 "access_token": token, # Estándar OAuth2
                 "token_type": "bearer",
@@ -3119,10 +3120,14 @@ def login(data: LoginRequest):
                     "clickup_api_token": getattr(user_db, 'clickup_api_token', None),
                 }
             }
+            db.close()
+            return res_payload
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"? [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
+        print(f"⚠️ [AUTH] Error al consultar DB: {e}. Intentando fallback hardcoded...")
     
-    # 3. Fallback Hardcoded si la DB fall? o no encontr? al usuario
+    # 3. Fallback Hardcoded si la DB falló o no encontró al usuario
     if hc and data.password == hc["password"]:
         # Si el usuario existe en DB, intentamos actualizar su hash (silenciosamente)
         user_id = hc["id"]
@@ -3134,6 +3139,9 @@ def login(data: LoginRequest):
             except:
                 pass
         
+        if db:
+            db.close()
+            
         token = create_access_token(user_id)
         return {
             "access_token": token,
@@ -3155,7 +3163,7 @@ def login(data: LoginRequest):
     if db:
         db.close()
     
-    raise HTTPException(status_code=401, detail="Usuario o contrase?a incorrectos")
+    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
 
 @app.post("/auth/logout")
