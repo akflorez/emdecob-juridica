@@ -833,7 +833,12 @@ async def _pending_validation_loop():
                                     inv.updated_at = now_colombia()
                                 else:
                                     db_run.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
-                                print(f"    [pending-loop] No encontrado (reintentar): {radicado}")
+                                
+                                # Eliminar el caso de la tabla cases para que no quede como pendiente
+                                case_to_del = db_run.query(Case).filter(Case.radicado == radicado, Case.company_id == company_id).first()
+                                if case_to_del:
+                                    db_run.delete(case_to_del)
+                                print(f"    [pending-loop] No encontrado (movido a invalidos): {radicado}")
                             db_run.commit()
                         except Exception as run_err:
                             db_run.rollback()
@@ -3660,6 +3665,7 @@ async def run_auto_refresh_now():
                             inv.updated_at = now_colombia()
                         else:
                             db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
+                        db.delete(c)
                         pending_result["not_found"] += 1
                     db.flush()
                 except Exception as e:
@@ -4600,6 +4606,7 @@ async def validate_batch(
                             inv.updated_at = now_colombia()
                         else:
                             _db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
+                        _db.delete(c)
                     _db.flush()
                 except Exception as e:
                     print(f"[validate-batch] Error en {c.radicado}: {e}")
@@ -4649,6 +4656,7 @@ async def validate_selected(data: ValidateSelectedRequest, db: Session = Depends
                     inv.updated_at = now_colombia()
                 else:
                     db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
+                db.delete(c)
         except Exception:
             pass
 
@@ -5719,6 +5727,11 @@ async def _background_validate_pendientes():
                                 inv.updated_at = now_colombia()
                             else:
                                 db_run.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                            
+                            # Eliminar el caso de la tabla cases para que no quede como pendiente
+                            case_to_del = db_run.query(Case).filter(Case.radicado == radicado, Case.company_id == company_id).first()
+                            if case_to_del:
+                                db_run.delete(case_to_del)
                         db_run.commit()
                     except Exception as run_err:
                         db_run.rollback()
