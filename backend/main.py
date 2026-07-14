@@ -3646,32 +3646,44 @@ async def run_auto_refresh_now():
         # 2. Validar pendientes (juzgado is None)
         pending_result = {"validated": 0, "not_found": 0}
         try:
-            db = SessionLocal()
-            pendientes = db.query(Case).filter(Case.juzgado.is_(None)).limit(2).all()
-            for i, c in enumerate(pendientes):
+            db_read = SessionLocal()
+            pendientes = db_read.query(Case.id, Case.radicado, Case.company_id).filter(Case.juzgado.is_(None)).limit(2).all()
+            pendientes_list = [(p.id, p.radicado, p.company_id) for p in pendientes]
+            db_read.close()
+
+            for i, (case_id, radicado, company_id) in enumerate(pendientes_list):
                 try:
                     if i > 0:
                         await asyncio.sleep(0.5)
-                    r = await validar_radicado_completo(c.radicado, db, is_new_import=True)
-                    if r["found"]:
-                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                        if inv:
-                            db.delete(inv)
-                        pending_result["validated"] += 1
-                    else:
-                        inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                        if inv:
-                            inv.intentos += 1
-                            inv.updated_at = now_colombia()
+                    
+                    db_write = SessionLocal()
+                    try:
+                        r = await validar_radicado_completo(radicado, db_write, is_new_import=True)
+                        if r["found"]:
+                            inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                            if inv:
+                                db_write.delete(inv)
+                            pending_result["validated"] += 1
                         else:
-                            db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
-                        db.delete(c)
-                        pending_result["not_found"] += 1
-                    db.flush()
+                            inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                            if inv:
+                                inv.intentos += 1
+                                inv.updated_at = now_colombia()
+                            else:
+                                db_write.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                            
+                            c_del = db_write.query(Case).filter(Case.id == case_id).first()
+                            if c_del:
+                                db_write.delete(c_del)
+                            pending_result["not_found"] += 1
+                        db_write.commit()
+                    except Exception as e:
+                        db_write.rollback()
+                        print(f" [cron-pending] Error en {radicado}: {e}")
+                    finally:
+                        db_write.close()
                 except Exception as e:
-                    print(f" [cron-pending] Error en {c.radicado}: {e}")
-            db.commit()
-            db.close()
+                    print(f" [cron-pending] Error en bucle de item: {e}")
         except Exception as e:
             print(f" [cron-pending] Error general: {e}")
 
@@ -4581,41 +4593,59 @@ async def validate_batch(
     batch_ids = [c.id for c in q.limit(batch_size).all()]
 
     async def _run_batch(ids):
-        _db = SessionLocal()
         validated = 0
         not_found = 0
-        try:
-            for i, case_id in enumerate(ids):
-                c = _db.query(Case).filter(Case.id == case_id).first()
-                if not c:
-                    continue
+        for i, case_id in enumerate(ids):
+            radicado = None
+            company_id = None
+            db_read = SessionLocal()
+            try:
+                c = db_read.query(Case).filter(Case.id == case_id).first()
+                if c:
+                    radicado = c.radicado
+                    company_id = c.company_id
+            except Exception as e:
+                print(f"[validate-batch] Error al leer caso {case_id}: {e}")
+            finally:
+                db_read.close()
+
+            if not radicado:
+                continue
+
+            try:
+                if i > 0:
+                    await delay_between_requests(0.5, 1.0)
+                
+                db_write = SessionLocal()
                 try:
-                    if i > 0:
-                        await delay_between_requests(0.5, 1.0)
-                    result = await validar_radicado_completo(c.radicado, _db, is_new_import=True)
+                    result = await validar_radicado_completo(radicado, db_write, is_new_import=True)
                     if result["found"]:
-                        inv = _db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
                         if inv:
-                            _db.delete(inv)
+                            db_write.delete(inv)
                         validated += 1
                     else:
                         not_found += 1
-                        inv = _db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
+                        inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
                         if inv:
                             inv.intentos += 1
                             inv.updated_at = now_colombia()
                         else:
-                            _db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
-                        _db.delete(c)
-                    _db.flush()
+                            db_write.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                        
+                        c_del = db_write.query(Case).filter(Case.id == case_id).first()
+                        if c_del:
+                            db_write.delete(c_del)
+                    db_write.commit()
                 except Exception as e:
-                    print(f"[validate-batch] Error en {c.radicado}: {e}")
-            _db.commit()
-            print(f"[validate-batch] Lote completado: {validated} validados, {not_found} no encontrados")
-        except Exception as e:
-            print(f"[validate-batch] Error general: {e}")
-        finally:
-            _db.close()
+                    db_write.rollback()
+                    print(f"[validate-batch] Error al validar {radicado}: {e}")
+                finally:
+                    db_write.close()
+            except Exception as e:
+                print(f"[validate-batch] Error general en item: {e}")
+
+        print(f"[validate-batch] Lote completado: {validated} validados, {not_found} no encontrados")
 
     background_tasks.add_task(_run_batch, batch_ids)
 
@@ -4632,35 +4662,48 @@ async def validate_selected(data: ValidateSelectedRequest, db: Session = Depends
     if not radicados:
         raise HTTPException(400, "No se enviaron radicados")
 
-    casos = db.query(Case).filter(Case.radicado.in_(radicados), Case.juzgado.is_(None)).all()
+    casos = db.query(Case.id, Case.radicado, Case.company_id).filter(Case.radicado.in_(radicados), Case.juzgado.is_(None)).all()
+    case_infos = [(c.id, c.radicado, c.company_id) for c in casos]
+    db.close()
+
     validated = 0
     not_found = 0
 
-    for i, c in enumerate(casos):
+    for i, (case_id, radicado, company_id) in enumerate(case_infos):
         try:
             if i > 0:
                 await delay_between_requests(0.3, 0.6)
 
-            result = await validar_radicado_completo(c.radicado, db, is_new_import=True)
+            db_write = SessionLocal()
+            try:
+                result = await validar_radicado_completo(radicado, db_write, is_new_import=True)
 
-            if result["found"]:
-                inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                if inv:
-                    db.delete(inv)
-                validated += 1
-            else:
-                not_found += 1
-                inv = db.query(InvalidRadicado).filter(InvalidRadicado.radicado == c.radicado).first()
-                if inv:
-                    inv.intentos += 1
-                    inv.updated_at = now_colombia()
+                if result["found"]:
+                    inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                    if inv:
+                        db_write.delete(inv)
+                    validated += 1
                 else:
-                    db.add(InvalidRadicado(radicado=c.radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=c.company_id))
-                db.delete(c)
+                    not_found += 1
+                    inv = db_write.query(InvalidRadicado).filter(InvalidRadicado.radicado == radicado).first()
+                    if inv:
+                        inv.intentos += 1
+                        inv.updated_at = now_colombia()
+                    else:
+                        db_write.add(InvalidRadicado(radicado=radicado, motivo="No encontrado en Rama Judicial", intentos=1, company_id=company_id))
+                    
+                    c_del = db_write.query(Case).filter(Case.id == case_id).first()
+                    if c_del:
+                        db_write.delete(c_del)
+                db_write.commit()
+            except Exception as e:
+                db_write.rollback()
+                print(f"[validate-selected] Error en {radicado}: {e}")
+            finally:
+                db_write.close()
         except Exception:
             pass
 
-    db.commit()
     return {"ok": True, "validated": validated, "not_found": not_found, "requested": len(radicados)}
 
 
