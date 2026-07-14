@@ -224,6 +224,19 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
     }
   };
 
+  const toggleSubtaskTag = async (st: any, tagName: string) => {
+    if (!displayTask) return;
+    const currentTags = (st.tags || []).map((t: any) => typeof t === 'string' ? t : t.name);
+    let newTags = currentTags.includes(tagName) ? currentTags.filter((t: any) => t !== tagName) : [...currentTags, tagName];
+    try {
+      await updateTask(st.id, { tags: newTags });
+      await refreshTask();
+      if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+    } catch (error) {
+      console.error("Error toggling subtask tag:", error);
+    }
+  };
+
   const handleAddComment = async () => {
     if (!displayTask || !newComment.trim()) return;
     try {
@@ -517,8 +530,9 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                       {isSubtasksOpen && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                           <div className="bg-card/10 rounded-[2rem] border border-border/50 overflow-hidden shadow-2xl">
-                             <div className="grid grid-cols-[1fr_180px_120px_160px] gap-8 px-10 py-4 border-b border-border/50 text-[10px] font-black uppercase text-muted-foreground tracking-widest bg-muted/20">
+                             <div className="grid grid-cols-[1fr_120px_180px_100px_140px] gap-6 px-10 py-4 border-b border-border/50 text-[10px] font-black uppercase text-muted-foreground tracking-widest bg-muted/20">
                                 <div>Actividad</div>
+                                <div className="text-center">Etiquetas</div>
                                 <div className="text-center">Responsable</div>
                                 <div className="text-center">Prioridad</div>
                                 <div className="text-right">Vencimiento</div>
@@ -526,31 +540,120 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                              <div className="divide-y divide-border/50">
                                 {displayTask.subtasks?.length ? (
                                    displayTask.subtasks.map(st => (
-                                     <div key={st.id} className="grid grid-cols-[1fr_180px_120px_160px] gap-8 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary">
+                                     <div key={st.id} className="grid grid-cols-[1fr_120px_180px_100px_140px] gap-6 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary items-center">
                                         <div className="flex items-center gap-5 text-foreground">
                                             <div 
-                                              className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all hover:border-primary cursor-pointer", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}
+                                              className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all hover:border-primary cursor-pointer flex-shrink-0", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}
                                               onClick={(e) => toggleSubtaskStatus(st, e)}
                                             >
                                               {['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3 w-3 text-white" />}
                                            </div>
                                            <span className={cn("font-bold tracking-tight truncate", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
                                         </div>
-                                        <div className="flex justify-center items-center">
-                                         <div className="flex items-center gap-3">
-                                            <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-black text-primary shadow-lg group-hover:bg-primary group-hover:text-primary-foreground transition-all flex-shrink-0">
-                                               {st.assignee_name?.[0] || 'U'}
-                                            </div>
-                                            <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground transition-colors uppercase tracking-tighter truncate max-w-[140px]">
-                                               {st.assignee_name || 'Sin asignar'}
-                                            </span>
-                                         </div>
+                                        <div className="flex justify-center items-center" onClick={(e) => e.stopPropagation()}>
+                                           <Popover>
+                                              <PopoverTrigger asChild>
+                                                 <div className="flex flex-wrap gap-1 items-center justify-center cursor-pointer min-h-[30px] w-full hover:bg-muted/30 rounded-xl p-1 transition-all border border-border/20">
+                                                    {st.tags?.length ? (
+                                                      st.tags.map((t: any) => (
+                                                        <span 
+                                                          key={t.name} 
+                                                          style={{ backgroundColor: t.color || '#3b82f6' }} 
+                                                          className="text-[8px] font-extrabold text-white px-1.5 py-0.5 rounded shadow-sm uppercase tracking-tighter"
+                                                        >
+                                                           {t.name}
+                                                        </span>
+                                                      ))
+                                                    ) : (
+                                                      <span className="text-[9px] text-muted-foreground/30 font-black tracking-widest uppercase hover:text-primary transition-colors">+ TAG</span>
+                                                    )}
+                                                 </div>
+                                              </PopoverTrigger>
+                                              <PopoverContent className="w-64 bg-popover border-border/80 rounded-2xl p-4 shadow-2xl">
+                                                 <ScrollArea className="h-48">
+                                                    <div className="space-y-1.5">
+                                                       {allTags.map(t => (
+                                                         <div 
+                                                           key={t.id} 
+                                                           className="flex items-center justify-between p-1.5 hover:bg-muted/50 rounded-lg cursor-pointer transition-all border border-transparent" 
+                                                           onClick={() => toggleSubtaskTag(st, t.name)}
+                                                         >
+                                                            <div className="flex items-center gap-2">
+                                                               <div className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color || '#3b82f6' }} />
+                                                               <span className="text-[11px] font-bold text-foreground">{t.name}</span>
+                                                            </div>
+                                                            {st.tags?.some((gt: any) => gt.name === t.name) && <Check className="h-4 w-4 text-[#2da44e]" />}
+                                                         </div>
+                                                       ))}
+                                                    </div>
+                                                 </ScrollArea>
+                                              </PopoverContent>
+                                           </Popover>
                                         </div>
-                                        <div className="flex justify-center items-center">
-                                           <Flag className={`h-5 w-5 ${st.priority === 'high' ? 'text-red-500' : 'text-muted-foreground/30'}`} />
+                                        <div className="flex justify-center items-center" onClick={(e) => e.stopPropagation()}>
+                                           <select
+                                             className="bg-transparent border-none text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-tighter cursor-pointer max-w-[150px] focus:ring-0 p-0 text-center"
+                                             value={st.assignee_id?.toString() || ''}
+                                             onChange={async (e) => {
+                                               const val = e.target.value;
+                                               const newAssigneeId = val ? parseInt(val) : null;
+                                               try {
+                                                 await updateTask(st.id, { assignee_id: newAssigneeId });
+                                                 await refreshTask();
+                                                 if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+                                               } catch (err) {
+                                                 console.error("Error updating subtask assignee:", err);
+                                               }
+                                             }}
+                                           >
+                                             <option value="" className="bg-popover text-foreground">Sin asignar</option>
+                                             {users.map(u => (
+                                               <option key={u.id} value={u.id.toString()} className="bg-popover text-foreground">
+                                                 {u.nombre || u.username}
+                                               </option>
+                                             ))}
+                                           </select>
                                         </div>
-                                        <div className="text-right text-[12px] font-black text-primary tracking-tighter uppercase opacity-80 group-hover:opacity-100">
-                                           {st.due_date ? format(parseISO(st.due_date.toString()), 'd MMM, yyyy') : '-'}
+                                        <div 
+                                           className="flex justify-center items-center cursor-pointer hover:scale-110 active:scale-95 transition-all"
+                                           onClick={async (e) => {
+                                             e.stopPropagation();
+                                             const priorities = ['low', 'normal', 'high', 'urgent'];
+                                             const currentIdx = priorities.indexOf(st.priority?.toLowerCase() || 'normal');
+                                             const nextPriority = priorities[(currentIdx + 1) % priorities.length];
+                                             try {
+                                               await updateTask(st.id, { priority: nextPriority });
+                                               await refreshTask();
+                                               if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+                                             } catch (err) {
+                                               console.error("Error updating subtask priority:", err);
+                                             }
+                                           }}
+                                        >
+                                           <Flag className={cn(
+                                             "h-5 w-5 transition-all",
+                                             st.priority === 'urgent' && 'text-purple-500 fill-purple-500',
+                                             st.priority === 'high' && 'text-red-500 fill-red-500',
+                                             st.priority === 'normal' && 'text-blue-500 fill-blue-500',
+                                             (st.priority === 'low' || !st.priority) && 'text-muted-foreground/30'
+                                           )} />
+                                        </div>
+                                        <div className="flex justify-end items-center" onClick={(e) => e.stopPropagation()}>
+                                           <input 
+                                             type="date"
+                                             className="bg-transparent border-none text-right text-[11px] font-bold text-primary tracking-tighter uppercase focus:ring-0 p-0 cursor-pointer w-[125px]"
+                                             value={st.due_date ? format(parseISO(st.due_date.toString()), 'yyyy-MM-dd') : ''}
+                                             onChange={async (e) => {
+                                               try {
+                                                 const newDate = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                 await updateTask(st.id, { due_date: newDate });
+                                                 await refreshTask();
+                                                 if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+                                               } catch (err) {
+                                                 console.error("Error updating subtask due date:", err);
+                                               }
+                                             }}
+                                           />
                                         </div>
                                      </div>
                                    ))

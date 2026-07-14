@@ -8487,7 +8487,7 @@ async def get_task_detail(
         from datetime import datetime
         
         task = db.query(Task).options(
-            selectinload(Task.subtasks),
+            selectinload(Task.subtasks).selectinload(Task.tags),
             selectinload(Task.checklists),
             selectinload(Task.comments),
             selectinload(Task.tags),
@@ -8546,8 +8546,10 @@ async def get_task_detail(
                     "status": st.status,
                     "priority": st.priority,
                     "due_date": fmt_dt(st.due_date),
+                    "assignee_id": st.assignee_id,
                     "assignee_name": st.assignee_name,
-                    "parent_id": st.parent_id
+                    "parent_id": st.parent_id,
+                    "tags": [{"name": tg.name, "color": tg.color} for tg in st.tags]
                 } for st in task.subtasks
             ],
             "comments": [
@@ -8960,6 +8962,8 @@ async def update_task(
         if t_data.title is not None: task.title = t_data.title
         if t_data.description is not None: task.description = t_data.description
         if t_data.status is not None: task.status = t_data.status.upper()
+        if t_data.priority is not None: task.priority = t_data.priority
+        if t_data.due_date is not None: task.due_date = t_data.due_date
         if hasattr(t_data, 'case_id') and t_data.case_id is not None:
             case_obj = db.query(Case).filter(Case.id == t_data.case_id).first()
             if not case_obj:
