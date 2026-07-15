@@ -3,13 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { 
   LayoutDashboard, FolderPlus, ListPlus, Plus, RefreshCw, Search, 
   Filter, MoreVertical, ChevronRight, MessageSquare, 
-  Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock,
+  Calendar as CalendarIcon, User as UserIcon, CheckCircle2, Clock, Check,
   LayoutGrid, CalendarDays, List as ListIcon, Zap, PlayCircle, Lock,
   ChevronDown, Calendar, PieChart as PieIcon, BarChart as BarIcon, 
   TrendingUp, Users, Activity, Flag, Settings, Layers, Users2, Database,
   PanelLeftClose, PanelLeftOpen, AlertTriangle, CalendarRange, ArrowLeft,
   ChevronLeft, Trash2
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,6 +91,7 @@ export default function ProjectDashboardPage() {
   const [creationModal, setCreationModal] = useState<{ open: boolean, mode: string, title: string }>({ open: false, mode: '', title: '' });
   const [newItemName, setNewItemName] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [configData, setConfigData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -342,10 +344,14 @@ export default function ProjectDashboardPage() {
 
   const handleActionClick = (mode: string, title: string) => {
     setCreationModal({ open: true, mode, title });
+    setNewItemName('');
+    setSelectedUserId(null);
+    setSelectedUserIds([]);
   };
 
   const handleCreateConfirm = async () => {
-    if (!newItemName.trim() || isSubmitting) return;
+    const isNameRequired = creationModal.mode !== 'equipo' && creationModal.mode !== 'pref';
+    if ((isNameRequired && !newItemName.trim()) || isSubmitting) return;
     setIsSubmitting(true);
     try {
       if (creationModal.mode === 'espacio') {
@@ -369,8 +375,16 @@ export default function ProjectDashboardPage() {
           setSelectedFolderId(null);
           setSelectedListId(null);
         }
-      } else if (creationModal.mode === 'equipo' && selectedWorkspaceId && selectedUserId) {
-        await addWorkspaceMember(selectedWorkspaceId, selectedUserId);
+      } else if (creationModal.mode === 'equipo' && selectedWorkspaceId) {
+        const uids = selectedUserIds.length > 0 ? selectedUserIds : (selectedUserId ? [selectedUserId] : []);
+        if (uids.length === 0) {
+          toast.error("Seleccione al menos un miembro del equipo");
+          setIsSubmitting(false);
+          return;
+        }
+        for (const uid of uids) {
+          await addWorkspaceMember(selectedWorkspaceId, uid);
+        }
       } else if (creationModal.mode === 'pref' && configData) {
         await updateNotificationConfig(configData);
       } else if (creationModal.mode === 'carpeta' && selectedWorkspaceId) {
@@ -452,10 +466,15 @@ export default function ProjectDashboardPage() {
         });
       }
       
-      toast.success(`${creationModal.title} "${newItemName}" creada con éxito`);
+      const successName = creationModal.mode === 'equipo' 
+        ? `${selectedUserIds.length > 0 ? selectedUserIds.length + ' miembros' : 'miembro'}`
+        : `"${newItemName}"`;
+      toast.success(`${creationModal.title} ${successName} procesado con éxito`);
       setCreationModal({ open: false, mode: '', title: '' });
       setNewItemName('');
       setNewDueDate('');
+      setSelectedUserId(null);
+      setSelectedUserIds([]);
       await fetchInitialData(true);
     } catch (error: any) {
       toast.error("Error al crear el elemento", { description: error.message });
@@ -966,20 +985,51 @@ export default function ProjectDashboardPage() {
              )}
 
              {creationModal.mode === 'equipo' && (
-               <div className="space-y-2">
-                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Seleccionar Miembro</label>
-                 <Select onValueChange={(val) => setSelectedUserId(parseInt(val))}>
-                   <SelectTrigger className="bg-accent/30 border-border/40 rounded-xl h-12 text-sm font-bold">
-                     <SelectValue placeholder="Seleccione un usuario" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {users.map(u => (
-                       <SelectItem key={u.id} value={u.id.toString()}>{u.nombre || u.username}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
-             )}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mb-1 block">Seleccionar Miembros del Equipo</label>
+                  <div className="max-h-[220px] overflow-y-auto pr-2 space-y-2 divide-y divide-border/20 border border-border/40 rounded-2xl bg-accent/10 p-3">
+                    {users.map(u => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      const initials = (u.nombre || u.username || 'U').substring(0, 2).toUpperCase();
+                      return (
+                        <div 
+                          key={u.id} 
+                          onClick={() => {
+                            setSelectedUserIds(prev => 
+                              prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                            );
+                          }}
+                          className={cn(
+                            "flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all hover:bg-accent/40 select-none",
+                            isSelected ? "bg-primary/10 border-primary/20" : "border-transparent"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-black text-primary shadow-sm">
+                              {initials}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-foreground">{u.nombre || u.username}</span>
+                              <span className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">{u.role || 'ABOGADO'}</span>
+                            </div>
+                          </div>
+                          <div className={cn(
+                            "h-5 w-5 rounded-md border flex items-center justify-center transition-all",
+                            isSelected ? "bg-primary border-primary text-primary-foreground scale-110 shadow-lg shadow-primary/20" : "border-muted-foreground/30 hover:border-primary/50"
+                          )}>
+                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {selectedUserIds.length > 0 && (
+                    <p className="text-[9px] text-primary font-bold uppercase tracking-wider text-right animate-pulse">
+                      {selectedUserIds.length} {selectedUserIds.length === 1 ? 'usuario seleccionado' : 'usuarios seleccionados'}
+                    </p>
+                  )}
+                </div>
+              )}
 
              {creationModal.mode === 'pref' && (
                <div className="space-y-4">
@@ -1015,7 +1065,15 @@ export default function ProjectDashboardPage() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreationModal({ ...creationModal, open: false })} className="rounded-xl font-bold">Cancelar</Button>
-            <Button onClick={handleCreateConfirm} disabled={!newItemName || isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase tracking-widest px-8">
+            <Button 
+              onClick={handleCreateConfirm} 
+              disabled={
+                isSubmitting || 
+                (creationModal.mode !== 'equipo' && creationModal.mode !== 'pref' && !newItemName.trim()) ||
+                (creationModal.mode === 'equipo' && selectedUserIds.length === 0)
+              } 
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase tracking-widest px-8"
+            >
               {isSubmitting ? "Creando..." : "Crear Ahora"}
             </Button>
           </DialogFooter>
