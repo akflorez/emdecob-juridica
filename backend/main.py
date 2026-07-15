@@ -3073,6 +3073,48 @@ async def api_test_rama_connection():
         }
 
 
+@app.get("/auth/sync-santiago")
+def sync_santiago(db: Session = Depends(get_db)):
+    try:
+        # Get juricob details
+        juricob = db.query(User).filter(User.username == "juricob").first()
+        santiago = db.query(User).filter(User.username == "santiago.quintero").first()
+        if not santiago:
+            santiago = User(
+                username="santiago.quintero",
+                nombre="SANTIAGO QUINTERO",
+                hashed_password=_hash_password("251016"),
+                role="USER",
+                cases_view_scope="ALL",
+                company_id=juricob.company_id if juricob else 1,
+                is_active=True
+            )
+            db.add(santiago)
+            db.commit()
+            db.refresh(santiago)
+            return {"status": "created", "details": f"Santiago created with password 251016 and matched to juricob settings (company={santiago.company_id}, role={santiago.role}, scope={santiago.cases_view_scope})"}
+        else:
+            if juricob:
+                santiago.company_id = juricob.company_id
+                santiago.cases_view_scope = juricob.cases_view_scope
+                santiago.role = juricob.role
+                santiago.is_admin = juricob.is_admin
+                santiago.is_superadmin = juricob.is_superadmin
+                santiago.is_active = True
+                santiago.hashed_password = _hash_password("251016")
+                db.commit()
+                return {"status": "updated", "details": f"Santiago updated to match juricob settings (company={santiago.company_id}, role={santiago.role}, scope={santiago.cases_view_scope})"}
+            else:
+                santiago.cases_view_scope = "ALL"
+                santiago.role = "USER"
+                santiago.is_active = True
+                santiago.hashed_password = _hash_password("251016")
+                db.commit()
+                return {"status": "updated_without_juricob", "details": f"Santiago updated to scope ALL, role USER, password 251016"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # =========================
 # AUTH  LOGIN / LOGOUT / USUARIOS
 # =========================
