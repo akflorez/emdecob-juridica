@@ -28,6 +28,7 @@ import {
   getDocumentosActuacion,
   createTask,
   createList,
+  createWorkspace,
   getCaseSourcesHistory,
   buscarNuevamente,
   markCaseRead,
@@ -626,10 +627,17 @@ export default function CasoDetailPage() {
         toast({ title: 'Error', description: 'Por favor escribe el nombre de la nueva lista.', variant: 'destructive' });
         return;
       }
-      const wsId = selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : undefined);
+      let wsId = selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : undefined);
       if (!wsId) {
-        toast({ title: 'Error', description: 'No se pudo determinar el espacio de trabajo para crear la lista.', variant: 'destructive' });
-        return;
+        try {
+          const newWs = await createWorkspace({ name: "Espacio Interno EMDECOB" });
+          wsId = newWs.id;
+          const freshWorkspaces = await getWorkspaces();
+          setWorkspaces(freshWorkspaces);
+        } catch (err: any) {
+          toast({ title: 'Error al crear espacio de trabajo', description: err.message || 'Error desconocido', variant: 'destructive' });
+          return;
+        }
       }
       try {
         const newList = await createList({ name: newListName.trim(), workspace_id: wsId });
@@ -1335,87 +1343,86 @@ export default function CasoDetailPage() {
                   </div>
 
                   {/* Espacio y Lista de destino */}
-                  {workspaces.length === 0 ? (
-                    <div className="p-3.5 bg-sky-500/10 border border-sky-500/25 rounded-2xl text-[11px] text-sky-700 dark:text-sky-300 font-semibold leading-relaxed">
-                      💡 No tienes espacios de trabajo o listas creadas. Se creará automáticamente un espacio interno ("Espacio Interno EMDECOB") y una lista de tareas para almacenar esta gestión de forma organizada.
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {workspaces.length === 0 && (
+                      <div className="md:col-span-2 p-3 bg-sky-500/5 border border-sky-500/15 rounded-xl text-[10px] text-sky-600 dark:text-sky-400 font-medium">
+                        💡 No tienes espacios de trabajo creados. Al seleccionar "➕ Crear nueva lista..." se creará un espacio interno automáticamente.
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Espacio de Trabajo (ClickUp)</label>
+                      <Select 
+                        value={selectedWorkspaceId?.toString() || ''} 
+                        onValueChange={(v) => {
+                          const wsId = v ? parseInt(v) : undefined;
+                          setSelectedWorkspaceId(wsId);
+                          if (wsId) {
+                            const ws = workspaces.find(w => w.id === wsId);
+                            if (ws) {
+                              const wsLists = getWorkspaceLists(ws);
+                              if (wsLists.length > 0) {
+                                setSelectedListId(wsLists[0].id);
+                              }
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                          <SelectValue placeholder="Seleccionar Espacio..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workspaces.map(ws => (
+                            <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Espacio de Trabajo (ClickUp)</label>
-                        <Select 
-                          value={selectedWorkspaceId?.toString() || ''} 
-                          onValueChange={(v) => {
-                            const wsId = v ? parseInt(v) : undefined;
-                            setSelectedWorkspaceId(wsId);
-                            if (wsId) {
-                              const ws = workspaces.find(w => w.id === wsId);
-                              if (ws) {
-                                const wsLists = getWorkspaceLists(ws);
-                                if (wsLists.length > 0) {
-                                  setSelectedListId(wsLists[0].id);
-                                }
-                              }
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
+                      <Select 
+                        value={selectedListId?.toString() || ''} 
+                        onValueChange={(v) => {
+                          const listId = v ? (['none', 'new'].includes(v) ? v : parseInt(v)) : undefined;
+                          setSelectedListId(listId);
+                          if (typeof listId === 'number') {
+                            const lists = getAllWorkspaceListsSorted();
+                            const matched = lists.find(l => l.id === listId);
+                            if (matched) {
+                              setSelectedWorkspaceId(matched.wsId);
                             }
-                          }}
-                        >
-                          <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
-                            <SelectValue placeholder="Seleccionar Espacio..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {workspaces.map(ws => (
-                              <SelectItem key={ws.id} value={ws.id.toString()}>{ws.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Lista de Destino</label>
-                        <Select 
-                          value={selectedListId?.toString() || ''} 
-                          onValueChange={(v) => {
-                            const listId = v ? (['none', 'new'].includes(v) ? v : parseInt(v)) : undefined;
-                            setSelectedListId(listId);
-                            if (typeof listId === 'number') {
-                              const lists = getAllWorkspaceListsSorted();
-                              const matched = lists.find(l => l.id === listId);
-                              if (matched) {
-                                setSelectedWorkspaceId(matched.wsId);
-                              }
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
-                            <SelectValue placeholder="Seleccionar Lista..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">❌ Ninguna (Solo local / Sin sincronizar)</SelectItem>
-                            {(() => {
-                              const lists = getAllWorkspaceListsSorted();
-                              return lists.map(l => (
-                                <SelectItem key={l.id} value={l.id.toString()}>
-                                  {l.isCurrentWs ? l.name : `[${l.wsName}] ${l.name}`}
-                                </SelectItem>
-                              ));
-                            })()}
-                            <SelectItem value="new">➕ Crear nueva lista...</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-background border-border/60 rounded-xl text-sm font-semibold">
+                          <SelectValue placeholder="Seleccionar Lista..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">❌ Ninguna (Solo local / Sin sincronizar)</SelectItem>
+                          {(() => {
+                            const lists = getAllWorkspaceListsSorted();
+                            return lists.map(l => (
+                              <SelectItem key={l.id} value={l.id.toString()}>
+                                {l.isCurrentWs ? l.name : `[${l.wsName}] ${l.name}`}
+                              </SelectItem>
+                            ));
+                          })()}
+                          <SelectItem value="new">➕ Crear nueva lista...</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                      {selectedListId === 'new' && (
-                        <div className="space-y-1.5 md:col-span-2 animate-in slide-in-from-top-2 duration-200">
-                          <label className="text-[10px] font-bold text-primary uppercase tracking-widest">Nombre de la nueva Lista ClickUp</label>
-                          <Input 
-                            value={newListName}
-                            onChange={(e) => setNewListName(e.target.value)}
-                            placeholder="Ej. Sincronización Proceso 11001..."
-                            className="h-10 bg-background border-primary/50 rounded-xl text-sm font-semibold px-4"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {selectedListId === 'new' && (
+                      <div className="space-y-1.5 md:col-span-2 animate-in slide-in-from-top-2 duration-200">
+                        <label className="text-[10px] font-bold text-primary uppercase tracking-widest">Nombre de la nueva Lista ClickUp</label>
+                        <Input 
+                          value={newListName}
+                          onChange={(e) => setNewListName(e.target.value)}
+                          placeholder="Ej. Sincronización Proceso 11001..."
+                          className="h-10 bg-background border-primary/50 rounded-xl text-sm font-semibold px-4"
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {/* Gestiones técnicas */}
                   <div className="space-y-3 pt-2">
