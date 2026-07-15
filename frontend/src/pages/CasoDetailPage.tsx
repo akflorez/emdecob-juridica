@@ -27,6 +27,7 @@ import {
   updateCaseLawyer,
   getDocumentosActuacion,
   createTask,
+  createList,
   getCaseSourcesHistory,
   buscarNuevamente,
   markCaseRead,
@@ -85,7 +86,8 @@ export default function CasoDetailPage() {
   // Workspaces and lists state for task destination
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | undefined>(undefined);
-  const [selectedListId, setSelectedListId] = useState<number | undefined>(undefined);
+  const [selectedListId, setSelectedListId] = useState<number | string | undefined>(undefined);
+  const [newListName, setNewListName] = useState('');
   const [isRetiring, setIsRetiring] = useState(false);
   const [retiroMotivo, setRetiroMotivo] = useState('');
 
@@ -635,9 +637,37 @@ export default function CasoDetailPage() {
       return;
     }
 
-    // Intentar auto-seleccionar lista si no hay una seleccionada
-    let listIdToUse = selectedListId;
-    if (!listIdToUse && workspaces.length > 0) {
+    // Resolver ID de lista final
+    let listIdToUse: number | undefined = undefined;
+
+    if (selectedListId === 'new') {
+      if (!newListName.trim()) {
+        toast({ title: 'Error', description: 'Por favor escribe el nombre de la nueva lista.', variant: 'destructive' });
+        return;
+      }
+      const wsId = selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : undefined);
+      if (!wsId) {
+        toast({ title: 'Error', description: 'No se pudo determinar el espacio de trabajo para crear la lista.', variant: 'destructive' });
+        return;
+      }
+      try {
+        const newList = await createList({ name: newListName.trim(), workspace_id: wsId });
+        listIdToUse = newList.id;
+        // Actualizar localmente la lista de workspaces
+        const freshWorkspaces = await getWorkspaces();
+        setWorkspaces(freshWorkspaces);
+      } catch (err: any) {
+        toast({ title: 'Error al crear lista en ClickUp', description: err.message || 'Error desconocido', variant: 'destructive' });
+        return;
+      }
+    } else if (selectedListId === 'none') {
+      listIdToUse = undefined;
+    } else if (selectedListId) {
+      listIdToUse = typeof selectedListId === 'string' ? parseInt(selectedListId) : selectedListId;
+    }
+
+    // Intentar auto-seleccionar lista si no hay una seleccionada y no se eligió 'none'
+    if (!listIdToUse && selectedListId !== 'none' && workspaces.length > 0) {
       let defaultListId: number | undefined = undefined;
       let defaultWsId = selectedWorkspaceId ?? workspaces[0].id;
       
@@ -696,6 +726,7 @@ export default function CasoDetailPage() {
       setShowCreateTaskForm(false);
       setNewTaskTitle('');
       setNewTaskDescription('');
+      setNewListName('');
       setNewTaskGestiones([{ title: '', due_date: '', priority: 'normal', assignee_id: undefined }]);
 
       toast({ title: '✅ Tarea creada', description: `Se creó la tarea con ${validGestiones.length} gestión(es) técnica(s).` });
@@ -1362,9 +1393,9 @@ export default function CasoDetailPage() {
                         <Select 
                           value={selectedListId?.toString() || ''} 
                           onValueChange={(v) => {
-                            const listId = v ? parseInt(v) : undefined;
+                            const listId = v ? (['none', 'new'].includes(v) ? v : parseInt(v)) : undefined;
                             setSelectedListId(listId);
-                            if (listId) {
+                            if (typeof listId === 'number') {
                               const lists = getAllWorkspaceListsSorted();
                               const matched = lists.find(l => l.id === listId);
                               if (matched) {
@@ -1377,6 +1408,7 @@ export default function CasoDetailPage() {
                             <SelectValue placeholder="Seleccionar Lista..." />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="none">❌ Ninguna (Solo local / Sin sincronizar)</SelectItem>
                             {(() => {
                               const lists = getAllWorkspaceListsSorted();
                               return lists.map(l => (
@@ -1385,9 +1417,22 @@ export default function CasoDetailPage() {
                                 </SelectItem>
                               ));
                             })()}
+                            <SelectItem value="new">➕ Crear nueva lista...</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {selectedListId === 'new' && (
+                        <div className="space-y-1.5 md:col-span-2 animate-in slide-in-from-top-2 duration-200">
+                          <label className="text-[10px] font-bold text-primary uppercase tracking-widest">Nombre de la nueva Lista ClickUp</label>
+                          <Input 
+                            value={newListName}
+                            onChange={(e) => setNewListName(e.target.value)}
+                            placeholder="Ej. Sincronización Proceso 11001..."
+                            className="h-10 bg-background border-primary/50 rounded-xl text-sm font-semibold px-4"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
