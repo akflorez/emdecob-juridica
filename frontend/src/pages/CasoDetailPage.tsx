@@ -596,30 +596,11 @@ export default function CasoDetailPage() {
       if (match) assigneeId = match.id;
     }
 
-    // Asegurar que haya workspace y lista seleccionados al abrir el formulario
+    // Por defecto, inicializar la lista de destino en Ninguna (sin sincronizar)
+    setSelectedListId('none');
     if (workspaces.length > 0) {
       const currentWsId = selectedWorkspaceId ?? workspaces[0].id;
       setSelectedWorkspaceId(currentWsId);
-      if (!selectedListId) {
-        let defaultListId: number | undefined = undefined;
-        let defaultWsId = currentWsId;
-        
-        for (const ws of workspaces) {
-          const direct = ws.lists || [];
-          const fromFolders = (ws.folders || []).flatMap(f => f.lists || []);
-          const wsLists = [...direct, ...fromFolders];
-          if (wsLists.length > 0) {
-            defaultListId = wsLists[0].id;
-            defaultWsId = ws.id;
-            break;
-          }
-        }
-        
-        setSelectedWorkspaceId(defaultWsId);
-        if (defaultListId) {
-          setSelectedListId(defaultListId);
-        }
-      }
     }
 
     setNewTaskTitle(`Gestión para Radicado: ${caseData.radicado}`);
