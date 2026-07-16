@@ -1154,8 +1154,12 @@ export default function CasosPage() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
-                    <TableRow key={row.id} className={row.unread ? "bg-primary/10 font-semibold" : "hover:bg-muted/30"}>
-                      <TableCell className="px-2">
+                    <TableRow 
+                      key={row.id} 
+                      className={`cursor-pointer transition-colors ${row.unread ? "bg-primary/10 font-semibold hover:bg-primary/15" : "hover:bg-muted/40"}`}
+                      onClick={() => onOpenCase(row)}
+                    >
+                      <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selectedIds.has(row.id)} onCheckedChange={() => toggleSelect(row.id)} />
                       </TableCell>
                       <TableCell className="font-mono py-4">
@@ -1166,7 +1170,7 @@ export default function CasosPage() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell max-w-[140px] truncate text-sm">{row.demandante || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[140px] truncate text-sm">{row.demandado || "—"}</TableCell>
-                      <TableCell className="max-w-[200px]">
+                      <TableCell className="max-w-[200px]" onClick={(e) => e.stopPropagation()}>
                         <LawyerCombobox
                           options={lawyerOptions}
                           value={row.abogado || ""}
@@ -1199,7 +1203,7 @@ export default function CasosPage() {
                           <span className="text-muted-foreground text-[10px]">Sin tarea</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
                           <Button variant={row.unread ? "default" : "outline"} size="sm" className="h-8 px-2" onClick={() => onOpenCase(row)} title="Abrir caso">
                             <Eye className="h-4 w-4" />
