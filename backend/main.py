@@ -9104,6 +9104,7 @@ async def get_advanced_dashboard_stats(
     
     lawyer_counts = q_abogados.group_by(Case.abogado).all()
     lawyer_stats = [{"name": l[0], "count": l[1]} for l in lawyer_counts]
+    lawyer_stats.sort(key=lambda x: x["count"], reverse=True)
     
     # 3. Alertas (casos sin leer)
     q_unread = db.query(Case).filter(
