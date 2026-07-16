@@ -928,7 +928,7 @@ export default function CasosPage() {
               )}
             </div>
 
-            {activeTab === "todos" && (
+            {["todos", "no_leidos", "hoy", "retirados"].includes(activeTab) && (
               <div className="flex flex-wrap gap-3 items-end">
                 <div className="w-full sm:w-44">
                   <label className="text-xs text-muted-foreground mb-1 block">Cédula</label>
@@ -964,7 +964,7 @@ export default function CasosPage() {
               </div>
             )}
 
-            {activeTab !== "todos" && (
+            {!["todos", "no_leidos", "hoy", "retirados"].includes(activeTab) && (
               <div className="flex gap-2">
                 <Button type="submit" disabled={isLoading}><Search className="mr-2 h-4 w-4" />Filtrar</Button>
                 {(appliedSearch || appliedJuzgado) && <Button type="button" variant="outline" onClick={handleClearFilters}>Limpiar</Button>}
