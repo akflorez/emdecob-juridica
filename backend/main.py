@@ -4201,7 +4201,7 @@ def list_abogados(db: Session = Depends(get_db), current_user: User = Depends(ge
 
     # 3. Combinar, deduplicar y ordenar
     all_names = sorted(set(case_names + user_names))
-    return all_names
+    return ["Sin asignar"] + all_names
 
 # =========================
 # CASES LIST
@@ -4275,7 +4275,11 @@ def list_cases(
             q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
 
         if abogado:
-            q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
+            val = abogado.strip()
+            if val.lower() == "sin asignar":
+                q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
+            else:
+                q = q.filter(Case.abogado.ilike(f"%{val}%"))
 
         if con_documentos is not None:
             q = q.filter(Case.has_documents == con_documentos)
@@ -4408,7 +4412,11 @@ def download_cases_excel(
         q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
 
     if abogado:
-        q = q.filter(Case.abogado.like(f"%{abogado.strip()}%"))
+        val = abogado.strip()
+        if val.lower() == "sin asignar":
+            q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
+        else:
+            q = q.filter(Case.abogado.ilike(f"%{val}%"))
 
     if mes_actuacion:
         try:
