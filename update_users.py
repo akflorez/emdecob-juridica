@@ -11,7 +11,7 @@ company_id = 1
 users_to_create = [
     ('julian.cuartas', 'JULIAN CUARTAS', '292509', 'COORDINADOR'),
     ('valentina.patino', 'VALENTINA PATIÑO', '251410', 'COORDINADOR'),
-    ('hereiberto.montealegre', 'HEREIBERTO MONTEALEGRE', '251016', 'COMERCIAL'),
+    ('heriberto.montealegre', 'HERIBERTO MONTEALEGRE', 'Heriberto2026*', 'COMERCIAL'),
     ('santiago.quintero', 'SANTIAGO QUINTERO', '251016', 'ABOGADO')
 ]
 

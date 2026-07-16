@@ -1109,7 +1109,7 @@ async def lifespan(app: FastAPI):
         users_to_add = [
             ("julian.cuartas", "JULIAN CUARTAS", "292509"),
             ("valentina.patino", "VALENTINA PATIÑO", "251410"),
-            ("hereiberto.montealegre", "HEREIBERTO MONTEALEGRE", "251016")
+            ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*")
         ]
         for uname, nombre, pwd in users_to_add:
             u = db_s.query(User).filter(User.username == uname).first()
@@ -3079,7 +3079,60 @@ def sync_santiago(db: Session = Depends(get_db)):
         from backend.models import Case, CaseEvent
         from sqlalchemy import extract, func, or_, and_
         
-        # 1. Casos con ultima_actuacion en julio de 2026 (empresa 1, que es juricob)
+        # 1. Sincronizar santiago.quintero con juricob
+        juricob = db.query(User).filter(User.username == "juricob").first()
+        santiago = db.query(User).filter(User.username == "santiago.quintero").first()
+        if not santiago:
+            santiago = User(
+                username="santiago.quintero",
+                nombre="SANTIAGO QUINTERO",
+                hashed_password=_hash_password("251016"),
+                role="USER",
+                cases_view_scope="ALL",
+                company_id=juricob.company_id if juricob else 1,
+                is_active=True
+            )
+            db.add(santiago)
+        else:
+            if juricob:
+                santiago.company_id = juricob.company_id
+                santiago.cases_view_scope = juricob.cases_view_scope
+                santiago.role = juricob.role
+                santiago.is_admin = juricob.is_admin
+                santiago.is_superadmin = juricob.is_superadmin
+            else:
+                santiago.cases_view_scope = "ALL"
+                santiago.role = "USER"
+            santiago.is_active = True
+            santiago.hashed_password = _hash_password("251016")
+        db.commit()
+
+        # 2. Corregir hereiberto.montealegre a heriberto.montealegre
+        old_heriberto = db.query(User).filter(User.username == "hereiberto.montealegre").first()
+        if old_heriberto:
+            db.delete(old_heriberto)
+            db.commit()
+            
+        heriberto = db.query(User).filter(User.username == "heriberto.montealegre").first()
+        hashed_pwd = _hash_password("Heriberto2026*")
+        if not heriberto:
+            heriberto = User(
+                username="heriberto.montealegre",
+                nombre="HERIBERTO MONTEALEGRE",
+                hashed_password=hashed_pwd,
+                role="USER",
+                company_id=1,
+                is_active=True
+            )
+            db.add(heriberto)
+        else:
+            heriberto.nombre = "HERIBERTO MONTEALEGRE"
+            heriberto.hashed_password = hashed_pwd
+            heriberto.role = "USER"
+            heriberto.is_active = True
+        db.commit()
+
+        # 3. Diagnóstico de julio de 2026
         cases_july = db.query(Case.id, Case.radicado, Case.ultima_actuacion).filter(
             extract('year', Case.ultima_actuacion) == 2026,
             extract('month', Case.ultima_actuacion) == 7,
@@ -3087,7 +3140,6 @@ def sync_santiago(db: Session = Depends(get_db)):
         ).all()
         cases_july_ids = {c[0] for c in cases_july}
         
-        # 2. Casos distintos con eventos en julio de 2026
         events_july = db.query(CaseEvent.case_id).join(Case, CaseEvent.case_id == Case.id).filter(
             CaseEvent.event_date >= '2026-07-01',
             CaseEvent.event_date <= '2026-07-31T23:59:59',
@@ -3095,13 +3147,9 @@ def sync_santiago(db: Session = Depends(get_db)):
         ).distinct().all()
         events_july_ids = {e[0] for e in events_july}
         
-        # Casos que están en el listado de julio pero no tienen eventos en julio
         no_events = [c for c in cases_july if c[0] not in events_july_ids]
-        
-        # Casos que tienen eventos en julio pero su ultima_actuacion no es en julio
         no_ultima = [eid for eid in events_july_ids if eid not in cases_july_ids]
         
-        # Total de eventos en julio
         total_events = db.query(CaseEvent).join(Case, CaseEvent.case_id == Case.id).filter(
             CaseEvent.event_date >= '2026-07-01',
             CaseEvent.event_date <= '2026-07-31T23:59:59',
@@ -3109,14 +3157,19 @@ def sync_santiago(db: Session = Depends(get_db)):
         ).count()
         
         return {
-            "cases_july_count": len(cases_july),
-            "distinct_cases_with_events_count": len(events_july_ids),
-            "total_events_in_july": total_events,
-            "cases_july_without_events_in_july_count": len(no_events),
-            "cases_july_without_events_in_july_sample": [
-                {"id": c[0], "radicado": c[1], "ultima_actuacion": str(c[2])} for c in no_events[:5]
-            ],
-            "cases_with_events_but_not_ultima_actuacion_count": len(no_ultima)
+            "status": "success",
+            "santiago_sync": "completed",
+            "heriberto_fix": "completed (username=heriberto.montealegre, password=Heriberto2026*)",
+            "diagnostic_july_2026": {
+                "cases_july_count": len(cases_july),
+                "distinct_cases_with_events_count": len(events_july_ids),
+                "total_events_in_july": total_events,
+                "cases_july_without_events_in_july_count": len(no_events),
+                "cases_july_without_events_in_july_sample": [
+                    {"id": c[0], "radicado": c[1], "ultima_actuacion": str(c[2])} for c in no_events[:5]
+                ],
+                "cases_with_events_but_not_ultima_actuacion_count": len(no_ultima)
+            }
         }
     except Exception as e:
         return {"error": str(e)}
