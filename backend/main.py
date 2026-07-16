@@ -3076,41 +3076,48 @@ async def api_test_rama_connection():
 @app.get("/auth/sync-santiago")
 def sync_santiago(db: Session = Depends(get_db)):
     try:
-        # Get juricob details
-        juricob = db.query(User).filter(User.username == "juricob").first()
-        santiago = db.query(User).filter(User.username == "santiago.quintero").first()
-        if not santiago:
-            santiago = User(
-                username="santiago.quintero",
-                nombre="SANTIAGO QUINTERO",
-                hashed_password=_hash_password("251016"),
-                role="USER",
-                cases_view_scope="ALL",
-                company_id=juricob.company_id if juricob else 1,
-                is_active=True
-            )
-            db.add(santiago)
-            db.commit()
-            db.refresh(santiago)
-            return {"status": "created", "details": f"Santiago created with password 251016 and matched to juricob settings (company={santiago.company_id}, role={santiago.role}, scope={santiago.cases_view_scope})"}
-        else:
-            if juricob:
-                santiago.company_id = juricob.company_id
-                santiago.cases_view_scope = juricob.cases_view_scope
-                santiago.role = juricob.role
-                santiago.is_admin = juricob.is_admin
-                santiago.is_superadmin = juricob.is_superadmin
-                santiago.is_active = True
-                santiago.hashed_password = _hash_password("251016")
-                db.commit()
-                return {"status": "updated", "details": f"Santiago updated to match juricob settings (company={santiago.company_id}, role={santiago.role}, scope={santiago.cases_view_scope})"}
-            else:
-                santiago.cases_view_scope = "ALL"
-                santiago.role = "USER"
-                santiago.is_active = True
-                santiago.hashed_password = _hash_password("251016")
-                db.commit()
-                return {"status": "updated_without_juricob", "details": f"Santiago updated to scope ALL, role USER, password 251016"}
+        from backend.models import Case, CaseEvent
+        from sqlalchemy import extract, func, or_, and_
+        
+        # 1. Casos con ultima_actuacion en julio de 2026 (empresa 1, que es juricob)
+        cases_july = db.query(Case.id, Case.radicado, Case.ultima_actuacion).filter(
+            extract('year', Case.ultima_actuacion) == 2026,
+            extract('month', Case.ultima_actuacion) == 7,
+            Case.company_id == 1
+        ).all()
+        cases_july_ids = {c[0] for c in cases_july}
+        
+        # 2. Casos distintos con eventos en julio de 2026
+        events_july = db.query(CaseEvent.case_id).join(Case, CaseEvent.case_id == Case.id).filter(
+            CaseEvent.event_date >= '2026-07-01',
+            CaseEvent.event_date <= '2026-07-31T23:59:59',
+            Case.company_id == 1
+        ).distinct().all()
+        events_july_ids = {e[0] for e in events_july}
+        
+        # Casos que están en el listado de julio pero no tienen eventos en julio
+        no_events = [c for c in cases_july if c[0] not in events_july_ids]
+        
+        # Casos que tienen eventos en julio pero su ultima_actuacion no es en julio
+        no_ultima = [eid for eid in events_july_ids if eid not in cases_july_ids]
+        
+        # Total de eventos en julio
+        total_events = db.query(CaseEvent).join(Case, CaseEvent.case_id == Case.id).filter(
+            CaseEvent.event_date >= '2026-07-01',
+            CaseEvent.event_date <= '2026-07-31T23:59:59',
+            Case.company_id == 1
+        ).count()
+        
+        return {
+            "cases_july_count": len(cases_july),
+            "distinct_cases_with_events_count": len(events_july_ids),
+            "total_events_in_july": total_events,
+            "cases_july_without_events_in_july_count": len(no_events),
+            "cases_july_without_events_in_july_sample": [
+                {"id": c[0], "radicado": c[1], "ultima_actuacion": str(c[2])} for c in no_events[:5]
+            ],
+            "cases_with_events_but_not_ultima_actuacion_count": len(no_ultima)
+        }
     except Exception as e:
         return {"error": str(e)}
 
