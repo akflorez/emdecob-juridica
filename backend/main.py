@@ -3078,9 +3078,6 @@ async def api_test_rama_connection():
 @app.get("/auth/sync-santiago")
 def sync_santiago(db: Session = Depends(get_db)):
     try:
-        from backend.models import Case, CaseEvent
-        from sqlalchemy import extract, func, or_, and_
-        
         # 1. Sincronizar santiago.quintero con juricob
         juricob = db.query(User).filter(User.username == "juricob").first()
         santiago = db.query(User).filter(User.username == "santiago.quintero").first()
@@ -3154,45 +3151,11 @@ def sync_santiago(db: Session = Depends(get_db)):
             erik.is_active = True
         db.commit()
 
-        # 3. Diagnóstico de julio de 2026
-        cases_july = db.query(Case.id, Case.radicado, Case.ultima_actuacion).filter(
-            extract('year', Case.ultima_actuacion) == 2026,
-            extract('month', Case.ultima_actuacion) == 7,
-            Case.company_id == 1
-        ).all()
-        cases_july_ids = {c[0] for c in cases_july}
-        
-        events_july = db.query(CaseEvent.case_id).join(Case, CaseEvent.case_id == Case.id).filter(
-            CaseEvent.event_date >= '2026-07-01',
-            CaseEvent.event_date <= '2026-07-31T23:59:59',
-            Case.company_id == 1
-        ).distinct().all()
-        events_july_ids = {e[0] for e in events_july}
-        
-        no_events = [c for c in cases_july if c[0] not in events_july_ids]
-        no_ultima = [eid for eid in events_july_ids if eid not in cases_july_ids]
-        
-        total_events = db.query(CaseEvent).join(Case, CaseEvent.case_id == Case.id).filter(
-            CaseEvent.event_date >= '2026-07-01',
-            CaseEvent.event_date <= '2026-07-31T23:59:59',
-            Case.company_id == 1
-        ).count()
-        
         return {
             "status": "success",
             "santiago_sync": "completed",
             "heriberto_fix": "completed (username=heriberto.montealegre, password=Heriberto2026*)",
-            "erik_sync": "completed (username=erik.garzon, password=1094950684)",
-            "diagnostic_july_2026": {
-                "cases_july_count": len(cases_july),
-                "distinct_cases_with_events_count": len(events_july_ids),
-                "total_events_in_july": total_events,
-                "cases_july_without_events_in_july_count": len(no_events),
-                "cases_july_without_events_in_july_sample": [
-                    {"id": c[0], "radicado": c[1], "ultima_actuacion": str(c[2])} for c in no_events[:5]
-                ],
-                "cases_with_events_but_not_ultima_actuacion_count": len(no_ultima)
-            }
+            "erik_sync": "completed (username=erik.garzon, password=1094950684)"
         }
     except Exception as e:
         return {"error": str(e)}
