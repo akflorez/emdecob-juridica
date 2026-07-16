@@ -3163,11 +3163,22 @@ def sync_santiago(db: Session = Depends(get_db)):
             erik.is_active = True
         db.commit()
 
+        users_list = db.query(User).all()
         return {
             "status": "success",
             "santiago_sync": "completed",
             "heriberto_fix": "completed (username=heriberto.montealegre, password=Heriberto2026*)",
-            "erik_sync": "completed (username=erik.garzon, password=1094950684)"
+            "erik_sync": "completed (username=erik.garzon, password=1094950684)",
+            "db_users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "nombre": u.nombre,
+                    "company_id": u.company_id,
+                    "cases_view_scope": u.cases_view_scope,
+                    "role": u.role
+                } for u in users_list
+            ]
         }
     except Exception as e:
         return {"error": str(e)}
