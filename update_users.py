@@ -1,4 +1,3 @@
-
 from backend.db import SessionLocal
 from backend.models import User, Case
 from passlib.context import CryptContext
@@ -10,9 +9,10 @@ company_id = 1
 
 users_to_create = [
     ('julian.cuartas', 'JULIAN CUARTAS', '292509', 'COORDINADOR'),
-    ('valentina.patino', 'VALENTINA PATIÑO', '251410', 'COORDINADOR'),
+    ('valentina.patino', 'VALENTINA PATIÃ‘O', '251410', 'COORDINADOR'),
     ('heriberto.montealegre', 'HERIBERTO MONTEALEGRE', 'Heriberto2026*', 'COMERCIAL'),
-    ('santiago.quintero', 'SANTIAGO QUINTERO', '251016', 'ABOGADO')
+    ('santiago.quintero', 'SANTIAGO QUINTERO', '251016', 'ABOGADO'),
+    ('erik.garzon', 'ERIK SANTIAGO GARZON AMEZQUITA', '1094950684', 'COORDINADOR')
 ]
 
 for uname, name, pwd, role in users_to_create:
@@ -45,4 +45,3 @@ for c in cases:
 
 db.commit()
 print(f'Actualizados {count} casos a abogado {santiago.nombre}. Usuarios creados con exito.')
-

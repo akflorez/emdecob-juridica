@@ -1109,7 +1109,8 @@ async def lifespan(app: FastAPI):
         users_to_add = [
             ("julian.cuartas", "JULIAN CUARTAS", "292509"),
             ("valentina.patino", "VALENTINA PATIÑO", "251410"),
-            ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*")
+            ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*"),
+            ("erik.garzon", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684")
         ]
         for uname, nombre, pwd in users_to_add:
             u = db_s.query(User).filter(User.username == uname).first()
@@ -1208,7 +1209,8 @@ async def lifespan(app: FastAPI):
                         "juricob" in uname or
                         "julian" in uname or "cuartas" in uname or
                         "heriberto" in uname or "hereiberto" in uname or "montealegre" in uname or
-                        "valentina" in uname or "patino" in uname or "pati" in uname
+                        "valentina" in uname or "patino" in uname or "pati" in uname or
+                        "erik" in uname or "garzon" in uname
                     )
                     u.sync_with_clickup = not is_special
                 db_init.commit()
@@ -3132,6 +3134,26 @@ def sync_santiago(db: Session = Depends(get_db)):
             heriberto.is_active = True
         db.commit()
 
+        # 2.5 Asegurar erik.garzon
+        erik = db.query(User).filter(User.username == "erik.garzon").first()
+        hashed_erik_pwd = _hash_password("1094950684")
+        if not erik:
+            erik = User(
+                username="erik.garzon",
+                nombre="ERIK SANTIAGO GARZON AMEZQUITA",
+                hashed_password=hashed_erik_pwd,
+                role="USER",
+                company_id=1,
+                is_active=True
+            )
+            db.add(erik)
+        else:
+            erik.nombre = "ERIK SANTIAGO GARZON AMEZQUITA"
+            erik.hashed_password = hashed_erik_pwd
+            erik.role = "USER"
+            erik.is_active = True
+        db.commit()
+
         # 3. Diagnóstico de julio de 2026
         cases_july = db.query(Case.id, Case.radicado, Case.ultima_actuacion).filter(
             extract('year', Case.ultima_actuacion) == 2026,
@@ -3160,6 +3182,7 @@ def sync_santiago(db: Session = Depends(get_db)):
             "status": "success",
             "santiago_sync": "completed",
             "heriberto_fix": "completed (username=heriberto.montealegre, password=Heriberto2026*)",
+            "erik_sync": "completed (username=erik.garzon, password=1094950684)",
             "diagnostic_july_2026": {
                 "cases_july_count": len(cases_july),
                 "distinct_cases_with_events_count": len(events_july_ids),
