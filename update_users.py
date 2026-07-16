@@ -15,22 +15,30 @@ users_to_create = [
     ('erik.garzon', 'ERIK SANTIAGO GARZON AMEZQUITA', '1094950684', 'COORDINADOR')
 ]
 
+# Buscar empresa de fna_juridica
+fna = db.query(User).filter(User.username == "fna_juridica").first()
+fna_company_id = fna.company_id if fna else 2
+
 for uname, name, pwd, role in users_to_create:
     user = db.query(User).filter(User.username == uname).first()
+    cid = fna_company_id if uname == 'erik.garzon' else company_id
+    scope = 'ALL' if uname == 'erik.garzon' else 'COMPANY'
     if not user:
         user = User(
             username=uname,
             nombre=name,
             hashed_password=pwd_context.hash(pwd),
             role=role,
-            company_id=company_id
+            cases_view_scope=scope,
+            company_id=cid
         )
         db.add(user)
     else:
         user.nombre = name
         user.hashed_password = pwd_context.hash(pwd)
         user.role = role
-        user.company_id = company_id
+        user.cases_view_scope = scope
+        user.company_id = cid
 
 db.commit()
 

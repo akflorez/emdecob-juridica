@@ -1112,13 +1112,19 @@ async def lifespan(app: FastAPI):
             ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*"),
             ("erik.garzon", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684")
         ]
+        # Buscar la empresa de fna_juridica
+        fna = db_s.query(User).filter(User.username == "fna_juridica").first()
+        fna_company_id = fna.company_id if fna else 2
+
         for uname, nombre, pwd in users_to_add:
             u = db_s.query(User).filter(User.username == uname).first()
+            cid = fna_company_id if "erik" in uname else 1
             if not u:
-                u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=1, is_admin=False)
+                u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=False)
                 db_s.add(u)
             else:
                 u.hashed_password = _hash_password(pwd)
+                u.company_id = cid
         db_s.commit()
         db_s.close()
     except Exception as e:
@@ -3132,6 +3138,9 @@ def sync_santiago(db: Session = Depends(get_db)):
         db.commit()
 
         # 2.5 Asegurar erik.garzon
+        fna = db.query(User).filter(User.username == "fna_juridica").first()
+        fna_company_id = fna.company_id if fna else 2
+
         erik = db.query(User).filter(User.username == "erik.garzon").first()
         hashed_erik_pwd = _hash_password("1094950684")
         if not erik:
@@ -3140,7 +3149,8 @@ def sync_santiago(db: Session = Depends(get_db)):
                 nombre="ERIK SANTIAGO GARZON AMEZQUITA",
                 hashed_password=hashed_erik_pwd,
                 role="USER",
-                company_id=1,
+                cases_view_scope="ALL",
+                company_id=fna_company_id,
                 is_active=True
             )
             db.add(erik)
@@ -3148,6 +3158,8 @@ def sync_santiago(db: Session = Depends(get_db)):
             erik.nombre = "ERIK SANTIAGO GARZON AMEZQUITA"
             erik.hashed_password = hashed_erik_pwd
             erik.role = "USER"
+            erik.cases_view_scope = "ALL"
+            erik.company_id = fna_company_id
             erik.is_active = True
         db.commit()
 
