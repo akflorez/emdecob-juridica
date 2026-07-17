@@ -12,7 +12,8 @@ users_to_create = [
     ('valentina.patino', 'VALENTINA PATIÑO', '251410', 'COORDINADOR'),
     ('heriberto.montealegre', 'HERIBERTO MONTEALEGRE', 'Heriberto2026*', 'COMERCIAL'),
     ('santiago.quintero', 'SANTIAGO QUINTERO', '251016', 'ABOGADO'),
-    ('erik.garzon', 'ERIK SANTIAGO GARZON AMEZQUITA', '1094950684', 'COORDINADOR')
+    ('erik.garzon', 'ERIK SANTIAGO GARZON AMEZQUITA', '1094950684', 'COORDINADOR'),
+    ('erik.santiago', 'ERIK SANTIAGO GARZON AMEZQUITA', '1094950684', 'COORDINADOR')
 ]
 
 # Buscar empresa de fna_juridica
@@ -21,8 +22,8 @@ fna_company_id = fna.company_id if fna else 2
 
 for uname, name, pwd, role in users_to_create:
     user = db.query(User).filter(User.username == uname).first()
-    cid = fna_company_id if uname == 'erik.garzon' else company_id
-    scope = 'ALL' if uname == 'erik.garzon' else 'COMPANY'
+    cid = fna_company_id if 'erik' in uname else company_id
+    scope = 'ALL' if 'erik' in uname else 'COMPANY'
     if not user:
         user = User(
             username=uname,

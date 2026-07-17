@@ -1110,7 +1110,8 @@ async def lifespan(app: FastAPI):
             ("julian.cuartas", "JULIAN CUARTAS", "292509"),
             ("valentina.patino", "VALENTINA PATIÑO", "251410"),
             ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*"),
-            ("erik.garzon", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684")
+            ("erik.garzon", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684"),
+            ("erik.santiago", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684")
         ]
         # Buscar la empresa de fna_juridica
         fna = db_s.query(User).filter(User.username == "fna_juridica").first()
@@ -3137,31 +3138,32 @@ def sync_santiago(db: Session = Depends(get_db)):
             heriberto.is_active = True
         db.commit()
 
-        # 2.5 Asegurar erik.garzon
+        # 2.5 Asegurar erik.garzon y erik.santiago
         fna = db.query(User).filter(User.username == "fna_juridica").first()
         fna_company_id = fna.company_id if fna else 2
-
-        erik = db.query(User).filter(User.username == "erik.garzon").first()
         hashed_erik_pwd = _hash_password("1094950684")
-        if not erik:
-            erik = User(
-                username="erik.garzon",
-                nombre="ERIK SANTIAGO GARZON AMEZQUITA",
-                hashed_password=hashed_erik_pwd,
-                role="USER",
-                cases_view_scope="ALL",
-                company_id=fna_company_id,
-                is_active=True
-            )
-            db.add(erik)
-        else:
-            erik.nombre = "ERIK SANTIAGO GARZON AMEZQUITA"
-            erik.hashed_password = hashed_erik_pwd
-            erik.role = "USER"
-            erik.cases_view_scope = "ALL"
-            erik.company_id = fna_company_id
-            erik.is_active = True
-        db.commit()
+
+        for erik_uname in ["erik.garzon", "erik.santiago"]:
+            erik = db.query(User).filter(User.username == erik_uname).first()
+            if not erik:
+                erik = User(
+                    username=erik_uname,
+                    nombre="ERIK SANTIAGO GARZON AMEZQUITA",
+                    hashed_password=hashed_erik_pwd,
+                    role="USER",
+                    cases_view_scope="ALL",
+                    company_id=fna_company_id,
+                    is_active=True
+                )
+                db.add(erik)
+            else:
+                erik.nombre = "ERIK SANTIAGO GARZON AMEZQUITA"
+                erik.hashed_password = hashed_erik_pwd
+                erik.role = "USER"
+                erik.cases_view_scope = "ALL"
+                erik.company_id = fna_company_id
+                erik.is_active = True
+            db.commit()
 
         users_list = db.query(User).all()
         return {
@@ -3169,6 +3171,7 @@ def sync_santiago(db: Session = Depends(get_db)):
             "santiago_sync": "completed",
             "heriberto_fix": "completed (username=heriberto.montealegre, password=Heriberto2026*)",
             "erik_sync": "completed (username=erik.garzon, password=1094950684)",
+            "erik_santiago_sync": "completed (username=erik.santiago, password=1094950684)",
             "db_users": [
                 {
                     "id": u.id,
