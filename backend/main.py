@@ -4530,16 +4530,24 @@ def download_cases_excel(
     case_ids = [c.id for c in cases]
     latest_event_map = {}
     if case_ids:
-        # Load latest events (actuaciones) for these cases in a single query to avoid N+1
-        events = (
-            db.query(CaseEvent.case_id, CaseEvent.event_date, CaseEvent.title, CaseEvent.detail)
+        # Load latest events (actuaciones) for these cases in a single optimized query using row_number window function
+        subq = (
+            db.query(
+                CaseEvent.case_id,
+                CaseEvent.event_date,
+                CaseEvent.title,
+                CaseEvent.detail,
+                func.row_number().over(
+                    partition_by=CaseEvent.case_id,
+                    order_by=(desc(CaseEvent.event_date), desc(CaseEvent.id))
+                ).label("rn")
+            )
             .filter(CaseEvent.case_id.in_(case_ids))
-            .order_by(CaseEvent.case_id, desc(CaseEvent.event_date), desc(CaseEvent.id))
-            .all()
+            .subquery()
         )
+        events = db.query(subq).filter(subq.c.rn == 1).all()
         for ev in events:
-            if ev.case_id not in latest_event_map:
-                latest_event_map[ev.case_id] = ev
+            latest_event_map[ev.case_id] = ev
 
     data = []
     for c in cases:
