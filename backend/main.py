@@ -4094,7 +4094,20 @@ def download_invalid_radicados_excel(
         for x in items
     ]
 
-    df = pd.DataFrame(data)
+    # Clean all string values in the data list to remove illegal control characters (XML incompatible)
+    import re
+    excel_clean_re = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]")
+    cleaned_data = []
+    for row in data:
+        cleaned_row = {}
+        for k, v in row.items():
+            if isinstance(v, str):
+                cleaned_row[k] = excel_clean_re.sub("", v)
+            else:
+                cleaned_row[k] = v
+        cleaned_data.append(cleaned_row)
+
+    df = pd.DataFrame(cleaned_data)
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="No Encontrados")
@@ -4593,7 +4606,20 @@ def download_cases_excel(
                 "Usuario asignado": c.user.username if c.user else "",
             })
 
-        df = pd.DataFrame(data)
+        # Clean all string values in the data list to remove illegal control characters (XML incompatible)
+        import re
+        excel_clean_re = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]")
+        cleaned_data = []
+        for row in data:
+            cleaned_row = {}
+            for k, v in row.items():
+                if isinstance(v, str):
+                    cleaned_row[k] = excel_clean_re.sub("", v)
+                else:
+                    cleaned_row[k] = v
+            cleaned_data.append(cleaned_row)
+
+        df = pd.DataFrame(cleaned_data)
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Casos")
