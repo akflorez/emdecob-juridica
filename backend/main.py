@@ -12,6 +12,7 @@ from fastapi import (
     Security,
     Request,
     Header,
+    Response,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -3187,118 +3188,6 @@ def sync_santiago(db: Session = Depends(get_db)):
         return {"error": str(e)}
 
 
-@app.get("/auth/debug-download-speed")
-def debug_download_speed(db: Session = Depends(get_db)):
-    import time
-    from sqlalchemy import desc, func, or_
-    from sqlalchemy.orm import joinedload
-    from backend.models import Case, CaseEvent
-    import pandas as pd
-    from io import BytesIO
-
-    try:
-        timings = {}
-        
-        # Step 1: Query Cases
-        start = time.time()
-        q = db.query(Case).filter(Case.juzgado.isnot(None))
-        q = q.filter(Case.company_id == 2)
-        q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
-        q = q.order_by(desc(Case.ultima_actuacion))
-        
-        cases = q.options(joinedload(Case.company), joinedload(Case.user)).all()
-        timings["1_query_cases_seconds"] = round(time.time() - start, 4)
-        timings["cases_count"] = len(cases)
-        
-        # Step 2: Get case IDs
-        start = time.time()
-        case_ids = [c.id for c in cases]
-        timings["2_get_case_ids_seconds"] = round(time.time() - start, 4)
-        
-        # Step 3: Query latest events
-        start = time.time()
-        latest_event_map = {}
-        if case_ids:
-            subq = (
-                db.query(
-                    CaseEvent.case_id,
-                    CaseEvent.event_date,
-                    CaseEvent.title,
-                    CaseEvent.detail,
-                    func.row_number().over(
-                        partition_by=CaseEvent.case_id,
-                        order_by=(desc(CaseEvent.event_date), desc(CaseEvent.id))
-                    ).label("rn")
-                )
-                .filter(CaseEvent.case_id.in_(case_ids))
-                .subquery()
-            )
-            events = db.query(subq).filter(subq.c.rn == 1).all()
-            for ev in events:
-                latest_event_map[ev.case_id] = ev
-        timings["3_query_latest_events_seconds"] = round(time.time() - start, 4)
-        timings["events_count"] = len(latest_event_map)
-        
-        # Step 4: Build data list
-        start = time.time()
-        data = []
-        for c in cases:
-            ev = latest_event_map.get(c.id)
-            if ev:
-                title_str = (ev.title or "").strip()
-                detail_str = (ev.detail or "").strip()
-                if len(detail_str) >= len(title_str):
-                    last_event_desc = detail_str or title_str
-                else:
-                    last_event_desc = title_str or detail_str
-                if not last_event_desc:
-                    last_event_desc = "Sin actuaciones registradas"
-            else:
-                last_event_desc = "Sin actuaciones registradas"
-                
-            if len(last_event_desc) > 32000:
-                last_event_desc = last_event_desc[:32000] + "..."
-
-            data.append({
-                "Radicado": c.radicado,
-                "Demandante": c.demandante or "",
-                "Demandado": c.demandado or "",
-                "Cédula": c.cedula or "",
-                "Abogado": c.abogado or "",
-                "Juzgado": c.juzgado or "",
-                "Despacho": c.despacho or c.juzgado or "",
-                "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
-                "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-                "Fecha de última actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-                "Descripción última actuación": last_event_desc,
-                "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
-                "Estado": "No leído" if is_unread_case(c) else "Leído",
-                "Fecha de creación": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
-                "Empresa": c.company.nombre if c.company else "",
-                "Usuario asignado": c.user.username if c.user else "",
-            })
-        timings["4_build_data_list_seconds"] = round(time.time() - start, 4)
-        
-        # Step 5: Pandas DataFrame creation and Excel generation
-        start = time.time()
-        df = pd.DataFrame(data)
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Casos")
-        timings["5_pandas_excel_seconds"] = round(time.time() - start, 4)
-        
-        return {
-            "status": "success",
-            "timings": timings
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
-
 
 # =========================
 # AUTH  LOGIN / LOGOUT / USUARIOS
@@ -4710,8 +4599,8 @@ def download_cases_excel(
     output.seek(0)
 
     filename = f"casos_{now_colombia().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        output,
+    return Response(
+        content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
