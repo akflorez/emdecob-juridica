@@ -4567,6 +4567,10 @@ def download_cases_excel(
         else:
             last_event_desc = "Sin actuaciones registradas"
 
+        # Truncate to avoid Excel cell character limits (32,767)
+        if len(last_event_desc) > 32000:
+            last_event_desc = last_event_desc[:32000] + "..."
+
         data.append({
             "Radicado": c.radicado,
             "Demandante": c.demandante or "",
