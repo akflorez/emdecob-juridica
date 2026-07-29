@@ -4457,153 +4457,164 @@ def download_cases_excel(
     page_size: Optional[int] = Query(default=None),
     ignore_filters: bool = Query(default=False),
 ):
-    q = db.query(Case).filter(Case.juzgado.isnot(None))
+    try:
+        q = db.query(Case).filter(Case.juzgado.isnot(None))
 
-    # Multi-tenancy filter: SaaS Isolation
-    if is_global_superadmin(current_user):
-        if company_id is not None:
-            q = q.filter(Case.company_id == company_id)
-    else:
-        q = q.filter(Case.company_id == current_user.company_id)
-
-    if not ignore_filters:
-        if solo_retirados:
-            q = q.filter(Case.is_active == False)
+        # Multi-tenancy filter: SaaS Isolation
+        if is_global_superadmin(current_user):
+            if company_id is not None:
+                q = q.filter(Case.company_id == company_id)
         else:
-            q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
+            q = q.filter(Case.company_id == current_user.company_id)
 
-        if solo_no_leidos:
-            ayer_list = today_colombia() - timedelta(days=1)
-            q = q.filter(
-                Case.current_hash.isnot(None),
-                or_(
-                    and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
-                    and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_list),
+        if not ignore_filters:
+            if solo_retirados:
+                q = q.filter(Case.is_active == False)
+            else:
+                q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
+
+            if solo_no_leidos:
+                ayer_list = today_colombia() - timedelta(days=1)
+                q = q.filter(
+                    Case.current_hash.isnot(None),
+                    or_(
+                        and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+                        and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_list),
+                    )
                 )
-            )
 
-        if solo_actualizados_hoy:
-            q = q.filter(Case.ultima_actuacion == today_colombia())
+            if solo_actualizados_hoy:
+                q = q.filter(Case.ultima_actuacion == today_colombia())
 
-        if search:
-            s = f"%{search.strip()}%"
-            q = q.filter(or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s), Case.alias.like(s)))
+            if search:
+                s = f"%{search.strip()}%"
+                q = q.filter(or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s), Case.alias.like(s)))
 
-        if juzgado:
-            q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
+            if juzgado:
+                q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
 
-        if cedula:
-            q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
+            if cedula:
+                q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
 
-        if abogado:
-            val = abogado.strip()
-            if val.lower() == "sin asignar":
-                q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
-            else:
-                q = q.filter(Case.abogado.ilike(f"%{val}%"))
+            if abogado:
+                val = abogado.strip()
+                if val.lower() == "sin asignar":
+                    q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
+                else:
+                    q = q.filter(Case.abogado.ilike(f"%{val}%"))
 
-        if mes_actuacion:
-            try:
-                year, month = mes_actuacion.split("-")
-                from sqlalchemy import extract
-                q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
-            except:
-                pass
-    else:
-        if solo_retirados:
-            q = q.filter(Case.is_active == False)
+            if mes_actuacion:
+                try:
+                    year, month = mes_actuacion.split("-")
+                    from sqlalchemy import extract
+                    q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
+                except:
+                    pass
         else:
-            q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
+            if solo_retirados:
+                q = q.filter(Case.is_active == False)
+            else:
+                q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
 
-    # Ordenar por última actuación descendente
-    q = q.order_by(desc(Case.ultima_actuacion))
+        # Ordenar por última actuación descendente
+        q = q.order_by(desc(Case.ultima_actuacion))
 
-    # Paginación
-    if not ignore_filters and page is not None and page_size is not None:
-        offset = (page - 1) * page_size
-        q = q.offset(offset).limit(page_size)
+        # Paginación
+        if not ignore_filters and page is not None and page_size is not None:
+            offset = (page - 1) * page_size
+            q = q.offset(offset).limit(page_size)
 
-    # Eager load company and user to avoid N+1 query overhead
-    cases = (
-        q.options(joinedload(Case.company), joinedload(Case.user))
-        .all()
-    )
-
-    case_ids = [c.id for c in cases]
-    latest_event_map = {}
-    if case_ids:
-        # Load latest events (actuaciones) for these cases in a single optimized query using row_number window function
-        subq = (
-            db.query(
-                CaseEvent.case_id,
-                CaseEvent.event_date,
-                CaseEvent.title,
-                CaseEvent.detail,
-                func.row_number().over(
-                    partition_by=CaseEvent.case_id,
-                    order_by=(desc(CaseEvent.event_date), desc(CaseEvent.id))
-                ).label("rn")
-            )
-            .filter(CaseEvent.case_id.in_(case_ids))
-            .subquery()
+        # Eager load company and user to avoid N+1 query overhead
+        cases = (
+            q.options(joinedload(Case.company), joinedload(Case.user))
+            .all()
         )
-        events = db.query(subq).filter(subq.c.rn == 1).all()
-        for ev in events:
-            latest_event_map[ev.case_id] = ev
 
-    data = []
-    for c in cases:
-        ev = latest_event_map.get(c.id)
-        if ev:
-            title_str = (ev.title or "").strip()
-            detail_str = (ev.detail or "").strip()
-            
-            # Choose the longest / most complete text
-            if len(detail_str) >= len(title_str):
-                last_event_desc = detail_str or title_str
-            else:
-                last_event_desc = title_str or detail_str
+        case_ids = [c.id for c in cases]
+        latest_event_map = {}
+        if case_ids:
+            # Load latest events (actuaciones) for these cases in a single optimized query using row_number window function
+            subq = (
+                db.query(
+                    CaseEvent.case_id,
+                    CaseEvent.event_date,
+                    CaseEvent.title,
+                    CaseEvent.detail,
+                    func.row_number().over(
+                        partition_by=CaseEvent.case_id,
+                        order_by=(desc(CaseEvent.event_date), desc(CaseEvent.id))
+                    ).label("rn")
+                )
+                .filter(CaseEvent.case_id.in_(case_ids))
+                .subquery()
+            )
+            events = db.query(subq).filter(subq.c.rn == 1).all()
+            for ev in events:
+                latest_event_map[ev.case_id] = ev
+
+        data = []
+        for c in cases:
+            ev = latest_event_map.get(c.id)
+            if ev:
+                title_str = (ev.title or "").strip()
+                detail_str = (ev.detail or "").strip()
                 
-            if not last_event_desc:
+                # Choose the longest / most complete text
+                if len(detail_str) >= len(title_str):
+                    last_event_desc = detail_str or title_str
+                else:
+                    last_event_desc = title_str or detail_str
+                    
+                if not last_event_desc:
+                    last_event_desc = "Sin actuaciones registradas"
+            else:
                 last_event_desc = "Sin actuaciones registradas"
-        else:
-            last_event_desc = "Sin actuaciones registradas"
 
-        # Truncate to avoid Excel cell character limits (32,767)
-        if len(last_event_desc) > 32000:
-            last_event_desc = last_event_desc[:32000] + "..."
+            # Truncate to avoid Excel cell character limits (32,767)
+            if len(last_event_desc) > 32000:
+                last_event_desc = last_event_desc[:32000] + "..."
 
-        data.append({
-            "Radicado": c.radicado,
-            "Demandante": c.demandante or "",
-            "Demandado": c.demandado or "",
-            "Cédula": c.cedula or "",
-            "Abogado": c.abogado or "",
-            "Juzgado": c.juzgado or "",
-            "Despacho": c.despacho or c.juzgado or "",
-            "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
-            "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-            "Fecha de última actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
-            "Descripción última actuación": last_event_desc,
-            "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
-            "Estado": "No leído" if is_unread_case(c) else "Leído",
-            "Fecha de creación": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
-            "Empresa": c.company.nombre if c.company else "",
-            "Usuario asignado": c.user.username if c.user else "",
-        })
+            data.append({
+                "Radicado": c.radicado,
+                "Demandante": c.demandante or "",
+                "Demandado": c.demandado or "",
+                "Cédula": c.cedula or "",
+                "Abogado": c.abogado or "",
+                "Juzgado": c.juzgado or "",
+                "Despacho": c.despacho or c.juzgado or "",
+                "Fecha Radicación": c.fecha_radicacion.isoformat() if c.fecha_radicacion else "",
+                "Última Actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+                "Fecha de última actuación": c.ultima_actuacion.isoformat() if c.ultima_actuacion else "",
+                "Descripción última actuación": last_event_desc,
+                "Última Verificación": c.last_check_at.strftime("%Y-%m-%d %H:%M") if c.last_check_at else "",
+                "Estado": "No leído" if is_unread_case(c) else "Leído",
+                "Fecha de creación": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
+                "Empresa": c.company.nombre if c.company else "",
+                "Usuario asignado": c.user.username if c.user else "",
+            })
 
-    df = pd.DataFrame(data)
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Casos")
-    output.seek(0)
+        df = pd.DataFrame(data)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Casos")
+        output.seek(0)
 
-    filename = f"casos_{now_colombia().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+        filename = f"casos_{now_colombia().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return Response(
+            content=output.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": str(e),
+                "traceback": tb
+            }
+        )
 
 
 # =========================
