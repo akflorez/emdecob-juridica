@@ -4449,7 +4449,11 @@ def download_cases_excel(
     mes_actuacion: Optional[str] = Query(default=None),
     solo_no_leidos: bool = Query(default=False),
     solo_actualizados_hoy: bool = Query(default=False),
+    solo_retirados: bool = Query(default=False),
     company_id: Optional[int] = Query(default=None),
+    page: Optional[int] = Query(default=None),
+    page_size: Optional[int] = Query(default=None),
+    ignore_filters: bool = Query(default=False),
 ):
     q = db.query(Case).filter(Case.juzgado.isnot(None))
 
@@ -4460,48 +4464,66 @@ def download_cases_excel(
     else:
         q = q.filter(Case.company_id == current_user.company_id)
 
-    if solo_no_leidos:
-        ayer_list = today_colombia() - timedelta(days=1)
-        q = q.filter(
-            Case.current_hash.isnot(None),
-            or_(
-                and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
-                and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_list),
-            )
-        )
-
-    if solo_actualizados_hoy:
-        q = q.filter(Case.ultima_actuacion == today_colombia())
-
-    if search:
-        s = f"%{search.strip()}%"
-        q = q.filter(or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s)))
-
-    if juzgado:
-        q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
-
-    if cedula:
-        q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
-
-    if abogado:
-        val = abogado.strip()
-        if val.lower() == "sin asignar":
-            q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
+    if not ignore_filters:
+        if solo_retirados:
+            q = q.filter(Case.is_active == False)
         else:
-            q = q.filter(Case.abogado.ilike(f"%{val}%"))
+            q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
 
-    if mes_actuacion:
-        try:
-            year, month = mes_actuacion.split("-")
-            from sqlalchemy import extract
-            q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
-        except:
-            pass
+        if solo_no_leidos:
+            ayer_list = today_colombia() - timedelta(days=1)
+            q = q.filter(
+                Case.current_hash.isnot(None),
+                or_(
+                    and_(Case.last_hash.isnot(None), Case.current_hash != Case.last_hash),
+                    and_(Case.last_hash.is_(None), Case.ultima_actuacion >= ayer_list),
+                )
+            )
+
+        if solo_actualizados_hoy:
+            q = q.filter(Case.ultima_actuacion == today_colombia())
+
+        if search:
+            s = f"%{search.strip()}%"
+            q = q.filter(or_(Case.radicado.like(s), Case.demandante.like(s), Case.demandado.like(s), Case.alias.like(s)))
+
+        if juzgado:
+            q = q.filter(Case.juzgado.like(f"%{juzgado.strip()}%"))
+
+        if cedula:
+            q = q.filter(Case.cedula.like(f"%{cedula.strip()}%"))
+
+        if abogado:
+            val = abogado.strip()
+            if val.lower() == "sin asignar":
+                q = q.filter(or_(Case.abogado.is_(None), Case.abogado == ""))
+            else:
+                q = q.filter(Case.abogado.ilike(f"%{val}%"))
+
+        if mes_actuacion:
+            try:
+                year, month = mes_actuacion.split("-")
+                from sqlalchemy import extract
+                q = q.filter(extract('year', Case.ultima_actuacion) == int(year), extract('month', Case.ultima_actuacion) == int(month))
+            except:
+                pass
+    else:
+        if solo_retirados:
+            q = q.filter(Case.is_active == False)
+        else:
+            q = q.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
+
+    # Ordenar por última actuación descendente
+    q = q.order_by(desc(Case.ultima_actuacion))
+
+    # Paginación
+    if not ignore_filters and page is not None and page_size is not None:
+        offset = (page - 1) * page_size
+        q = q.offset(offset).limit(page_size)
 
     # Eager load company and user to avoid N+1 query overhead
     cases = (
         q.options(joinedload(Case.company), joinedload(Case.user))
-        .order_by(desc(Case.ultima_actuacion))
         .all()
     )
 

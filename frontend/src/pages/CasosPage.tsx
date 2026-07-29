@@ -55,6 +55,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import {
   getCases,
@@ -619,7 +625,7 @@ export default function CasosPage() {
     }
   };
 
-  const handleDownloadExcel = async () => {
+  const handleDownloadExcel = async (mode: "page" | "filtered" | "all" = "filtered") => {
     if (activeTab === "pendientes") return;
 
     try {
@@ -628,15 +634,33 @@ export default function CasosPage() {
         return;
       }
 
-      await downloadCasesExcel({ 
-        search: appliedSearch, 
-        juzgado: appliedJuzgado, 
-        abogado: appliedAbogado,
-        cedula: appliedCedula,
-        mes_actuacion: appliedMonth,
-        solo_no_leidos: activeTab === "no_leidos", 
-        solo_actualizados_hoy: activeTab === "hoy" 
-      });
+      const params: any = {};
+      if (mode === "page") {
+        params.page = page;
+        params.page_size = pageSize;
+        params.search = appliedSearch;
+        params.juzgado = appliedJuzgado;
+        params.abogado = appliedAbogado;
+        params.cedula = appliedCedula;
+        params.mes_actuacion = appliedMonth;
+        params.solo_no_leidos = activeTab === "no_leidos";
+        params.solo_actualizados_hoy = activeTab === "hoy";
+        params.solo_retirados = activeTab === "retirados";
+      } else if (mode === "filtered") {
+        params.search = appliedSearch;
+        params.juzgado = appliedJuzgado;
+        params.abogado = appliedAbogado;
+        params.cedula = appliedCedula;
+        params.mes_actuacion = appliedMonth;
+        params.solo_no_leidos = activeTab === "no_leidos";
+        params.solo_actualizados_hoy = activeTab === "hoy";
+        params.solo_retirados = activeTab === "retirados";
+      } else if (mode === "all") {
+        params.ignore_filters = true;
+        params.solo_retirados = activeTab === "retirados";
+      }
+
+      await downloadCasesExcel(params);
       toast({ title: "Descargando...", description: "El archivo Excel se descargará en unos segundos" });
     } catch (error) {
       toast({ title: "Error", description: "No se pudo generar el archivo", variant: "destructive" });
@@ -1023,9 +1047,36 @@ export default function CasosPage() {
                 </>
               )}
               {activeTab !== "pendientes" && total > 0 && (
-                <Button onClick={handleDownloadExcel} variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />Exportar
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />Exportar
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-xl rounded-lg p-1.5 z-[100]">
+                    <DropdownMenuItem 
+                      onClick={() => handleDownloadExcel("page")} 
+                      className="cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-md p-2 text-sm flex flex-col items-start"
+                    >
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">Exportar página actual</span>
+                      <span className="text-xs text-zinc-500">Solo los {rows.length} casos visibles en esta hoja</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleDownloadExcel("filtered")} 
+                      className="cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-md p-2 text-sm flex flex-col items-start mt-0.5"
+                    >
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">Exportar con filtros aplicados</span>
+                      <span className="text-xs text-zinc-500">Todos los casos según búsqueda y filtros actuales</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleDownloadExcel("all")} 
+                      className="cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-md p-2 text-sm flex flex-col items-start mt-0.5"
+                    >
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">Exportar todos los casos</span>
+                      <span className="text-xs text-zinc-500">Todo el listado completo (sin filtros de búsqueda)</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </div>

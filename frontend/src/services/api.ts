@@ -393,7 +393,11 @@ export function downloadCasesExcel(params: {
   mes_actuacion?: string;
   solo_no_leidos?: boolean;
   solo_actualizados_hoy?: boolean;
+  solo_retirados?: boolean;
   company_id?: number;
+  page?: number;
+  page_size?: number;
+  ignore_filters?: boolean;
 }) {
   const cleanBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
   const qs = new URLSearchParams();
@@ -404,12 +408,21 @@ export function downloadCasesExcel(params: {
   if (params.mes_actuacion) qs.set("mes_actuacion", params.mes_actuacion);
   if (params.solo_no_leidos) qs.set("solo_no_leidos", "true");
   if (params.solo_actualizados_hoy) qs.set("solo_actualizados_hoy", "true");
+  if (params.solo_retirados) qs.set("solo_retirados", "true");
+  if (params.page !== undefined) qs.set("page", String(params.page));
+  if (params.page_size !== undefined) qs.set("page_size", String(params.page_size));
+  if (params.ignore_filters) qs.set("ignore_filters", "true");
   if (params.company_id !== undefined) qs.set("company_id", String(params.company_id));
   const q = qs.toString();
   const token = getToken();
   const downloadUrl = `${cleanBaseUrl}/cases/download?${q}${token ? `&token=${token}` : ""}`;
   
-  window.location.assign(downloadUrl);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.target = "_blank";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 /** ---------------------------
@@ -553,7 +566,12 @@ export function downloadInvalidRadicadosExcel() {
   const token = getToken();
   const downloadUrl = `${cleanBaseUrl}/invalid-radicados/download${token ? `?token=${token}` : ""}`;
   
-  window.location.assign(downloadUrl);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.target = "_blank";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 /** ---------------------------
