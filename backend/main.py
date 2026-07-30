@@ -1112,7 +1112,8 @@ async def lifespan(app: FastAPI):
             ("valentina.patino", "VALENTINA PATIÑO", "251410"),
             ("heriberto.montealegre", "HERIBERTO MONTEALEGRE", "Heriberto2026*"),
             ("erik.garzon", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684"),
-            ("erik.santiago", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684")
+            ("erik.santiago", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684"),
+            ("superadmin", "SUPERADMIN", "admin123$")
         ]
         # Buscar la empresa de fna_juridica
         fna = db_s.query(User).filter(User.username == "fna_juridica").first()
@@ -1120,13 +1121,23 @@ async def lifespan(app: FastAPI):
 
         for uname, nombre, pwd in users_to_add:
             u = db_s.query(User).filter(User.username == uname).first()
-            cid = fna_company_id if "erik" in uname else 1
+            if uname == "superadmin":
+                cid = None
+                is_adm = True
+                role_val = "SUPERADMIN"
+            else:
+                cid = fna_company_id if "erik" in uname else 1
+                is_adm = False
+                role_val = "USER"
+
             if not u:
-                u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=False)
+                u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=is_adm, role=role_val)
                 db_s.add(u)
             else:
                 u.hashed_password = _hash_password(pwd)
                 u.company_id = cid
+                u.is_admin = is_adm
+                u.role = role_val
         db_s.commit()
         db_s.close()
     except Exception as e:
@@ -3165,6 +3176,29 @@ def sync_santiago(db: Session = Depends(get_db)):
                 erik.company_id = fna_company_id
                 erik.is_active = True
             db.commit()
+
+        # 2.6 Asegurar superadmin
+        superadmin = db.query(User).filter(User.username == "superadmin").first()
+        hashed_sa_pwd = _hash_password("admin123$")
+        if not superadmin:
+            superadmin = User(
+                username="superadmin",
+                nombre="SUPERADMIN",
+                hashed_password=hashed_sa_pwd,
+                role="SUPERADMIN",
+                is_admin=True,
+                company_id=None,
+                is_active=True
+            )
+            db.add(superadmin)
+        else:
+            superadmin.nombre = "SUPERADMIN"
+            superadmin.hashed_password = hashed_sa_pwd
+            superadmin.role = "SUPERADMIN"
+            superadmin.is_admin = True
+            superadmin.company_id = None
+            superadmin.is_active = True
+        db.commit()
 
         users_list = db.query(User).all()
         return {
