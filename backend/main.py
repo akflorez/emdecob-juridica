@@ -1115,6 +1115,11 @@ async def lifespan(app: FastAPI):
             ("erik.santiago", "ERIK SANTIAGO GARZON AMEZQUITA", "1094950684"),
             ("superadmin", "SUPERADMIN", "admin123$")
         ]
+        # Clean up conflicting superadmin IDs (like if username='superadmin' had ID 35)
+        from sqlalchemy import text
+        db_s.execute(text("DELETE FROM users WHERE username = 'superadmin' OR id = 9999"))
+        db_s.commit()
+
         # Buscar la empresa de fna_juridica
         fna = db_s.query(User).filter(User.username == "fna_juridica").first()
         fna_company_id = fna.company_id if fna else 2
@@ -1131,7 +1136,10 @@ async def lifespan(app: FastAPI):
                 role_val = "USER"
 
             if not u:
-                u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=is_adm, role=role_val)
+                if uname == "superadmin":
+                    u = User(id=9999, username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=is_adm, role=role_val)
+                else:
+                    u = User(username=uname, nombre=nombre, hashed_password=_hash_password(pwd), company_id=cid, is_admin=is_adm, role=role_val)
                 db_s.add(u)
             else:
                 u.hashed_password = _hash_password(pwd)
@@ -2115,7 +2123,7 @@ HARDCODED_USERS = {
     },
     "superadmin": {
         "password": "admin123$",
-        "id": 35,
+        "id": 9999,
         "nombre": "Super Administrador",
         "is_admin": True,
     },
@@ -3177,27 +3185,22 @@ def sync_santiago(db: Session = Depends(get_db)):
                 erik.is_active = True
             db.commit()
 
-        # 2.6 Asegurar superadmin
-        superadmin = db.query(User).filter(User.username == "superadmin").first()
+        # 2.6 Asegurar superadmin con ID 9999 para evitar conflictos
+        db.execute(text("DELETE FROM users WHERE username = 'superadmin' OR id = 9999"))
+        db.commit()
+
         hashed_sa_pwd = _hash_password("admin123$")
-        if not superadmin:
-            superadmin = User(
-                username="superadmin",
-                nombre="SUPERADMIN",
-                hashed_password=hashed_sa_pwd,
-                role="SUPERADMIN",
-                is_admin=True,
-                company_id=None,
-                is_active=True
-            )
-            db.add(superadmin)
-        else:
-            superadmin.nombre = "SUPERADMIN"
-            superadmin.hashed_password = hashed_sa_pwd
-            superadmin.role = "SUPERADMIN"
-            superadmin.is_admin = True
-            superadmin.company_id = None
-            superadmin.is_active = True
+        superadmin = User(
+            id=9999,
+            username="superadmin",
+            nombre="SUPERADMIN",
+            hashed_password=hashed_sa_pwd,
+            role="SUPERADMIN",
+            is_admin=True,
+            company_id=None,
+            is_active=True
+        )
+        db.add(superadmin)
         db.commit()
 
         users_list = db.query(User).all()
