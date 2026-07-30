@@ -319,7 +319,7 @@ export default function AdminDashboard() {
     setTiers(tiers.filter((_, i) => i !== index));
   };
 
-  if (!user?.is_admin || user?.company_id) {
+  if (user?.role !== 'SUPERADMIN' && user?.is_superadmin !== true && (!user?.is_admin || user?.company_id)) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4 animate-bounce" />

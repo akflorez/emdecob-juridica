@@ -13,7 +13,7 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const isAdmin = user?.is_admin === true;
-  const isSuperAdmin = user?.is_admin === true && !user?.company_id;
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || user?.is_superadmin === true || (user?.is_admin === true && !user?.company_id);
 
   return (
     <aside
