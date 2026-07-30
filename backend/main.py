@@ -2885,12 +2885,12 @@ def debug_superadmin(db: Session = Depends(get_db)):
         except Exception as e:
             result["companies_columns_error"] = str(e)
         
-        # 2. Ver todos los usuarios admin
+        # 2. Ver todos los usuarios
         try:
-            admins = db.execute(text("SELECT id, username, is_admin, company_id, is_active FROM users WHERE is_admin = TRUE")).fetchall()
-            result["admin_users"] = [{"id": r[0], "username": r[1], "is_admin": r[2], "company_id": r[3], "is_active": r[4]} for r in admins]
+            users_raw = db.execute(text("SELECT id, username, is_admin, company_id, role, is_active FROM users ORDER BY id")).fetchall()
+            result["all_users"] = [{"id": r[0], "username": r[1], "is_admin": r[2], "company_id": r[3], "role": r[4], "is_active": r[5]} for r in users_raw]
         except Exception as e:
-            result["admin_users_error"] = str(e)
+            result["all_users_error"] = str(e)
         
         # 3. Ver todas las empresas (raw)
         try:
