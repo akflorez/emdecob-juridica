@@ -10565,34 +10565,69 @@ async def ia_summarize(data: IASummarizeRequest, current_user: User = Depends(ge
 @app.post("/ia/chat")
 async def ia_chat(data: IAChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Asistente de chat inteligente. Responde consultas con base en los radicados de la base de datos de producción."""
-    # 1. Obtener contexto de los radicados del usuario
+    from datetime import datetime, timedelta
+    from sqlalchemy import desc
+
+    # 1. Preparar la consulta base de radicados del usuario
     query = db.query(Case)
     if not is_global_superadmin(current_user):
         query = query.filter(Case.company_id == current_user.company_id)
-        
-    cases = query.filter(or_(Case.is_active == True, Case.is_active.is_(None))).order_by(desc(Case.ultima_actuacion)).limit(35).all()
+    
+    # Filtrar radicados activos o sin flag definido
+    active_query = query.filter(or_(Case.is_active == True, Case.is_active.is_(None)))
+    
+    # 2. Calcular estadísticas reales para alimentar la IA
+    total_cases = active_query.count()
+    cases_with_date = active_query.filter(Case.ultima_actuacion.isnot(None)).count()
+    cases_without_date = total_cases - cases_with_date
+    
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+    inactive_cases_count = active_query.filter(
+        or_(Case.ultima_actuacion < six_months_ago.date(), Case.ultima_actuacion.is_(None))
+    ).count()
+
+    # 3. Traer los 35 casos con movimiento más reciente (nulls_last)
+    recent_cases = active_query.order_by(desc(Case.ultima_actuacion).nulls_last()).limit(35).all()
+    
+    # 4. Traer una pequeña muestra de casos sin fecha de actuación para que la IA sepa que existen
+    unsynced_cases = active_query.filter(Case.ultima_actuacion.is_(None)).limit(10).all()
     
     context_list = []
-    for c in cases:
+    context_list.append("=== ESTADÍSTICAS GENERALES DE JURICOB ===")
+    context_list.append(f"- Total de radicados activos de la empresa: {total_cases}")
+    context_list.append(f"- Procesos con fecha de última actuación registrada: {cases_with_date}")
+    context_list.append(f"- Procesos sin fecha de última actuación registrada (pendiente indexar/primera actualización): {cases_without_date}")
+    context_list.append(f"- Procesos inactivos (última actuación hace más de 6 meses o sin registrar): {inactive_cases_count}")
+    context_list.append("")
+    
+    context_list.append("=== MUESTRA DE PROCESOS RECIENTES O ACTUALIZADOS ===")
+    for c in recent_cases:
+        dt_str = str(c.ultima_actuacion)[:10] if c.ultima_actuacion else "Sin registrar"
         context_list.append(
             f"- Radicado: {c.radicado} | Demandado: {c.demandado or 'No indicado'} | "
             f"Juzgado: {c.juzgado or 'No indicado'} | Abogado: {c.abogado or 'Sin asignar'} | "
-            f"Última Actuación: {c.ultima_actuacion.isoformat() if c.ultima_actuacion else 'Sin registrar'} | "
-            f"Activo: {c.is_active}"
+            f"Última Actuación: {dt_str}"
         )
     
+    if unsynced_cases:
+        context_list.append("")
+        context_list.append("=== MUESTRA DE PROCESOS PENDIENTES DE ACTUALIZACIÓN ===")
+        for c in unsynced_cases:
+            context_list.append(
+                f"- Radicado: {c.radicado} | Demandado: {c.demandado or 'No indicado'} | Abogado: {c.abogado or 'Sin asignar'}"
+            )
+            
     cases_context = "\n".join(context_list)
     
     prompt = (
-        "Actúas como el Asistente Judicial de Inteligencia Artificial para la plataforma JURICOB. "
-        "Responderás la pregunta del usuario basándote únicamente en la información de los siguientes procesos "
-        "judiciales reales pertenecientes a su empresa:\n\n"
+        "Actúas como el Asistente Judicial de Inteligencia Artificial para la plataforma JURICOB de EMDECOB.\n"
+        "Responderás las preguntas del usuario sobre los procesos judiciales de su empresa apoyándote en la siguiente información y estadísticas de la base de datos de producción:\n\n"
         f"{cases_context}\n\n"
-        "Instrucciones:\n"
-        "1. Sé conciso, profesional y claro en tu redacción.\n"
-        "2. Si te preguntan por procesos sin movimiento, identifícalos y resúmelos basándote en la fecha de última actuación.\n"
-        "3. Si te preguntan por términos de la semana, indica las acciones críticas.\n"
-        "4. Si te preguntan por algo que no está en el listado, responde amablemente que no posees registros con ese criterio en el sistema.\n\n"
+        "Instrucciones clave:\n"
+        "1. Escribe de manera profesional, clara y concisa en español.\n"
+        "2. Si el usuario te cuestiona sobre el total de radicados (ej. '¿cómo así que 35 si hay 2497?'), aclárale formalmente que en la base de datos hay registrados un total de {total_cases} radicados en total de su empresa, pero que en esta ventana de conversación tienes un resumen con la muestra detallada de los 35 más recientes junto con las estadísticas globales.\n"
+        "3. Si te preguntan por procesos sin movimiento, menciona la cifra total inactiva (ej. {inactive_cases_count}) y pon como ejemplo algunos de los radicados del listado que tienen la fecha más antigua o sin registrar.\n"
+        "4. Si te preguntan sobre procesos de la semana o términos, analiza las fechas del listado que estén más próximas.\n\n"
         f"Pregunta del usuario: {data.message}"
     )
     
