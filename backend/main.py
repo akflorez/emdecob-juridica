@@ -10477,6 +10477,129 @@ async def get_all_statuses(db: Session = Depends(get_db), current_user: User = D
 
 
 # =========================
+# ASISTENTE INTELIGENTE (GEMINI IA)
+# =========================
+
+import os
+import requests
+import json
+
+class IASummarizeRequest(BaseModel):
+    text: str
+
+class IAChatRequest(BaseModel):
+    message: str
+
+def call_gemini_api(prompt: str, is_json: bool = False) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": prompt
+            }]
+        }]
+    }
+    
+    if is_json:
+        payload["generationConfig"] = {
+            "responseMimeType": "application/json"
+        }
+        
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            res_json = response.json()
+            try:
+                text_out = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                return text_out
+            except KeyError:
+                return ""
+        else:
+            print(f"Gemini API error {response.status_code}: {response.text}")
+            return ""
+    except Exception as e:
+        print(f"Error calling Gemini: {e}")
+        return ""
+
+@app.post("/api/ia/summarize")
+@app.post("/ia/summarize")
+async def ia_summarize(data: IASummarizeRequest, current_user: User = Depends(get_current_user)):
+    """Resalta e identifica términos, decisiones e impactos a partir del texto de una actuación judicial usando Gemini."""
+    prompt = (
+        "Actúa como un abogado experto en derecho procesal colombiano y asesor legal del Fondo Nacional del Ahorro (FNA). "
+        "Resume la siguiente actuación judicial de forma concisa. Estructura el resultado en formato JSON con los siguientes campos estrictamente:\n"
+        "- decision: La decisión principal tomada por el despacho judicial.\n"
+        "- term_days: Los términos o plazos procesales decretados (indica cuántos días o la fecha límite específica si se menciona).\n"
+        "- actions: Una lista con 3 acciones concretas e inmediatas que debe realizar el apoderado legal.\n"
+        "- risk_impact: Nivel de riesgo (Alto, Medio, Bajo) y una breve justificación legal de 2 líneas.\n\n"
+        "Texto de la actuación judicial:\n"
+        f"{data.text}"
+    )
+    
+    gemini_resp = call_gemini_api(prompt, is_json=True)
+    if gemini_resp:
+        try:
+            return json.loads(gemini_resp)
+        except Exception:
+            pass
+            
+    # Fallback si falla la llamada
+    return {
+        "decision": "No se pudo extraer la decisión principal debido a un error de comunicación con la IA.",
+        "term_days": "Término no disponible.",
+        "actions": [
+            "Revisar el expediente de forma manual en el portal de la Rama Judicial.",
+            "Contactar al juzgado si el término es perentorio.",
+            "Validar el estado físico de la notificación."
+        ],
+        "risk_impact": "Medio. Error en análisis automatizado."
+    }
+
+@app.post("/api/ia/chat")
+@app.post("/ia/chat")
+async def ia_chat(data: IAChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Asistente de chat inteligente. Responde consultas con base en los radicados de la base de datos de producción."""
+    # 1. Obtener contexto de los radicados del usuario
+    query = db.query(Case)
+    if not is_global_superadmin(current_user):
+        query = query.filter(Case.company_id == current_user.company_id)
+        
+    cases = query.filter(or_(Case.is_active == True, Case.is_active.is_(None))).order_by(desc(Case.ultima_actuacion)).limit(35).all()
+    
+    context_list = []
+    for c in cases:
+        context_list.append(
+            f"- Radicado: {c.radicado} | Demandado: {c.demandado or 'No indicado'} | "
+            f"Juzgado: {c.juzgado or 'No indicado'} | Abogado: {c.abogado or 'Sin asignar'} | "
+            f"Última Actuación: {c.ultima_actuacion.isoformat() if c.ultima_actuacion else 'Sin registrar'} | "
+            f"Activo: {c.is_active}"
+        )
+    
+    cases_context = "\n".join(context_list)
+    
+    prompt = (
+        "Actúas como el Asistente Judicial de Inteligencia Artificial para la plataforma JURICOB. "
+        "Responderás la pregunta del usuario basándote únicamente en la información de los siguientes procesos "
+        "judiciales reales pertenecientes a su empresa:\n\n"
+        f"{cases_context}\n\n"
+        "Instrucciones:\n"
+        "1. Sé conciso, profesional y claro en tu redacción.\n"
+        "2. Si te preguntan por procesos sin movimiento, identifícalos y resúmelos basándote en la fecha de última actuación.\n"
+        "3. Si te preguntan por términos de la semana, indica las acciones críticas.\n"
+        "4. Si te preguntan por algo que no está en el listado, responde amablemente que no posees registros con ese criterio en el sistema.\n\n"
+        f"Pregunta del usuario: {data.message}"
+    )
+    
+    response_text = call_gemini_api(prompt)
+    if not response_text:
+        response_text = "Disculpa, en este momento no puedo conectarme con el motor de IA. Por favor, intenta de nuevo en unos momentos."
+        
+    return {"response": response_text}
+
+
+# =========================
 # ADMIN PANEL (DJANGO-LIKE)
 # =========================
 

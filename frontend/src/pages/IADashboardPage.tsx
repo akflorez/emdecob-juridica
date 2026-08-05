@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/services/api";
 
 // Mock data reflecting Colombian legal cases and terminology
 const MOCK_DEADLINES = [
@@ -140,53 +141,30 @@ export default function IADashboardPage() {
   }, [selectedSampleAct]);
 
   // Handle preset questions from the screenshot
-  const handlePresetQuestion = (question: string, answerType: string) => {
+  const handlePresetQuestion = async (question: string, answerType: string) => {
     // Add user message
     setMessages(prev => [...prev, { sender: "user", text: question }]);
     setIsAiTyping(true);
 
-    setTimeout(() => {
-      let aiResponseText = "";
-      let listData = null;
-
-      if (answerType === "no_movement") {
-        aiResponseText = "Al analizar la base de datos de los procesos de la empresa CODE / Fondo Nacional del Ahorro, identifiqué **2 procesos** que llevan más de seis meses sin registrar ninguna actuación judicial o cambio de estado:";
-        listData = {
-          headers: ["Radicado", "Demandado", "Última Actuación", "Días Inactivo", "Abogado Asignado"],
-          rows: [
-            ["11001400300220250085400", "Inversiones Bogotá SAS", "2025-10-15 (Auto ordena notificar)", "295 días", "Erick Santiago Garzón"],
-            ["25000234100020250096600", "Distribuidora del Norte", "2025-11-20 (Remisión al despacho)", "258 días", "Santiago Quintero"]
-          ]
-        };
-      } else if (answerType === "unfavorable") {
-        aiResponseText = "En el último trimestre (Mayo - Julio 2026), se han registrado **3 procesos con sentencias desfavorables o autos de terminación anticipada** que impactan al Fondo Nacional del Ahorro:";
-        listData = {
-          headers: ["Radicado", "Juzgado", "Demandado", "Fecha Sentencia", "Motivo de Decisión"],
-          rows: [
-            ["11001400308820250099400", "Juzgado 14 Civil Circuito Bogotá", "Héctor Fabio Castro", "2026-06-12", "Declarada prescripción del título por inactividad procesal (Art. 95 CGP)."],
-            ["05001310300220250041200", "Juzgado 2 Civil Circuito Medellín", "Constructoras Asociadas D.C.", "2026-07-04", "Excepción de contrato no cumplido declarada probada en primera instancia."],
-            ["76001400302220250051100", "Juzgado 22 Civil Circuito Cali", "Comercializadora Pacífico Ltda", "2026-07-19", "Nulidad absoluta del pagaré por falta de firma del codeudor solidario."]
-          ]
-        };
-      } else if (answerType === "attention") {
-        aiResponseText = "Esta semana requieren atención prioritaria **3 procesos** debido a términos procesales próximos a vencer o solicitudes de subsanación urgentes detectadas por nuestro motor de IA:";
-        listData = {
-          headers: ["Radicado", "Término Procesal", "Fecha Límite", "Abogado", "Acción Pendiente"],
-          rows: [
-            ["11001400300220260012300", "Traslado de excepciones (3 días)", "2026-08-07 (En 2 días)", "Erick Santiago Garzón", "Contestar excepciones de CREDIVALORES S.A."],
-            ["25000234100020260045600", "Subsanación de demanda (5 días)", "2026-08-09 (En 4 días)", "Santiago Quintero Rojas", "Adjuntar certificado catastral actualizado."],
-            ["05001310300420260078900", "Ejecutoria de auto de pruebas", "2026-08-11 (En 6 días)", "Heriberto Montealegre", "Radicar recurso de reposición por pruebas negadas."]
-          ]
-        };
-      }
-
-      setMessages(prev => [...prev, { sender: "ai", text: aiResponseText, listData }]);
+    try {
+      const res = await apiFetch<{ response: string }>("/api/ia/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: question }),
+      });
+      
+      setMessages(prev => [...prev, { sender: "ai", text: res.response }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { 
+        sender: "ai", 
+        text: "Lo siento, ha ocurrido un error al conectar con el asistente de IA. Por favor, reintenta en unos instantes." 
+      }]);
+    } finally {
       setIsAiTyping(false);
-    }, 1500);
+    }
   };
 
   // Handle custom user questions
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
 
@@ -195,72 +173,59 @@ export default function IADashboardPage() {
     setInputText("");
     setIsAiTyping(true);
 
-    setTimeout(() => {
-      // General fallbacks
-      let aiResponseText = "Entiendo tu consulta sobre el proceso. Actualmente estoy simulando este asistente inteligente para JURICOB. En el tablero puedes ver los módulos interactivos de Resumen de Actuaciones, Plazos Críticos y Clasificación de Riesgos.";
+    try {
+      const res = await apiFetch<{ response: string }>("/api/ia/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: userMsg }),
+      });
       
-      const lower = userMsg.toLowerCase();
-      if (lower.includes("resumen") || lower.includes("resumir")) {
-        aiResponseText = "Para resumir una actuación judicial, por favor navega a la pestaña **'Resumidor de Actuaciones'** arriba, selecciona uno de los autos del juzgado de ejemplo, y haz clic en 'Generar Resumen con IA'.";
-      } else if (lower.includes("riesgo") || lower.includes("riesgos")) {
-        aiResponseText = "Para revisar la clasificación del riesgo de cada proceso, dirígete a la pestaña **'Análisis de Riesgo'** arriba. Allí encontrarás la justificación del porcentaje de riesgo asociado a cada radicado.";
-      } else if (lower.includes("plazo") || lower.includes("vencer") || lower.includes("término")) {
-        aiResponseText = "Los plazos extraídos por IA para esta semana se encuentran listados en la pestaña **'Alertas de Plazos'**. El proceso con radicado finalizado en *12300* (abogado Erick Santiago Garzón) vence este 7 de agosto.";
-      }
-
-      setMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
+      setMessages(prev => [...prev, { sender: "ai", text: res.response }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { 
+        sender: "ai", 
+        text: "Lo siento, ha ocurrido un error al conectar con el asistente de IA. Por favor, reintenta en unos instantes." 
+      }]);
+    } finally {
       setIsAiTyping(false);
-    }, 1200);
+    }
   };
 
-  // Handle AI Summarization simulation
-  const handleSummarize = () => {
+  // Handle AI Summarization
+  const handleSummarize = async () => {
     setIsSummarizing(true);
     setSummaryResult(null);
 
-    setTimeout(() => {
-      let decision = "";
-      let termDays = "";
-      let actions = [];
-      let riskImpact = "";
-
-      if (selectedSampleAct === 0) {
-        decision = "Inadmisión de la demanda ejecutiva singular contra COLPATRIA MULTIBANCA.";
-        termDays = "Cinco (5) días hábiles contados a partir del día siguiente a la notificación por estado.";
-        actions = [
-          "Solicitar y expedir el certificado catastral de vigencia del inmueble objeto de embargo preventivo.",
-          "Elaborar memorial de subsanación adjuntando el certificado respectivo antes del vencimiento.",
-          "Radicar el memorial a través de los canales digitales asignados por el juzgado veinticinco municipal."
-        ];
-        riskImpact = "Bajo. Es una inadmisión subsanable y de trámite común que no compromete el cobro de la obligación ejecutada.";
-      } else if (selectedSampleAct === 1) {
-        decision = "Se corre traslado de las excepciones de mérito presentadas por la parte demandada (CREDIVALORES S.A.) a la parte demandante (FNA).";
-        termDays = "Tres (3) días hábiles.";
-        actions = [
-          "Analizar los argumentos de excepción ('Falta de exigibilidad del título' y 'Cobro de lo no debido').",
-          "Revisar el estado de cuenta y el historial de pagos del FNA con el deudor para verificar si existen abonos no imputados.",
-          "Redactar y radicar memorial descorriendo el traslado de excepciones y solicitando pruebas de soporte de la deuda."
-        ];
-        riskImpact = "Alto. De no contestarse en término, el juzgado asumirá que no se contradicen los hechos alegados por la contraparte.";
-      } else {
-        decision = "Se señala fecha y hora para llevar a cabo la audiencia inicial establecida en el artículo 372 del Código General del Proceso (CGP).";
-        termDays = "Audiencia fijada para el día 25 de agosto de 2026 a las 09:00 A.M. vía virtual (Microsoft Teams).";
-        actions = [
-          "Notificar al cliente y al abogado asignado (Heriberto Montealegre) sobre la programación.",
-          "Agendar la reunión de Teams respectiva y preparar el interrogatorio de parte.",
-          "Verificar la disponibilidad de los poderes del Fondo Nacional del Ahorro debidamente incorporados en el expediente."
-        ];
-        riskImpact = "Medio. Etapa crítica del proceso CGP donde se fijan los hechos del litigio, se realiza la conciliación y el saneamiento procesal.";
-      }
-
-      setSummaryResult({
-        decision,
-        termDays,
-        actions,
-        riskImpact
+    try {
+      const res = await apiFetch<{
+        decision: string;
+        term_days: string;
+        actions: string[];
+        risk_impact: string;
+      }>("/api/ia/summarize", {
+        method: "POST",
+        body: JSON.stringify({ text: actText }),
       });
+      
+      setSummaryResult({
+        decision: res.decision,
+        termDays: res.term_days,
+        actions: res.actions,
+        riskImpact: res.risk_impact
+      });
+    } catch (err) {
+      setSummaryResult({
+        decision: "Error de comunicación con el servidor de IA.",
+        termDays: "No disponible.",
+        actions: [
+          "Verificar la validez de la API Key en el archivo .env",
+          "Revisar el formato y contenido de la actuación judicial ingresada.",
+          "Verificar los registros de red del navegador."
+        ],
+        riskImpact: "Alto. Error en procesamiento."
+      });
+    } finally {
       setIsSummarizing(false);
-    }, 1800);
+    }
   };
 
   return (
