@@ -25,6 +25,7 @@ import HelpPage from "./pages/HelpPage";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
 import LandingPage from "./pages/LandingPage";
+import IADashboardPage from "./pages/IADashboardPage";
 
 import { MyTasksView } from "./components/MyTasksView";
 
@@ -79,6 +80,7 @@ const App = () => (
                     <AdminDashboard />
                   </ProtectedRoute>
                 } />
+                <Route path="/ia-dashboard" element={<IADashboardPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
