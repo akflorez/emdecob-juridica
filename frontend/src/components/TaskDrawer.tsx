@@ -107,6 +107,8 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isNote, setIsNote] = useState(true);
   const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
 
   const displayTask = fullTask || task;
 
@@ -263,6 +265,34 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
       if (onTaskUpdate) onTaskUpdate({ ...displayTask });
     } catch (error) {
       console.error("Error toggling subtask tag:", error);
+    }
+  };
+
+  const handleDeleteSubtask = async (subtaskId: number) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar esta gestión técnica?")) return;
+    try {
+      await deleteTask(subtaskId);
+      await refreshTask();
+      if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+      toast({ title: "Gestión eliminada", description: "La gestión se ha eliminado correctamente." });
+    } catch (err) {
+      console.error("Error deleting subtask:", err);
+      toast({ title: "Error", description: "No se pudo eliminar la gestión.", variant: "destructive" });
+    }
+  };
+
+  const handleSaveSubtaskTitle = async (subtaskId: number) => {
+    if (!editingSubtaskTitle.trim()) {
+      setEditingSubtaskId(null);
+      return;
+    }
+    try {
+      await updateTask(subtaskId, { title: editingSubtaskTitle.trim() });
+      setEditingSubtaskId(null);
+      await refreshTask();
+      if (onTaskUpdate) onTaskUpdate({ ...displayTask });
+    } catch (err) {
+      console.error("Error saving subtask title:", err);
     }
   };
 
@@ -577,25 +607,55 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                       {isSubtasksOpen && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                           <div className="bg-card/10 rounded-[2rem] border border-border/50 overflow-hidden shadow-2xl">
-                             <div className="grid grid-cols-[1fr_120px_180px_100px_140px] gap-6 px-10 py-4 border-b border-border/50 text-[10px] font-black uppercase text-muted-foreground tracking-widest bg-muted/20">
+                             <div className="grid grid-cols-[1fr_120px_180px_100px_140px_80px] gap-6 px-10 py-4 border-b border-border/50 text-[10px] font-black uppercase text-muted-foreground tracking-widest bg-muted/20">
                                 <div>Actividad</div>
                                 <div className="text-center">Etiquetas</div>
                                 <div className="text-center">Responsable</div>
                                 <div className="text-center">Prioridad</div>
                                 <div className="text-right">Vencimiento</div>
+                                <div className="text-center">Acciones</div>
                              </div>
                              <div className="divide-y divide-border/50">
                                 {displayTask.subtasks?.length ? (
                                    displayTask.subtasks.map(st => (
-                                     <div key={st.id} className="grid grid-cols-[1fr_120px_180px_100px_140px] gap-6 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary items-center">
-                                        <div className="flex items-center gap-5 text-foreground">
+                                     <div key={st.id} className="grid grid-cols-[1fr_120px_180px_100px_140px_80px] gap-6 px-10 py-3 hover:bg-muted/30 transition-all cursor-pointer group text-[13.5px] border-l-2 border-transparent hover:border-primary items-center">
+                                        <div className="flex items-center gap-5 text-foreground min-w-0">
                                             <div 
                                               className={cn("h-5 w-5 rounded-md border-2 border-border/80 flex items-center justify-center transition-all hover:border-primary cursor-pointer flex-shrink-0", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && 'bg-[#2da44e] border-[#2da44e]')}
                                               onClick={(e) => toggleSubtaskStatus(st, e)}
                                             >
                                               {['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && <Check className="h-3 w-3 text-white" />}
                                            </div>
-                                           <span className={cn("font-bold tracking-tight truncate", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}>{st.title}</span>
+                                           {editingSubtaskId === st.id ? (
+                                             <Input 
+                                               autoFocus
+                                               value={editingSubtaskTitle}
+                                               onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                               className="h-8 py-1 px-3 text-xs border border-primary font-bold rounded-lg w-full bg-background text-foreground focus:ring-1 focus:ring-primary"
+                                               onClick={(e) => e.stopPropagation()}
+                                               onKeyDown={async (e) => {
+                                                 if (e.key === 'Enter') {
+                                                   e.preventDefault();
+                                                   await handleSaveSubtaskTitle(st.id);
+                                                 } else if (e.key === 'Escape') {
+                                                   setEditingSubtaskId(null);
+                                                 }
+                                               }}
+                                               onBlur={async () => {
+                                                 await handleSaveSubtaskTitle(st.id);
+                                               }}
+                                             />
+                                           ) : (
+                                             <span 
+                                               onDoubleClick={() => {
+                                                 setEditingSubtaskId(st.id);
+                                                 setEditingSubtaskTitle(st.title || '');
+                                               }}
+                                               className={cn("font-bold tracking-tight truncate flex-1", ['completado', 'completo', 'finalizado', 'terminado', 'closed', 'done'].includes(st.status?.toLowerCase() || '') && "line-through text-muted-foreground opacity-50")}
+                                             >
+                                               {st.title}
+                                             </span>
+                                           )}
                                         </div>
                                         <div className="flex justify-center items-center" onClick={(e) => e.stopPropagation()}>
                                            <Popover>
@@ -701,6 +761,29 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                                                }
                                              }}
                                            />
+                                        </div>
+                                        <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                           <Button
+                                             variant="ghost"
+                                             size="icon"
+                                             className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                             onClick={() => {
+                                               setEditingSubtaskId(st.id);
+                                               setEditingSubtaskTitle(st.title || '');
+                                             }}
+                                             title="Editar título de gestión"
+                                           >
+                                             <Edit3 className="h-3.5 w-3.5" />
+                                           </Button>
+                                           <Button
+                                             variant="ghost"
+                                             size="icon"
+                                             className="h-7 w-7 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                             onClick={() => handleDeleteSubtask(st.id)}
+                                             title="Eliminar gestión"
+                                           >
+                                             <Trash2 className="h-3.5 w-3.5" />
+                                           </Button>
                                         </div>
                                      </div>
                                    ))
