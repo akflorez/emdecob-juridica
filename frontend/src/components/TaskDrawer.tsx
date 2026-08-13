@@ -6,7 +6,7 @@ import {
   UserCheck, Search, Activity, CornerDownRight, Smile, MoreHorizontal,
   ChevronDown, CalendarDays, Layout, Check, Trash, RefreshCw,
   Play, Settings, Hash, Paperclip as AttachmentIcon, MessageCircle,
-  ChevronUp
+  ChevronUp, ExternalLink
 } from "lucide-react";
 import {
   Sheet,
@@ -43,6 +43,30 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+
+const renderTextWithLinks = (text: string) => {
+  if (!text) return <span className="text-muted-foreground/35 italic">Sin descripción.</span>;
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.match(urlRegex)) {
+      const href = part.startsWith("http") ? part : `https://${part}`;
+      return (
+        <a 
+          key={index} 
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-primary hover:underline font-bold inline-flex items-center gap-0.5 break-all cursor-pointer bg-primary/5 px-1 py-0.5 rounded border border-primary/15"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part} <ExternalLink className="h-3 w-3 inline" />
+        </a>
+      );
+    }
+    return <span key={index} className="whitespace-pre-line">{part}</span>;
+  });
+};
 
 interface TaskDrawerProps {
   task: TaskType | null;
@@ -82,6 +106,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isNote, setIsNote] = useState(true);
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
 
   const displayTask = fullTask || task;
 
@@ -92,6 +117,7 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
       setFullTask(null); // limpiar datos anteriores para evitar mostrar datos de otra tarea
       setEditedTitle(task.title || '');
       setEditedDesc(task.description || '');
+      setIsEditingDesc(false);
       setEditedDueDate(task.due_date ? format(parseISO(task.due_date.toString()), 'yyyy-MM-dd') : '');
       if (task.id) refreshTask();
       
@@ -182,8 +208,11 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
       } else {
         // Es una tarea existente, usar updateTask
         const updated = await updateTask(displayTask.id, cleanedUpdates);
-        onTaskUpdate(updated);
-        setFullTask(updated);
+        const merged = { ...displayTask, ...updated };
+        onTaskUpdate(merged);
+        setFullTask(merged);
+        // Refrescar en segundo plano para sincronizar sub-recursos de manera robusta
+        refreshTask();
       }
     } catch (error: any) {
       console.error("Error in handleSave", error);
@@ -491,21 +520,39 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
                       </div>
                    </div>
 
-                   {/* Description */}
-                   <div className="space-y-4">
-                      <div className="flex items-center gap-3 text-muted-foreground italic text-[11px] font-black tracking-widest uppercase">
-                         <Activity className="h-4 w-4 text-primary opacity-50" /> Síntesis Procesal
-                      </div>
-                      <div className="bg-card/10 rounded-[2rem] p-8 border border-border/50 shadow-inner">
-                        <Textarea 
-                          className="min-h-[150px] bg-transparent border-none p-0 text-[15px] leading-relaxed text-foreground/80 focus:ring-0 placeholder:text-muted-foreground/10 transition-all font-medium"
-                          placeholder="Estado detallado de la actuación judicial..."
-                          value={editedDesc}
-                          onChange={(e) => setEditedDesc(e.target.value)}
-                          onBlur={() => handleSave({ description: editedDesc })}
-                        />
-                      </div>
-                   </div>
+                    {/* Description */}
+                    <div className="space-y-4">
+                       <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 text-muted-foreground italic text-[11px] font-black tracking-widest uppercase">
+                             <Activity className="h-4 w-4 text-primary opacity-50" /> Síntesis Procesal
+                          </div>
+                          {!isEditingDesc && editedDesc && (
+                             <span className="text-[9px] text-muted-foreground/50 italic font-bold">Haz clic adentro para editar</span>
+                          )}
+                       </div>
+                       <div 
+                         className="bg-card/10 rounded-[2rem] p-8 border border-border/50 shadow-inner cursor-text min-h-[150px]"
+                         onClick={() => { if (!isEditingDesc) setIsEditingDesc(true); }}
+                       >
+                         {isEditingDesc ? (
+                           <Textarea 
+                             autoFocus
+                             className="min-h-[150px] bg-transparent border-none p-0 text-[15px] leading-relaxed text-foreground/80 focus:ring-0 placeholder:text-muted-foreground/10 transition-all font-medium w-full resize-y"
+                             placeholder="Estado detallado de la actuación judicial..."
+                             value={editedDesc}
+                             onChange={(e) => setEditedDesc(e.target.value)}
+                             onBlur={() => {
+                               handleSave({ description: editedDesc });
+                               setIsEditingDesc(false);
+                             }}
+                           />
+                         ) : (
+                           <div className="text-[15px] leading-relaxed text-foreground/80 font-medium whitespace-pre-wrap break-words">
+                             {renderTextWithLinks(editedDesc)}
+                           </div>
+                         )}
+                       </div>
+                    </div>
 
                    {/* Gestiones Técnicas */}
                    <div className="space-y-6 pt-4 border-t border-border/50">
