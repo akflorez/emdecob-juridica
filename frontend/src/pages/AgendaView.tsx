@@ -102,6 +102,26 @@ function CustomEvent({ event }: any) {
   );
 }
 
+const parseSafeDate = (dateStr: any): Date => {
+  if (!dateStr) return new Date();
+  if (dateStr instanceof Date) {
+    return isNaN(dateStr.getTime()) ? new Date() : dateStr;
+  }
+  const str = String(dateStr).trim();
+  const dmyRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+  const match = str.match(dmyRegex);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const year = parseInt(match[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) return parsed;
+  return new Date();
+};
+
 export default function AgendaView() {
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -140,7 +160,7 @@ export default function AgendaView() {
   const displayTasks = tasks.filter(t => t.parent_id != null);
 
   const events = displayTasks.map(t => {
-    const d = t.due_date ? new Date(t.due_date) : new Date();
+    const d = parseSafeDate(t.due_date);
     return {
       id: t.id,
       title: t.title + (!t.due_date ? ' (Sin Fecha)' : ''),
@@ -153,7 +173,7 @@ export default function AgendaView() {
 
   const todayTasks = displayTasks.filter(t => {
     if (!t.due_date) return false;
-    const d = new Date(t.due_date);
+    const d = parseSafeDate(t.due_date);
     const today = new Date();
     return d.toDateString() === today.toDateString();
   });
