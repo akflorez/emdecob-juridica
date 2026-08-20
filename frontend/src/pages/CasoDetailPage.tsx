@@ -1201,8 +1201,9 @@ export default function CasoDetailPage() {
                                             doc.fecha        ||
                                             '';
 
+                                          const authToken = localStorage.getItem('emdecob_auth_token');
                                           const downloadUrl = docId
-                                            ? `${cleanBaseUrl}/documentos/${docId}/descargar`
+                                            ? `${cleanBaseUrl}/documentos/${docId}/descargar${authToken ? `?token=${authToken}` : ''}`
                                             : null;
 
                                           return (

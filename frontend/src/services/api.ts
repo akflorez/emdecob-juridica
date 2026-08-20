@@ -768,7 +768,8 @@ export function downloadDocumento(doc: DocumentoActuacion) {
     return;
   }
 
-  window.open(`${cleanBaseUrl}/documentos/${idDocumento}/descargar`, "_blank");
+  const authToken = localStorage.getItem('emdecob_auth_token');
+  window.open(`${cleanBaseUrl}/documentos/${idDocumento}/descargar${authToken ? `?token=${authToken}` : ''}`, "_blank");
 }
 
 /** ---------------------------
