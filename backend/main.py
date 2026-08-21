@@ -2503,21 +2503,52 @@ def extract_juzgado(p: dict, det: Optional[dict]) -> Optional[str]:
 
     return juzgado
 
+async def select_best_process_item(items: list) -> dict:
+    """
+    Si la Rama Judicial devuelve múltiples expedientes para un mismo radicado de 23 dígitos,
+    evalúa cada expediente y selecciona el que tenga mayor cantidad de actuaciones.
+    """
+    if not items:
+        return {}
+    if len(items) == 1:
+        return items[0] or {}
+        
+    best_item = items[0] or {}
+    max_acts_count = -1
+    
+    for item in items:
+        if not item or not isinstance(item, dict):
+            continue
+        idp_cand = item.get("idProceso") or item.get("IdProceso") or item.get("id_proceso") or item.get("id")
+        if not idp_cand:
+            continue
+        try:
+            idp_int = int(idp_cand)
+            acts = await actuaciones_proceso(idp_int)
+            count = len(acts) if isinstance(acts, list) else 0
+            if count > max_acts_count:
+                max_acts_count = count
+                best_item = item
+        except Exception as err:
+            print(f"[rama] Error evaluando idProceso candidato {idp_cand}: {err}")
+            
+    return best_item or items[0] or {}
+
 async def obtener_id_proceso(radicado: str) -> Optional[int]:
-    # Intentar b?squeda directa
+    # Intentar búsqueda directa
     resp = await consulta_por_radicado(radicado, solo_activos=False, pagina=1)
     items = extract_items(resp)
     
-    # Si no hay items, intentar con los primeros 21 d?gitos (por si acaso el final var?a)
+    # Si no hay items, intentar con los primeros 21 dígitos (por si acaso el final varía)
     if not items and len(radicado) >= 21:
-        print(f"? [rama] Reintentando obtener_id_proceso con 21 d?gitos para {radicado}")
+        print(f"📌 [rama] Reintentando obtener_id_proceso con 21 dígitos para {radicado}")
         resp = await consulta_por_radicado(radicado[:21], solo_activos=False, pagina=1)
         items = extract_items(resp)
 
     if not items:
         return None
         
-    p0 = items[0] or {}
+    p0 = await select_best_process_item(items)
     idp = (
         p0.get("idProceso")
         or p0.get("IdProceso")
@@ -2611,7 +2642,7 @@ async def validar_radicado_completo(radicado: str, db: Session, is_new_import: b
     if not items:
         return {"found": False, "case": None}
 
-    p = items[0] or {}
+    p = await select_best_process_item(items)
     id_proceso = p.get("idProceso") or p.get("IdProceso")
 
     det = {}
