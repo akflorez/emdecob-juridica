@@ -77,21 +77,6 @@ export default function AdminDashboard() {
     clickup_api_token: ''
   });
 
-  useEffect(() => {
-    if (user?.is_admin || user?.is_superadmin) {
-      fetchData();
-    }
-  }, [user]);
-
-  // Auto-refresco del monitoreo cada 30 segundos
-  useEffect(() => {
-    if (!user?.is_admin && !user?.is_superadmin) return;
-    const interval = setInterval(() => {
-      refreshMonitoring();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
-
   const refreshMonitoring = async () => {
     setIsRefreshingMonitoring(true);
     setMonitoringError(null);
@@ -128,6 +113,21 @@ export default function AdminDashboard() {
     // Carga el monitoreo por separado para no bloquear el resto
     refreshMonitoring();
   };
+
+  useEffect(() => {
+    if (user?.is_admin || user?.is_superadmin) {
+      fetchData();
+    }
+  }, [user]);
+
+  // Auto-refresco del monitoreo cada 30 segundos
+  useEffect(() => {
+    if (!user?.is_admin && !user?.is_superadmin) return;
+    const interval = setInterval(() => {
+      refreshMonitoring();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleCreateCompany = async () => {
     try {

@@ -103,6 +103,27 @@ def migrate():
             except Exception as e:
                 print(f"Error agregando columna {col_name} a case_publications: {e}")
 
+        # 8. Columna completed_at en tasks (seguimiento de duración de resolución)
+        print("Verificando columna 'completed_at' en 'tasks'...")
+        try:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP"))
+        except Exception as e:
+            print(f"Nota en completed_at: {e}")
+
+        # 9. Columna last_active_at en users (detección de usuarios en línea)
+        print("Verificando columna 'last_active_at' en 'users'...")
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP"))
+        except Exception as e:
+            print(f"Nota en last_active_at: {e}")
+
+        # 10. Columna metadata_json en audit_logs (detalles de acciones)
+        print("Verificando columna 'metadata_json' en 'audit_logs'...")
+        try:
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata_json TEXT"))
+        except Exception as e:
+            print(f"Nota en metadata_json: {e}")
+
         conn.commit()
     
     print("Migracion Experta completada exitosamente.")
