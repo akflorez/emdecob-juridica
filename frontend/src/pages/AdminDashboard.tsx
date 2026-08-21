@@ -9,9 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Plus, Users, Building2, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult } from '@/services/api';
+import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult, getAdminMonitoring, AdminMonitoringStats } from '@/services/api';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DollarSign, Save, RefreshCw, MoreHorizontal, Edit, Check, AlertTriangle } from 'lucide-react';
+import { DollarSign, Save, RefreshCw, MoreHorizontal, Edit, Check, AlertTriangle, Activity } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function AdminDashboard() {
@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [tiers, setTiers] = useState<BillingTier[]>([]);
   const [simulatorData, setSimulatorData] = useState<BillingSimulatorResult[]>([]);
+  const [monitoring, setMonitoring] = useState<AdminMonitoringStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingTiers, setSavingTiers] = useState(false);
 
@@ -83,16 +84,18 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [compRes, usrRes, tiersRes, simRes] = await Promise.all([
+      const [compRes, usrRes, tiersRes, simRes, monRes] = await Promise.all([
         apiFetch<any[]>('/api/admin/companies'),
         apiFetch<any[]>('/api/admin/users'),
         getBillingTiers().catch(() => ({ tiers: [] as BillingTier[] })),
-        getBillingSimulator().catch(() => ({ simulator: [] as BillingSimulatorResult[] }))
+        getBillingSimulator().catch(() => ({ simulator: [] as BillingSimulatorResult[] })),
+        getAdminMonitoring().catch(() => null)
       ]);
       setCompanies(compRes || []);
       setUsers(usrRes || []);
       if (tiersRes && 'tiers' in tiersRes) setTiers(tiersRes.tiers);
       if (simRes && 'simulator' in simRes) setSimulatorData(simRes.simulator);
+      if (monRes) setMonitoring(monRes);
     } catch (error: any) {
       toast({ title: "Error", description: "No se pudieron cargar los datos.", variant: "destructive" });
     } finally {
@@ -352,6 +355,9 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="facturacion" className="flex items-center gap-2 px-4 py-2">
             <DollarSign className="w-4 h-4" /> Facturación
+          </TabsTrigger>
+          <TabsTrigger value="monitoreo" className="flex items-center gap-2 px-4 py-2">
+            <Activity className="w-4 h-4" /> Monitoreo y Auditoría
           </TabsTrigger>
         </TabsList>
 
@@ -737,6 +743,151 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="monitoreo" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-indigo-500/5 to-indigo-500/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Inicios de Sesión Hoy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-black text-slate-800">{monitoring?.stats?.logins_today ?? 0}</div>
+                  <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-600">
+                    <Activity className="w-6 h-6" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-emerald-500/5 to-emerald-500/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Tareas Creadas Hoy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-black text-slate-800">{monitoring?.stats?.tasks_created_today ?? 0}</div>
+                  <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-600">
+                    <Check className="w-6 h-6" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-blue-500/5 to-blue-500/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Nuevos Casos Hoy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-black text-slate-800">{monitoring?.stats?.cases_created_today ?? 0}</div>
+                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-600">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            {/* Actividad de Usuarios Hoy */}
+            <Card className="xl:col-span-1 border-slate-100 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-bold text-slate-800">Actividad de Usuarios Hoy</CardTitle>
+                <CardDescription>Cantidad de acciones registradas hoy por cada usuario</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold text-slate-700">Usuario</TableHead>
+                        <TableHead className="font-bold text-slate-700 text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {monitoring?.user_activity_today?.map((u, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-slate-800">{u.nombre || u.username}</span>
+                              <span className="text-xs text-slate-500">@{u.username}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-black text-slate-800">{u.count}</TableCell>
+                        </TableRow>
+                      ))}
+                      {(!monitoring?.user_activity_today || monitoring.user_activity_today.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center py-6 text-slate-400">
+                            Sin actividad reportada hoy
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Historial de Auditoría en Tiempo Real */}
+            <Card className="xl:col-span-2 border-slate-100 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg font-bold text-slate-800">Historial de Auditoría</CardTitle>
+                  <CardDescription>Registro en tiempo real de las últimas 100 acciones en el aplicativo</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchData} className="text-slate-600 hover:text-slate-800 flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4" /> Recargar
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-hidden rounded-xl border border-slate-100 bg-white max-h-[500px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                      <TableRow>
+                        <TableHead className="font-bold text-slate-700">Fecha/Hora</TableHead>
+                        <TableHead className="font-bold text-slate-700">Usuario</TableHead>
+                        <TableHead className="font-bold text-slate-700">Empresa</TableHead>
+                        <TableHead className="font-bold text-slate-700">Acción</TableHead>
+                        <TableHead className="font-bold text-slate-700">IP</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {monitoring?.recent_logs?.map((log) => (
+                        <TableRow key={log.id} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs text-slate-500 font-mono">
+                            {log.created_at ? new Date(log.created_at).toLocaleString('es-CO') : '—'}
+                          </TableCell>
+                          <TableCell className="font-semibold text-slate-800">{log.user_name}</TableCell>
+                          <TableCell className="text-slate-600">{log.company_name}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                              log.accion === 'LOGIN' ? 'bg-indigo-50 text-indigo-700' :
+                              log.accion === 'CREATE_TASK' ? 'bg-emerald-50 text-emerald-700' :
+                              log.accion === 'DELETE_TASK' ? 'bg-rose-50 text-rose-700' :
+                              'bg-slate-100 text-slate-800'
+                            }`}>
+                              {log.accion}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 font-mono">{log.ip || '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                      {(!monitoring?.recent_logs || monitoring.recent_logs.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-12 text-slate-400">
+                            No hay registros de auditoría disponibles
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>

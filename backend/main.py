@@ -100,6 +100,8 @@ try:
 
         # Tareas
         try_execute(conn, "ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)")
+        try_execute(conn, "ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES task_comments(id) ON DELETE CASCADE")
+        try_execute(conn, "ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS case_event_id INTEGER REFERENCES case_events(id) ON DELETE CASCADE")
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)")
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)")
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT")
@@ -3231,7 +3233,7 @@ def sync_santiago(db: Session = Depends(get_db)):
 # =========================
 
 @app.post("/auth/login")
-def login(data: LoginRequest):
+def login(data: LoginRequest, request: Request = None):
     """Autentica un usuario y retorna un token de sesi?n."""
 
     username_raw = data.username
@@ -3278,6 +3280,7 @@ def login(data: LoginRequest):
                     "clickup_api_token": getattr(user_db, 'clickup_api_token', None),
                 }
             }
+            log_audit_action(db, user_db.id, user_db.company_id, "LOGIN", "User", user_db.id, request)
             db.close()
             return res_payload
     except HTTPException:
@@ -4357,6 +4360,8 @@ def list_cases(
         # Multi-tenancy filter: SaaS Isolation
         if is_global_superadmin(current_user):
             pass # SuperAdmin ve todo
+        elif current_user.username == 'fna_juridica':
+            q = q.filter(Case.company_id.in_([1, 2]))
         else:
             q = q.filter(Case.company_id == current_user.company_id)
 
@@ -5136,7 +5141,8 @@ async def get_case_by_id(case_id: int, db: Session = Depends(get_db), current_us
         raise HTTPException(404, "Caso no encontrado")
         
     if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
-        raise HTTPException(403, "No tienes acceso a este caso")
+        if not (current_user.username == 'fna_juridica' and c.company_id in [1, 2]):
+            raise HTTPException(403, "No tienes acceso a este caso")
         
     return serialize_case(c)
 
@@ -5339,6 +5345,10 @@ async def get_case_by_radicado_endpoint(
                 if _es_fna(c.demandante or "") or (c.user_id != 2 and c.user_id != 1): visible = True
                 if c.user_id == 1: visible = True
             
+            # Asegurar acceso de fna_juridica para empresa 1 y 2
+            if current_user.username == 'fna_juridica' and c.company_id in [1, 2]:
+                visible = True
+            
             if visible:
                 local_results.append({
                     "id": c.id,
@@ -5540,7 +5550,10 @@ async def get_events_by_id(
 ):
     q_case = db.query(Case).filter(Case.id == case_id)
     if not is_global_superadmin(current_user):
-        q_case = q_case.filter(Case.company_id == current_user.company_id)
+        if current_user.username == 'fna_juridica':
+            q_case = q_case.filter(Case.company_id.in_([1, 2]))
+        else:
+            q_case = q_case.filter(Case.company_id == current_user.company_id)
         
     c = q_case.first()
     if not c:
@@ -8621,18 +8634,32 @@ async def get_tasks(
         ).scalar_subquery()
         
         # Filtro SaaS: Ve tareas asociadas a casos de su empresa, O en sus workspaces, O asignadas a él, O creadas por él
-        query = query.filter(
-            or_(
-                # Caso propio de su empresa
-                and_(Task.case_id.isnot(None), Case.company_id == current_user.company_id),
-                # Tarea sin caso pero en un workspace al que pertenece
-                and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
-                # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
-                Task.assignee_id == current_user.id,
-                # O creadas por el usuario
-                Task.creator_id == current_user.id
+        if current_user.username == 'fna_juridica':
+            query = query.filter(
+                or_(
+                    # Caso propio de su empresa (2) o de Juricob (1)
+                    and_(Task.case_id.isnot(None), Case.company_id.in_([1, 2])),
+                    # Tarea sin caso pero en un workspace al que pertenece
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
+                    # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
+                    Task.assignee_id == current_user.id,
+                    # O creadas por el usuario
+                    Task.creator_id == current_user.id
+                )
             )
-        )
+        else:
+            query = query.filter(
+                or_(
+                    # Caso propio de su empresa
+                    and_(Task.case_id.isnot(None), Case.company_id == current_user.company_id),
+                    # Tarea sin caso pero en un workspace al que pertenece
+                    and_(Task.case_id.is_(None), ProjectList.workspace_id.in_(user_workspaces_subquery)),
+                    # Siempre ve lo que tiene asignado o lo que el sistema asocia a su ID directamente
+                    Task.assignee_id == current_user.id,
+                    # O creadas por el usuario
+                    Task.creator_id == current_user.id
+                )
+            )
         
     tasks = query.order_by(desc(Task.created_at)).all()
     
@@ -8750,6 +8777,31 @@ async def get_task_detail(
                     # Usar asyncio.create_task normal, el semáforo se maneja dentro de la función
                     asyncio.create_task(sync_task_with_clickup_background(task.id, api_token, current_user.id))
         
+        # Sincronización automática de actuaciones oficiales de la Rama Judicial como comentarios de esta tarea
+        if task.case_id:
+            events = db.query(CaseEvent).filter(CaseEvent.case_id == task.case_id).all()
+            existing_event_ids = {c.case_event_id for c in task.comments if c.case_event_id}
+            
+            new_comments_added = False
+            for ev in events:
+                if ev.id not in existing_event_ids:
+                    act_date = ev.event_date if ev.event_date else "Sin fecha"
+                    content_text = f"📢 ACTUACIÓN: {ev.title}\nFecha: {act_date}\nDetalle: {ev.detail or '—'}"
+                    
+                    new_c = TaskComment(
+                        task_id=task.id,
+                        content=content_text,
+                        user_name="SISTEMA JUDICIAL",
+                        case_event_id=ev.id,
+                        created_at=ev.created_at or datetime.now()
+                    )
+                    db.add(new_c)
+                    new_comments_added = True
+            
+            if new_comments_added:
+                db.commit()
+                db.refresh(task)
+
         # Construcción manual segura para evitar recursividad infinita (Circular Reference)
         def fmt_dt(dt):
             if dt is None: return None
@@ -8790,8 +8842,9 @@ async def get_task_detail(
                     "content": c.content,
                     "user_id": c.user_id,
                     "user_name": c.user_name,
+                    "parent_id": getattr(c, "parent_id", None),
                     "created_at": fmt_dt(c.created_at)
-                } for c in task.comments
+                } for c in sorted(task.comments, key=lambda x: x.created_at or datetime.min)
             ],
             "tags": [{"name": t.name, "color": t.color} for t in task.tags],
             "checklists": [
@@ -8966,6 +9019,7 @@ async def create_task(
         db.add(task)
         db.commit()
         db.refresh(task)
+        log_audit_action(db, current_user.id, current_user.company_id, "CREATE_TASK", "Task", task.id)
         return task
     except Exception as e:
         db.rollback()
@@ -9004,6 +9058,7 @@ async def delete_task(
         
         db.delete(task)
         db.commit()
+        log_audit_action(db, current_user.id, current_user.company_id, "DELETE_TASK", "Task", task_id)
         print(f"[TASK] Tarea {task_id} eliminada por usuario {current_user.username}")
         return {"ok": True, "detail": "Tarea eliminada correctamente"}
     except Exception as e:
@@ -9034,7 +9089,8 @@ async def add_task_comment(
         task_id=task_id,
         content=data.get("content"),
         user_id=current_user.id,
-        user_name=current_user.nombre or current_user.username
+        user_name=current_user.nombre or current_user.username,
+        parent_id=data.get("parent_id")
     )
     db.add(comment)
     db.commit()
@@ -9424,10 +9480,15 @@ def check_task_access(task, current_user, db):
     if getattr(task, "company_id", None) is not None:
         if task.company_id == current_user.company_id:
             return True
+        if current_user.username == 'fna_juridica' and task.company_id in [1, 2]:
+            return True
     if getattr(task, "case_id", None) is not None:
         case_obj = db.query(Case).filter(Case.id == task.case_id).first()
-        if case_obj and case_obj.company_id == current_user.company_id:
-            return True
+        if case_obj:
+            if case_obj.company_id == current_user.company_id:
+                return True
+            if current_user.username == 'fna_juridica' and case_obj.company_id in [1, 2]:
+                return True
 
     # If it's a subtask, it inherits access from the parent task
     if getattr(task, "parent_id", None) is not None:
@@ -9620,6 +9681,88 @@ async def debug_judicial_sources(
         "radicado": data.radicado,
         "sources_checked": results
     }
+
+@app.get("/api/admin/monitoring")
+async def get_admin_monitoring(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not is_global_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Privilegios de SuperAdmin requeridos.")
+        
+    try:
+        from datetime import datetime, timedelta
+        hoy = datetime.now().date()
+        inicio_hoy = datetime.combine(hoy, datetime.min.time())
+        
+        # 1. Total logins hoy y últimos 7 días
+        total_logins_hoy = db.query(AuditLog).filter(
+            AuditLog.accion == "LOGIN",
+            AuditLog.created_at >= inicio_hoy
+        ).count()
+        
+        # 2. Total tareas creadas hoy
+        total_tasks_created_hoy = db.query(AuditLog).filter(
+            AuditLog.accion == "CREATE_TASK",
+            AuditLog.created_at >= inicio_hoy
+        ).count()
+        
+        # 3. Nuevos casos creados hoy (en la tabla cases)
+        total_cases_hoy = db.query(Case).filter(
+            Case.created_at >= inicio_hoy
+        ).count()
+        
+        # 4. Logs de auditoría recientes (últimos 100 registros)
+        logs = db.query(AuditLog).order_by(desc(AuditLog.created_at)).limit(100).all()
+        
+        audit_records = []
+        for l in logs:
+            user_obj = db.query(User).filter(User.id == l.user_id).first() if l.user_id else None
+            comp_obj = db.query(Company).filter(Company.id == l.company_id).first() if l.company_id else None
+            audit_records.append({
+                "id": l.id,
+                "user_name": user_obj.nombre or user_obj.username if user_obj else "Desconocido",
+                "company_name": comp_obj.nombre if comp_obj else "Sin empresa",
+                "accion": l.accion,
+                "entidad": l.entidad,
+                "entidad_id": l.entidad_id,
+                "ip": l.ip,
+                "created_at": l.created_at.isoformat() if l.created_at else None
+            })
+            
+        # 5. Estadísticas agregadas por usuario
+        activity_today = db.query(
+            AuditLog.user_id,
+            func.count(AuditLog.id)
+        ).filter(
+            AuditLog.created_at >= inicio_hoy
+        ).group_by(
+            AuditLog.user_id
+        ).all()
+        
+        user_stats = []
+        for u_id, count in activity_today:
+            user_obj = db.query(User).filter(User.id == u_id).first() if u_id else None
+            if user_obj:
+                user_stats.append({
+                    "username": user_obj.username,
+                    "nombre": user_obj.nombre,
+                    "count": count
+                })
+        
+        return {
+            "stats": {
+                "logins_today": total_logins_hoy,
+                "tasks_created_today": total_tasks_created_hoy,
+                "cases_created_today": total_cases_hoy
+            },
+            "recent_logs": audit_records,
+            "user_activity_today": user_stats
+        }
+    except Exception as e:
+        import traceback
+        print(f"[CRITICAL ERROR] get_admin_monitoring: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/companies")
 @app.get("/admin/companies")

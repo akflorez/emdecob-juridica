@@ -109,8 +109,25 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
+  const [replyingToId, setReplyingToId] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   const displayTask = fullTask || task;
+
+  const rootComments = useMemo(() => {
+    return (displayTask?.comments || []).filter(c => !c.parent_id);
+  }, [displayTask?.comments]);
+
+  const repliesMap = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    (displayTask?.comments || []).forEach(c => {
+      if (c.parent_id) {
+        if (!map[c.parent_id]) map[c.parent_id] = [];
+        map[c.parent_id].push(c);
+      }
+    });
+    return map;
+  }, [displayTask?.comments]);
 
   const COMMON_EMOJIS = ["👍", "❤️", "🔥", "✅", "🚀", "⏳", "⚠️", "⚖️", "📝", "👏"];
 
@@ -908,39 +925,181 @@ export function TaskDrawer({ task, open, onOpenChange, onTaskUpdate, onTaskDelet
 
              <ScrollArea className="flex-1 px-8 py-8">
                 <div className="space-y-10">
-                   {displayTask.comments?.map(comment => (
-                     <div key={comment.id} className="group relative">
-                        <div className="flex items-center gap-4 text-[12px] mb-4">
-                           <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-[14px] font-black text-primary border border-primary/20 shadow-xl group-hover:bg-primary group-hover:text-primary-foreground transition-all">
-                              {comment.user_name?.[0] || 'U'}
+                    {rootComments.map(comment => {
+                      const isActuacion = comment.content.startsWith("📢 ACTUACIÓN:");
+                      return (
+                        <div key={comment.id} className="space-y-4">
+                           {/* Cabecera del Comentario */}
+                           <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4 text-[12px]">
+                                 <div className={cn(
+                                    "h-9 w-9 rounded-xl flex items-center justify-center text-[14px] font-black border shadow-xl transition-all",
+                                    isActuacion 
+                                      ? "bg-blue-500/10 text-blue-500 border-blue-500/30" 
+                                      : "bg-primary/10 text-primary border-primary/20"
+                                 )}>
+                                    {isActuacion ? "🏛️" : (comment.user_name?.[0] || 'U')}
+                                 </div>
+                                 <div className="flex flex-col">
+                                    <span className="text-foreground font-black uppercase tracking-widest text-[11px]">
+                                       {isActuacion ? "Rama Judicial" : (comment.user_name || 'SISTEMA')}
+                                    </span>
+                                    <span className="text-muted-foreground text-[10px] font-bold tracking-tighter">
+                                       {isValid(parseISO(comment.created_at.toString())) 
+                                         ? format(parseISO(comment.created_at.toString()), "d MMM, p", { locale: es }) 
+                                         : ''}
+                                    </span>
+                                 </div>
+                              </div>
+                              {isActuacion && (
+                                 <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 border-none font-bold text-[8px] uppercase tracking-wider px-2 py-0.5">
+                                    Actuación
+                                 </Badge>
+                              )}
                            </div>
-                           <div className="flex flex-col">
-                              <span className="text-foreground font-black uppercase tracking-widest text-[11px]">{(comment.user_name || 'SISTEMA')}</span>
-                              <span className="text-muted-foreground text-[10px] font-bold tracking-tighter">{isValid(parseISO(comment.created_at.toString())) ? format(parseISO(comment.created_at.toString()), "d MMM, p", { locale: es }) : ''}</span>
+                           
+                           {/* Contenido del Comentario */}
+                           <div className={cn(
+                              "p-7 border rounded-[2rem] rounded-tl-none text-[15px] font-medium leading-relaxed shadow-xl relative transition-all group border-l-2",
+                              isActuacion 
+                                ? "bg-blue-500/5 dark:bg-blue-500/10 border-blue-500/20 border-l-blue-500" 
+                                : "bg-card/30 border-border/50 border-l-primary/10 hover:border-l-primary/40 hover:bg-card/50 text-foreground/70"
+                           )}>
+                              {editingCommentId === comment.id ? (
+                                 <div className="space-y-4">
+                                    <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-background border-primary/40 text-[14px] min-h-[120px] rounded-2xl p-5 shadow-inner text-foreground" />
+                                    <div className="flex justify-end gap-4">
+                                       <Button variant="ghost" onClick={() => setEditingCommentId(null)} className="h-9 px-6 rounded-xl text-[10px] font-black uppercase text-muted-foreground">Descartar</Button>
+                                       <Button onClick={() => handleUpdateComment(comment.id)} className="h-9 px-8 rounded-xl bg-primary text-primary-foreground font-black text-[10px] uppercase shadow-lg">ACTUALIZAR</Button>
+                                    </div>
+                                 </div>
+                              ) : (
+                                 <>
+                                    <div className="whitespace-pre-line break-words text-foreground">
+                                       {comment.content}
+                                    </div>
+                                    <div className="mt-4 flex items-center justify-between border-t border-border/20 pt-3">
+                                       <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          onClick={() => {
+                                             setReplyingToId(comment.id);
+                                             setReplyText("");
+                                          }}
+                                          className="text-xs text-primary hover:text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 font-bold px-3 py-1 rounded-lg transition-all"
+                                       >
+                                          <CornerDownRight className="h-3.5 w-3.5" /> Responder
+                                       </Button>
+                                       
+                                       {!isActuacion && (
+                                          <div className="opacity-0 group-hover:opacity-100 transition-all flex gap-2">
+                                             <Button variant="ghost" size="icon" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="h-7 w-7 rounded-lg bg-background/80 hover:text-primary border border-border/50 shadow-sm"><Edit3 className="h-3.5 w-3.5" /></Button>
+                                             <Button variant="ghost" size="icon" onClick={() => handleDeleteComment(comment.id)} className="h-7 w-7 rounded-lg bg-background/80 hover:text-red-500 border border-border/50 shadow-sm"><Trash2 className="h-3.5 w-3.5" /></Button>
+                                          </div>
+                                       )}
+                                    </div>
+                                 </>
+                              )}
                            </div>
-                        </div>
-                        
-                        <div className="p-7 bg-card/30 border border-border/50 rounded-[2rem] rounded-tl-none text-[15px] font-medium text-foreground/70 leading-relaxed shadow-xl group-hover:bg-card/50 transition-all relative border-l-2 border-l-primary/10 hover:border-l-primary/40">
-                           {editingCommentId === comment.id ? (
-                             <div className="space-y-4">
-                                <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-background border-primary/40 text-[14px] min-h-[120px] rounded-2xl p-5 shadow-inner text-foreground" />
-                                <div className="flex justify-end gap-4">
-                                   <Button variant="ghost" onClick={() => setEditingCommentId(null)} className="h-9 px-6 rounded-xl text-[10px] font-black uppercase text-muted-foreground">Descartar</Button>
-                                   <Button onClick={() => handleUpdateComment(comment.id)} className="h-9 px-8 rounded-xl bg-primary text-primary-foreground font-black text-[10px] uppercase shadow-lg">ACTUALIZAR</Button>
-                               </div>
-                             </div>
-                           ) : (
-                             <>
-                               {comment.content}
-                               <div className="absolute top-4 right-6 opacity-0 group-hover:opacity-100 transition-all flex gap-3">
-                                  <Button variant="ghost" size="icon" onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.content); }} className="h-8 w-8 rounded-xl bg-background/80 flex items-center justify-center hover:text-primary border border-border/50 shadow-xl"><Edit3 className="h-4 w-4" /></Button>
-                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteComment(comment.id)} className="h-8 w-8 rounded-xl bg-background/80 flex items-center justify-center hover:text-red-500 border border-border/50 shadow-xl"><Trash2 className="h-4 w-4" /></Button>
-                               </div>
-                             </>
+
+                           {/* Respuestas Hijas (Sub-comentarios) */}
+                           {repliesMap[comment.id] && repliesMap[comment.id].map(reply => (
+                              <div key={reply.id} className="ml-10 space-y-2 group/reply relative">
+                                 <div className="flex items-center gap-3 text-[11.5px]">
+                                    <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center text-[12px] font-black text-primary border border-primary/20">
+                                       {reply.user_name?.[0] || 'U'}
+                                    </div>
+                                    <div className="flex flex-col">
+                                       <span className="font-extrabold text-foreground/80">{reply.user_name || 'Usuario'}</span>
+                                       <span className="text-muted-foreground text-[9px] font-bold tracking-tighter">
+                                          {isValid(parseISO(reply.created_at.toString())) 
+                                            ? format(parseISO(reply.created_at.toString()), "d MMM, p", { locale: es }) 
+                                            : ''}
+                                       </span>
+                                    </div>
+                                 </div>
+                                 <div className="p-5 bg-card/20 border border-border/40 rounded-[1.5rem] rounded-tl-none text-[14px] font-medium text-foreground/80 leading-relaxed shadow-md relative border-l-2 border-l-primary/30 hover:bg-card/45 transition-all">
+                                    {editingCommentId === reply.id ? (
+                                       <div className="space-y-3">
+                                          <Textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} className="bg-background text-sm min-h-[85px] p-3 rounded-xl text-foreground" />
+                                          <div className="flex justify-end gap-2">
+                                             <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>Descartar</Button>
+                                             <Button size="sm" onClick={() => handleUpdateComment(reply.id)}>Actualizar</Button>
+                                          </div>
+                                       </div>
+                                    ) : (
+                                       <>
+                                          <div className="whitespace-pre-line break-words text-foreground">
+                                             {reply.content}
+                                          </div>
+                                          <div className="absolute top-2 right-4 opacity-0 group-hover/reply:opacity-100 transition-all flex gap-1.5">
+                                             <Button variant="ghost" size="icon" onClick={() => { setEditingCommentId(reply.id); setEditingCommentText(reply.content); }} className="h-6 w-6 rounded hover:text-primary"><Edit3 className="h-3 w-3" /></Button>
+                                             <Button variant="ghost" size="icon" onClick={() => handleDeleteComment(reply.id)} className="h-6 w-6 rounded hover:text-red-500"><Trash2 className="h-3 w-3" /></Button>
+                                          </div>
+                                       </>
+                                    )}
+                                 </div>
+                              </div>
+                           ))}
+
+                           {/* Formulario de Respuesta Inline */}
+                           {replyingToId === comment.id && (
+                              <div className="ml-10 p-5 bg-card/25 border border-primary/20 rounded-[1.5rem] space-y-3 shadow-inner animate-in slide-in-from-top-1 duration-200" onClick={(e) => e.stopPropagation()}>
+                                 <Textarea
+                                    autoFocus
+                                    placeholder="Escribe una respuesta técnica o nota interna..."
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                    className="min-h-[70px] bg-background text-sm p-3 rounded-xl border border-border w-full text-foreground focus:ring-1 focus:ring-primary focus:border-primary/50"
+                                    onKeyDown={async (e) => {
+                                       if (e.key === 'Enter' && !e.shiftKey) {
+                                          e.preventDefault();
+                                          if (!replyText.trim()) return;
+                                          try {
+                                             await addComment(displayTask.id, replyText.trim(), clickupToken || undefined, comment.id);
+                                             setReplyText("");
+                                             setReplyingToId(null);
+                                             await refreshTask();
+                                             toast({ title: "Respuesta agregada" });
+                                          } catch (err) {
+                                             console.error("Error adding reply:", err);
+                                          }
+                                       }
+                                    }}
+                                 />
+                                 <div className="flex justify-end gap-3">
+                                    <Button 
+                                       size="sm" 
+                                       variant="ghost" 
+                                       onClick={() => setReplyingToId(null)}
+                                       className="h-8 rounded-lg text-xs font-bold text-muted-foreground"
+                                    >
+                                       Cancelar
+                                    </Button>
+                                    <Button 
+                                       size="sm" 
+                                       onClick={async () => {
+                                          if (!replyText.trim()) return;
+                                          try {
+                                             await addComment(displayTask.id, replyText.trim(), clickupToken || undefined, comment.id);
+                                             setReplyText("");
+                                             setReplyingToId(null);
+                                             await refreshTask();
+                                             toast({ title: "Respuesta agregada" });
+                                          } catch (err) {
+                                             console.error("Error adding reply:", err);
+                                          }
+                                       }}
+                                       className="h-8 rounded-lg bg-primary text-primary-foreground font-bold text-xs px-4"
+                                    >
+                                       Responder
+                                    </Button>
+                                 </div>
+                              </div>
                            )}
                         </div>
-                     </div>
-                   ))}
+                      );
+                    })}
                    {(!displayTask.comments || displayTask.comments.length === 0) && (
                       <div className="p-24 text-center opacity-5">
                          <MessageSquare className="h-20 w-20 mx-auto text-muted-foreground" />

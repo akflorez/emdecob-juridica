@@ -180,6 +180,33 @@ export function getCaseById(id: number) {
   return apiFetch<CaseByRadicadoResponse>(`/cases/id/${id}`);
 }
 
+export type AdminMonitoringStats = {
+  stats: {
+    logins_today: number;
+    tasks_created_today: number;
+    cases_created_today: number;
+  };
+  recent_logs: Array<{
+    id: number;
+    user_name: string;
+    company_name: string;
+    accion: string;
+    entidad: string;
+    entidad_id: number | null;
+    ip: string | null;
+    created_at: string;
+  }>;
+  user_activity_today: Array<{
+    username: string;
+    nombre: string;
+    count: number;
+  }>;
+};
+
+export function getAdminMonitoring() {
+  return apiFetch<AdminMonitoringStats>("/admin/monitoring");
+}
+
 /** ---------------------------
  * EVENTOS / ACTUACIONES POR RADICADO
  * -------------------------- */
@@ -1152,13 +1179,13 @@ export function deleteTask(taskId: number) {
   });
 }
 
-export function addComment(taskId: number, content: string, token?: string) {
+export function addComment(taskId: number, content: string, token?: string, parentId?: number) {
   const headers: any = {};
   if (token) headers["X-ClickUp-Token"] = token;
   return apiFetch<TaskComment>(`/projects/tasks/${taskId}/comments`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, parent_id: parentId }),
   });
 }
 
