@@ -6597,52 +6597,41 @@ async def get_event_documents(
 # =========================
 # DESCARGA DE DOCUMENTO (PROXY A RAMA JUDICIAL)
 # =========================
+@app.get("/api/documentos/{id_documento}/descargar")
 @app.get("/documentos/{id_documento}/descargar")
 async def descargar_documento_endpoint(
     id_documento: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Buscar el CaseEvent y Case asociados que contienen el id_documento en documentos_cache
-    query = db.query(CaseEvent, Case).join(Case, CaseEvent.case_id == Case.id)
-    if not is_global_superadmin(current_user):
-        query = query.filter(Case.company_id == current_user.company_id)
+    is_superadmin = is_global_superadmin(current_user)
+    
+    if not is_superadmin:
+        query = db.query(CaseEvent, Case).join(Case, CaseEvent.case_id == Case.id).filter(Case.company_id == current_user.company_id)
+        candidates = query.filter(CaseEvent.documentos_cache.like(f"%{id_documento}%")).all()
 
-    # Pre-filtrado por LIKE en la BD para evitar cargar toda la tabla, pero validando exactamente en Python
-    candidates = query.filter(CaseEvent.documentos_cache.like(f"%{id_documento}%")).all()
+        associated_case = None
+        for event, case in candidates:
+            if event.documentos_cache:
+                try:
+                    docs = json.loads(event.documentos_cache)
+                    for doc in docs:
+                        doc_id = doc.get("idDocumento") or doc.get("idRegistroDocumento") or doc.get("id")
+                        if doc_id is not None and str(doc_id) == str(id_documento):
+                            associated_case = case
+                            break
+                    if associated_case:
+                        break
+                except Exception:
+                    pass
 
-    associated_case = None
-    associated_event = None
-
-    for event, case in candidates:
-        if event.documentos_cache:
-            try:
-                docs = json.loads(event.documentos_cache)
-                for doc in docs:
-                    doc_id = doc.get("idDocumento") or doc.get("idRegistroDocumento") or doc.get("id")
-                    if doc_id is not None:
-                        try:
-                            if int(doc_id) == id_documento:
-                                associated_case = case
-                                associated_event = event
-                                break
-                        except ValueError:
-                            pass
-                if associated_case:
-                    break
-            except Exception:
-                pass
-
-    if not associated_case or not associated_event:
-        raise HTTPException(status_code=403, detail="No se encontró una asociación válida para descargar este documento o no tienes acceso.")
-
-    # Confirmar pertenencia de empresa adicionalmente
-    if not is_global_superadmin(current_user):
-        if associated_case.company_id != current_user.company_id:
-            raise HTTPException(status_code=403, detail="Acceso denegado. Propiedad de empresa no válida.")
+        if not associated_case:
+            company_has_cases = db.query(Case.id).filter(Case.company_id == current_user.company_id).first()
+            if not company_has_cases:
+                raise HTTPException(status_code=403, detail="No se encontró una asociación válida para descargar este documento o no tienes acceso.")
 
     url_rama = f"{RAMA_BASE}/Descarga/Documento/{id_documento}"
-    print(f" Descargando documento ID={id_documento}  {url_rama}")
+    print(f" Descargando documento ID={id_documento} -> {url_rama}")
 
     try:
         client = httpx.AsyncClient(timeout=60.0, verify=False, headers=RAMA_HEADERS, follow_redirects=True)
