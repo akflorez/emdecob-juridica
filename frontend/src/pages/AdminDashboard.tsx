@@ -34,6 +34,29 @@ export default function AdminDashboard() {
     return comp ? comp.nombre : `Empresa #${companyId}`;
   };
 
+  const formatAuditDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '—';
+    const isoStr = (dateStr.endsWith('Z') || dateStr.includes('+')) ? dateStr : `${dateStr}Z`;
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const formatAuditTimeOnly = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '—';
+    const isoStr = (dateStr.endsWith('Z') || dateStr.includes('+')) ? dateStr : `${dateStr}Z`;
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
   // Modals Open State
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -852,7 +875,7 @@ export default function AdminDashboard() {
                             {u.is_online ? 'Conectado' : 'Ausente'}
                           </span>
                           <span className="text-[9px] text-slate-400 mt-1">
-                            {u.last_active ? new Date(u.last_active).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {formatAuditTimeOnly(u.last_active)}
                           </span>
                         </div>
                       </div>
@@ -900,7 +923,7 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Historial de Auditoría en Tiempo Real */}
-            <Card className="xl:col-span-2 border-slate-100 shadow-sm">
+            <Card className="xl:col-span-2 border-slate-100 shadow-sm overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-lg font-bold text-slate-800">Historial de Auditoría</CardTitle>
@@ -930,27 +953,31 @@ export default function AdminDashboard() {
                 </div>
               )}
               <CardContent>
-                <div className="overflow-hidden rounded-xl border border-slate-100 bg-white max-h-[500px] overflow-y-auto">
-                  <Table>
+                <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[500px] overflow-y-auto">
+                  <Table className="min-w-full">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="font-bold text-slate-700">Fecha/Hora</TableHead>
-                        <TableHead className="font-bold text-slate-700">Usuario</TableHead>
-                        <TableHead className="font-bold text-slate-700">Empresa</TableHead>
-                        <TableHead className="font-bold text-slate-700">Acción</TableHead>
-                        <TableHead className="font-bold text-slate-700">Detalles</TableHead>
-                        <TableHead className="font-bold text-slate-700">IP</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[140px]">Fecha/Hora</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[130px]">Usuario</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[110px]">Empresa</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[100px]">Acción</TableHead>
+                        <TableHead className="font-bold text-slate-700 min-w-[220px]">Detalles</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[90px]">IP</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {monitoring?.recent_logs?.map((log) => (
                         <TableRow key={log.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-xs text-slate-500 font-mono">
-                            {log.created_at ? new Date(log.created_at).toLocaleString('es-CO') : '—'}
+                          <TableCell className="text-xs text-slate-600 font-mono whitespace-nowrap py-2">
+                            {formatAuditDate(log.created_at)}
                           </TableCell>
-                          <TableCell className="font-semibold text-slate-800">{log.user_name}</TableCell>
-                          <TableCell className="text-slate-600">{log.company_name}</TableCell>
-                          <TableCell>
+                          <TableCell className="font-semibold text-slate-800 text-xs py-2 whitespace-nowrap max-w-[140px] truncate" title={log.user_name}>
+                            {log.user_name}
+                          </TableCell>
+                          <TableCell className="text-slate-600 text-xs py-2 whitespace-nowrap max-w-[120px] truncate" title={log.company_name}>
+                            {log.company_name}
+                          </TableCell>
+                          <TableCell className="py-2 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
                               log.accion === 'LOGIN' ? 'bg-indigo-50 text-indigo-700' :
                               log.accion === 'CREATE_TASK' ? 'bg-emerald-50 text-emerald-700' :
@@ -964,9 +991,9 @@ export default function AdminDashboard() {
                               {log.accion}
                             </span>
                           </TableCell>
-                          <TableCell className="text-xs text-slate-600 max-w-[250px] truncate">
+                          <TableCell className="text-xs text-slate-600 py-2 max-w-[280px] break-words">
                             {log.detalles ? (
-                              <div className="flex flex-col text-xs">
+                              <div className="flex flex-col text-xs space-y-0.5">
                                 {log.detalles.task_title && (
                                   <span className="font-semibold text-slate-700">Tarea: {log.detalles.task_title}</span>
                                 )}
@@ -974,7 +1001,7 @@ export default function AdminDashboard() {
                                   <span className="font-semibold text-slate-700">Tarea: {log.detalles.title}</span>
                                 )}
                                 {log.detalles.content && (
-                                  <span className="text-slate-500 italic truncate">"{log.detalles.content}"</span>
+                                  <span className="text-slate-500 italic break-words">"{log.detalles.content}"</span>
                                 )}
                                 {log.detalles.duration_hours !== undefined && (
                                   <span className="text-emerald-600 font-bold">Resuelto en: {log.detalles.duration_hours} horas</span>
@@ -984,7 +1011,7 @@ export default function AdminDashboard() {
                               '—'
                             )}
                           </TableCell>
-                          <TableCell className="text-xs text-slate-500 font-mono">{log.ip || '—'}</TableCell>
+                          <TableCell className="text-[11px] text-slate-500 font-mono py-2 whitespace-nowrap">{log.ip || '—'}</TableCell>
                         </TableRow>
                       ))}
                       {(!monitoring?.recent_logs || monitoring.recent_logs.length === 0) && (
@@ -1010,23 +1037,23 @@ export default function AdminDashboard() {
                 <CardDescription>Monitoreo del tiempo transcurrido desde la creación hasta que se completó la tarea</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="overflow-hidden rounded-xl border border-slate-100 bg-white max-h-[400px] overflow-y-auto">
-                  <Table>
+                <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[400px] overflow-y-auto">
+                  <Table className="min-w-full">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="font-bold text-slate-700">Tarea</TableHead>
-                        <TableHead className="font-bold text-slate-700">Radicado</TableHead>
-                        <TableHead className="font-bold text-slate-700">Responsable</TableHead>
-                        <TableHead className="font-bold text-slate-700 text-right">Tiempo transcurrido</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap">Tarea</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap">Radicado</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap">Responsable</TableHead>
+                        <TableHead className="font-bold text-slate-700 text-right whitespace-nowrap">Tiempo transcurrido</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {monitoring?.completed_tasks?.map((t) => (
                         <TableRow key={t.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-semibold text-slate-800 text-xs">{t.title}</TableCell>
-                          <TableCell className="text-xs text-slate-500 font-mono">{t.radicado}</TableCell>
-                          <TableCell className="text-slate-600 text-xs">{t.assignee}</TableCell>
-                          <TableCell className="text-right font-black text-emerald-600 text-xs">{t.duration}</TableCell>
+                          <TableCell className="font-semibold text-slate-800 text-xs py-2">{t.title}</TableCell>
+                          <TableCell className="text-xs text-slate-500 font-mono py-2 whitespace-nowrap">{t.radicado}</TableCell>
+                          <TableCell className="text-slate-600 text-xs py-2 whitespace-nowrap">{t.assignee}</TableCell>
+                          <TableCell className="text-right font-black text-emerald-600 text-xs py-2 whitespace-nowrap">{t.duration}</TableCell>
                         </TableRow>
                       ))}
                       {(!monitoring?.completed_tasks || monitoring.completed_tasks.length === 0) && (
@@ -1049,31 +1076,31 @@ export default function AdminDashboard() {
                 <CardDescription>Visualiza las notas y comentarios agregados por los usuarios en cada caso</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="overflow-hidden rounded-xl border border-slate-100 bg-white max-h-[400px] overflow-y-auto">
-                  <Table>
+                <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[400px] overflow-y-auto">
+                  <Table className="min-w-full">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                       <TableRow>
-                        <TableHead className="font-bold text-slate-700">Radicado / Tarea</TableHead>
-                        <TableHead className="font-bold text-slate-700">Usuario</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap">Radicado / Tarea</TableHead>
+                        <TableHead className="font-bold text-slate-700 whitespace-nowrap">Usuario</TableHead>
                         <TableHead className="font-bold text-slate-700">Comentario</TableHead>
-                        <TableHead className="font-bold text-slate-700 text-right">Fecha</TableHead>
+                        <TableHead className="font-bold text-slate-700 text-right whitespace-nowrap">Fecha</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {monitoring?.comments_by_radicado?.map((c) => (
                         <TableRow key={c.id} className="hover:bg-slate-50/50">
-                          <TableCell>
+                          <TableCell className="py-2">
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-mono text-slate-500">{c.radicado}</span>
+                              <span className="text-[10px] font-mono text-slate-500 whitespace-nowrap">{c.radicado}</span>
                               <span className="font-semibold text-slate-800 text-xs truncate max-w-[150px]">{c.task_title}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="font-semibold text-slate-700 text-xs">{c.user_name}</TableCell>
-                          <TableCell className="text-slate-600 text-xs italic max-w-[200px] truncate" title={c.content}>
+                          <TableCell className="font-semibold text-slate-700 text-xs py-2 whitespace-nowrap">{c.user_name}</TableCell>
+                          <TableCell className="text-slate-600 text-xs italic max-w-[220px] break-words py-2" title={c.content}>
                             "{c.content}"
                           </TableCell>
-                          <TableCell className="text-right text-[10px] text-slate-500 font-mono">
-                            {c.created_at ? new Date(c.created_at).toLocaleString('es-CO') : '—'}
+                          <TableCell className="text-right text-xs text-slate-500 font-mono py-2 whitespace-nowrap">
+                            {formatAuditDate(c.created_at)}
                           </TableCell>
                         </TableRow>
                       ))}

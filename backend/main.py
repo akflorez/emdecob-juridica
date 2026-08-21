@@ -9772,7 +9772,7 @@ async def get_admin_monitoring(
                 "entidad": l.entidad,
                 "entidad_id": l.entidad_id,
                 "ip": l.ip,
-                "created_at": l.created_at.isoformat() if l.created_at else None,
+                "created_at": (l.created_at.isoformat() + "Z") if l.created_at else None,
                 "detalles": meta_dict
             })
             
@@ -9823,8 +9823,8 @@ async def get_admin_monitoring(
                 "title": ct.title,
                 "radicado": case_num,
                 "assignee": assignee,
-                "created_at": ct.created_at.isoformat() if ct.created_at else None,
-                "completed_at": ct.completed_at.isoformat() if ct.completed_at else None,
+                "created_at": (ct.created_at.isoformat() + "Z") if ct.created_at else None,
+                "completed_at": (ct.completed_at.isoformat() + "Z") if ct.completed_at else None,
                 "duration": duration_str
             })
 
@@ -9844,7 +9844,7 @@ async def get_admin_monitoring(
                 "task_title": task_obj.title if task_obj else "Tarea eliminada",
                 "user_name": comm.user_name or f"Usuario #{comm.user_id}",
                 "content": comm.content,
-                "created_at": comm.created_at.isoformat() if comm.created_at else None
+                "created_at": (comm.created_at.isoformat() + "Z") if comm.created_at else None
             })
 
         # 8. Usuarios en línea (activos últimos 5 mins) o recientemente activos (últimas 24h)
@@ -9865,7 +9865,7 @@ async def get_admin_monitoring(
                 "username": u.username,
                 "nombre": u.nombre or u.username,
                 "company_name": comp_name,
-                "last_active": u.last_active_at.isoformat() if u.last_active_at else None,
+                "last_active": (u.last_active_at.isoformat() + "Z") if u.last_active_at else None,
                 "is_online": is_online
             })
 
