@@ -151,6 +151,7 @@ export default function CasoDetailPage() {
 
   const [expandedDocs, setExpandedDocs] = useState<Record<number, DocsState>>({});
   const [loadingDocs, setLoadingDocs] = useState<Record<number, boolean>>({});
+  const [isMarkingUnreadDetail, setIsMarkingUnreadDetail] = useState(false);
 
   const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
   const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
@@ -804,8 +805,6 @@ export default function CasoDetailPage() {
       </div>
     );
   }
-
-  const [isMarkingUnreadDetail, setIsMarkingUnreadDetail] = useState(false);
 
   const handleToggleReadStatusDetail = async () => {
     if (!caseData?.id) return;
