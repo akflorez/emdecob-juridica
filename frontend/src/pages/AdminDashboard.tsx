@@ -9,9 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Plus, Users, Building2, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult, getAdminMonitoring, AdminMonitoringStats } from '@/services/api';
+import { apiFetch, getBillingTiers, getBillingSimulator, updateBillingTiers, BillingTier, BillingSimulatorResult, getAdminMonitoring, AdminMonitoringStats, triggerFullSweep } from '@/services/api';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DollarSign, Save, RefreshCw, MoreHorizontal, Edit, Check, AlertTriangle, Activity } from 'lucide-react';
+import { DollarSign, Save, RefreshCw, MoreHorizontal, Edit, Check, AlertTriangle, Activity, ShieldCheck } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function AdminDashboard() {
@@ -27,6 +27,27 @@ export default function AdminDashboard() {
   const [savingTiers, setSavingTiers] = useState(false);
   const [isRefreshingMonitoring, setIsRefreshingMonitoring] = useState(false);
   const [monitoringError, setMonitoringError] = useState<string | null>(null);
+  const [isTriggeringSweep, setIsTriggeringSweep] = useState(false);
+
+  const handleTriggerSweep = async () => {
+    setIsTriggeringSweep(true);
+    try {
+      await triggerFullSweep();
+      toast({
+        title: "Barrido Completo Iniciado",
+        description: "El robot en segundo plano comenzó a revisar el 100% de los radicados del sistema sin exclusiones.",
+      });
+      await refreshMonitoring();
+    } catch (err: any) {
+      toast({
+        title: "Error al iniciar barrido",
+        description: err.message || "No se pudo iniciar el barrido automático.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTriggeringSweep(false);
+    }
+  };
 
   const getCompanyName = (companyId: number | null) => {
     if (!companyId) return 'Global (SuperAdmin)';
@@ -856,6 +877,80 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* TARJETA DE CONTROL Y AUDITORÍA DE BARRIDO COMPLETO DE RADICADOS */}
+          <Card className="border-indigo-100 shadow-sm bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white overflow-hidden">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 space-y-2 sm:space-y-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-300">
+                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Estado del Barrido Automático de Radicados</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-extrabold">
+                      100% Cobertura Sin Exclusiones
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-slate-300 text-xs mt-0.5">
+                    Revisión continua de fondo en la Rama Judicial de la totalidad de expedientes registrados en el sistema
+                  </CardDescription>
+                </div>
+              </div>
+              <Button 
+                onClick={handleTriggerSweep} 
+                disabled={isTriggeringSweep}
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md border border-indigo-400/30"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isTriggeringSweep ? 'animate-spin' : ''}`} />
+                {isTriggeringSweep ? 'Iniciando Barrido...' : 'Ejecutar Barrido Completo Ahora'}
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-white/5 border border-white/10 rounded-xl p-4">
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Estado del Ciclo</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-sm font-bold text-emerald-300">
+                      {monitoring?.sweep_info?.status || 'VUELTA COMPLETA FINALIZADA'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Radicados Cubiertos Hoy</span>
+                  <div className="text-sm font-bold text-white mt-1">
+                    {monitoring?.sweep_info?.cases_synced_today ?? 0} de {monitoring?.sweep_info?.total_cases ?? 0} ({monitoring?.sweep_info?.coverage_percentage ?? 100}%)
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Última Vuelta Completa</span>
+                  <div className="text-sm font-mono font-semibold text-indigo-200 mt-1">
+                    {monitoring?.sweep_info?.last_sweep_at ? formatAuditDate(monitoring.sweep_info.last_sweep_at) : 'Hoy (Continuo)'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Atención / Alertas</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {(monitoring?.sweep_info?.cases_without_juzgado ?? 0) > 0 ? (
+                      <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-medium flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        {monitoring?.sweep_info?.cases_without_juzgado} sin juzgado (incluidos)
+                      </span>
+                    ) : (
+                      <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" /> 0 alertas — 100% integrados
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Fila Superior: Presencia de Usuarios y Conteo de Acciones */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

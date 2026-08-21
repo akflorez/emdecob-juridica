@@ -333,6 +333,17 @@ def now_colombia() -> datetime:
 def today_colombia() -> date:
     return datetime.now(TIMEZONE_CO).date()
 
+def inicio_hoy_colombia() -> datetime:
+    d = datetime.now(TIMEZONE_CO).date()
+    return datetime(d.year, d.month, d.day, 0, 0, 0)
+
+SWEEP_STATUS = {
+    "last_completed_at": None,
+    "current_progress": 0,
+    "total_cases": 0,
+    "is_running": False
+}
+
 
 # =========================
 # VARIABLES GLOBALES AUTO-REFRESH
@@ -448,19 +459,23 @@ async def do_auto_refresh() -> dict:
         case_ids = [
             row[0] for row in
             db.query(Case.id)
-            .filter(Case.juzgado.isnot(None))
-            .order_by(Case.last_check_at.asc())
+            .order_by(Case.last_check_at.asc().nullsfirst())
             .limit(BATCH_SIZE)
             .all()
         ]
-        total_cases = db.query(Case).filter(Case.juzgado.isnot(None)).count()
+        total_cases = db.query(Case).count()
+        cases_synced_today = db.query(Case).filter(Case.last_check_at >= inicio_hoy_colombia()).count()
         db.close()
         db = None
 
         if not case_ids:
             return {"ok": True, "checked": 0, "updated_cases": 0, "message": "No hay casos para verificar"}
 
-        print(f"[stats] Verificando {len(case_ids)} de {total_cases} casos...")
+        # Si el conteo de casos revisados hoy alcanza o supera el total de casos, registramos el fin de la vuelta completa
+        if cases_synced_today >= total_cases and total_cases > 0:
+            SWEEP_STATUS["last_completed_at"] = now_colombia()
+
+        print(f"[stats] Verificando {len(case_ids)} de {total_cases} casos totales sin exclusiones...")
 
         for i, case_id in enumerate(case_ids):
             try:
@@ -5718,19 +5733,35 @@ async def sync_case_events_background(case_id: int):
 
         new_count = 0
         for a in acts:
+            id_reg = a.get("idRegActuacion")
+            cons_act = a.get("consActuacion")
             it = {
                 "event_date": a.get("fechaActuacion"),
                 "title": (a.get("actuacion") or "").strip(),
                 "detail": a.get("anotacion"),
+                "cons_actuacion": cons_act,
+                "id_reg_actuacion": id_reg
             }
             event_hash = sha256_obj(it)
             con_docs = bool(a.get("conDocumentos"))
-            exists = db.query(CaseEvent).filter(
-                CaseEvent.case_id == c.id,
-                CaseEvent.event_hash == event_hash
-            ).first()
             
-            # FALLBACK REFORZADO: Buscar por fecha, título y detalle para evitar duplicidad total
+            exists = None
+            if id_reg:
+                exists = db.query(CaseEvent).filter(
+                    CaseEvent.case_id == c.id,
+                    CaseEvent.id_reg_actuacion == id_reg
+                ).first()
+            if not exists and cons_act:
+                exists = db.query(CaseEvent).filter(
+                    CaseEvent.case_id == c.id,
+                    CaseEvent.cons_actuacion == cons_act
+                ).first()
+            if not exists:
+                exists = db.query(CaseEvent).filter(
+                    CaseEvent.case_id == c.id,
+                    CaseEvent.event_hash == event_hash
+                ).first()
+            
             if not exists:
                 exists = db.query(CaseEvent).filter(
                     CaseEvent.case_id == c.id,
@@ -5739,7 +5770,6 @@ async def sync_case_events_background(case_id: int):
                     CaseEvent.detail == it["detail"]
                 ).first()
                 if exists:
-                    # Actualizamos el hash al nuevo formato para que el 'if not exists' lo encuentre la próxima vez
                     exists.event_hash = event_hash
             
             if not exists:
@@ -10010,6 +10040,22 @@ async def get_admin_monitoring(
         radicados_managed_today = len([x for x in managed_cases_summary if x["has_activity_today"]])
         radicados_managed_total = len(managed_cases_summary)
 
+        # 10. Información de cobertura del barrido automático (Vuelta Completa)
+        total_cases_all = db.query(Case).count()
+        cases_without_juzgado = db.query(Case).filter((Case.juzgado == None) | (Case.juzgado == "")).count()
+        cases_synced_today = db.query(Case).filter(Case.last_check_at >= inicio_hoy).count()
+        
+        last_sweep = SWEEP_STATUS.get("last_completed_at")
+        
+        sweep_info = {
+            "total_cases": total_cases_all,
+            "cases_without_juzgado": cases_without_juzgado,
+            "cases_synced_today": cases_synced_today,
+            "coverage_percentage": round((cases_synced_today / total_cases_all * 100), 1) if total_cases_all > 0 else 100.0,
+            "last_sweep_at": (last_sweep.isoformat() + "Z") if last_sweep else None,
+            "status": "VUELTA COMPLETA FINALIZADA" if (cases_synced_today >= total_cases_all or last_sweep) else "BARRIDO EN PROGRESO"
+        }
+
         return {
             "stats": {
                 "logins_today": total_logins_hoy,
@@ -10023,12 +10069,22 @@ async def get_admin_monitoring(
             "completed_tasks": completed_tasks_list,
             "comments_by_radicado": comments_list,
             "online_users": online_users_list,
-            "managed_cases_summary": managed_cases_summary
+            "managed_cases_summary": managed_cases_summary,
+            "sweep_info": sweep_info
         }
     except Exception as e:
         import traceback
         print(f"[CRITICAL ERROR] get_admin_monitoring: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/trigger-full-sweep")
+@app.post("/admin/trigger-full-sweep")
+async def trigger_full_sweep(current_user: User = Depends(get_current_user)):
+    if not (current_user.is_admin or current_user.is_superadmin):
+        raise HTTPException(status_code=403, detail="No autorizado")
+        
+    asyncio.create_task(run_stats_cron())
+    return {"ok": True, "message": "Barrido completo de todos los radicados iniciado en segundo plano"}
 
 @app.get("/api/admin/companies")
 @app.get("/admin/companies")

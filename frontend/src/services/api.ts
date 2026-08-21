@@ -243,10 +243,24 @@ export type AdminMonitoringStats = {
     last_user: string;
     users_involved?: string;
   }>;
+  sweep_info?: {
+    total_cases: number;
+    cases_without_juzgado: number;
+    cases_synced_today: number;
+    coverage_percentage: number;
+    last_sweep_at: string | null;
+    status: string;
+  };
 };
 
 export function getAdminMonitoring() {
   return apiFetch<AdminMonitoringStats>("/api/admin/monitoring");
+}
+
+export function triggerFullSweep() {
+  return apiFetch<{ ok: boolean; message: string }>("/api/admin/trigger-full-sweep", {
+    method: "POST",
+  });
 }
 
 /** ---------------------------

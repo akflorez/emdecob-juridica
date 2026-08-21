@@ -214,8 +214,8 @@ async def detalle_proceso(id_proceso: int):
     return await _get(f"/Procesos/Detalle/{int(id_proceso)}")
 
 
-async def actuaciones_proceso(id_proceso: int, pagina: int = 1):
-    """Obtiene las actuaciones de un proceso por su ID con fallback."""
+async def actuaciones_proceso(id_proceso: int, pagina: int = 1, fetch_all: bool = True):
+    """Obtiene las actuaciones de un proceso por su ID con fallback y recorrido de todas las páginas."""
     paths = [
         f"/Proceso/Actuaciones/{int(id_proceso)}",
         f"/Procesos/Actuaciones/{int(id_proceso)}",
@@ -223,18 +223,37 @@ async def actuaciones_proceso(id_proceso: int, pagina: int = 1):
     
     for path in paths:
         try:
-            print(f"[rama.py] Consultando actuaciones: {path}")
             data = await _get(path, params={"pagina": pagina})
             if data:
                 res = []
+                paginacion = {}
                 if isinstance(data, dict):
                     res = data.get("actuaciones") or data.get("items") or []
+                    paginacion = data.get("paginacion") or {}
                 elif isinstance(data, list):
                     res = data
                 
                 if res:
-                    print(f"[rama.py] OK: {len(res)} actuaciones encontradas en {path}")
-                    return res
+                    all_actuaciones = list(res)
+                    if fetch_all and isinstance(paginacion, dict):
+                        cant_paginas = (
+                            paginacion.get("cantPaginas")
+                            or paginacion.get("paginas")
+                            or paginacion.get("totalPaginas")
+                            or 1
+                        )
+                        if cant_paginas > 1:
+                            print(f"[rama.py] Recorriendo {cant_paginas} páginas de actuaciones para idProceso={id_proceso}")
+                            for p in range(2, cant_paginas + 1):
+                                await asyncio.sleep(0.2)
+                                p_data = await _get(path, params={"pagina": p})
+                                if p_data and isinstance(p_data, dict):
+                                    p_acts = p_data.get("actuaciones") or p_data.get("items") or []
+                                    if p_acts:
+                                        all_actuaciones.extend(p_acts)
+                                        
+                    print(f"[rama.py] OK: {len(all_actuaciones)} actuaciones obtenidas para idProceso={id_proceso}")
+                    return all_actuaciones
         except RamaError as e:
             print(f"[rama.py] WARN: Error en {path}: {e}")
             continue
