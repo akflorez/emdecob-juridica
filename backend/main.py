@@ -9719,6 +9719,7 @@ async def debug_judicial_sources(
     }
 
 @app.get("/api/admin/monitoring")
+@app.get("/admin/monitoring")
 async def get_admin_monitoring(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

@@ -229,7 +229,7 @@ export type AdminMonitoringStats = {
 };
 
 export function getAdminMonitoring() {
-  return apiFetch<AdminMonitoringStats>("/admin/monitoring");
+  return apiFetch<AdminMonitoringStats>("/api/admin/monitoring");
 }
 
 /** ---------------------------
