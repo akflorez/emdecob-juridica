@@ -2576,6 +2576,8 @@ async def obtener_id_proceso(radicado: str) -> Optional[int]:
         return None
 
 def is_unread_case(c: Case) -> bool:
+    if c.last_hash == "unread_manually":
+        return True
     if not c.current_hash:
         return False
     if c.last_hash:
@@ -4781,6 +4783,7 @@ def delete_case(case_id: int, db: Session = Depends(get_db), current_user: User 
 # =========================
 # MARK READ
 # =========================
+@app.post("/api/cases/{case_id}/mark-read")
 @app.post("/cases/{case_id}/mark-read")
 def mark_case_read(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     c = db.query(Case).filter(Case.id == case_id).first()
@@ -4788,7 +4791,7 @@ def mark_case_read(case_id: int, db: Session = Depends(get_db), current_user: Us
         raise HTTPException(404, "Caso no encontrado")
     if not is_global_superadmin(current_user) and c.company_id != current_user.company_id:
         raise HTTPException(403, "No tienes permisos sobre este caso")
-    c.last_hash = c.current_hash or c.last_hash
+    c.last_hash = c.current_hash or "read_manually"
     db.commit()
     return {"ok": True, "id": c.id}
 
@@ -4804,6 +4807,7 @@ def mark_case_unread(case_id: int, db: Session = Depends(get_db), current_user: 
     db.commit()
     return {"ok": True, "id": c.id}
 
+@app.post("/api/cases/mark-read-bulk")
 @app.post("/cases/mark-read-bulk")
 def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ids = [int(x) for x in (data.case_ids or [])]
@@ -4818,8 +4822,28 @@ def mark_read_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db), cur
     updated = 0
     for c in cases:
         if is_unread_case(c):
-            c.last_hash = c.current_hash
+            c.last_hash = c.current_hash or "read_manually"
             updated += 1
+
+    db.commit()
+    return {"ok": True, "updated": updated}
+
+@app.post("/api/cases/mark-unread-bulk")
+@app.post("/cases/mark-unread-bulk")
+def mark_unread_bulk(data: MarkReadBulkRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    ids = [int(x) for x in (data.case_ids or [])]
+    if not ids:
+        raise HTTPException(400, "No se enviaron ids")
+
+    if is_global_superadmin(current_user):
+        cases = db.query(Case).filter(Case.id.in_(ids)).all()
+    else:
+        cases = db.query(Case).filter(Case.id.in_(ids), Case.company_id == current_user.company_id).all()
+        
+    updated = 0
+    for c in cases:
+        c.last_hash = "unread_manually"
+        updated += 1
 
     db.commit()
     return {"ok": True, "updated": updated}

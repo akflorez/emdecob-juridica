@@ -66,6 +66,8 @@ import {
   getCases,
   markCaseRead,
   markCaseUnread,
+  markReadBulk,
+  markUnreadBulk,
   markReadAll,
   downloadMultipleEventsExcel,
   refreshAllCases,
@@ -511,23 +513,39 @@ export default function CasosPage() {
     window.open(`/casos/id/${c.id}`, "_blank");
   };
 
-  const onToggleReadStatus = async (c: CaseRow, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const [isMarkingBulk, setIsMarkingBulk] = useState(false);
+
+  const handleMarkReadBulkClick = async () => {
+    if (selectedIds.size === 0) return;
+    setIsMarkingBulk(true);
     try {
-      if (c.unread) {
-        await markCaseRead(c.id);
-        setRows((prev) => prev.map((x) => (x.id === c.id ? { ...x, unread: false } : x)));
-        setUnreadCount((n) => Math.max(0, n - 1));
-        toast({ title: "Marcado como leído", description: `El radicado ${c.radicado} ahora está marcado como leído.` });
-      } else {
-        await markCaseUnread(c.id);
-        setRows((prev) => prev.map((x) => (x.id === c.id ? { ...x, unread: true } : x)));
-        setUnreadCount((n) => n + 1);
-        toast({ title: "Marcado como no leído", description: `El radicado ${c.radicado} ahora está marcado como no leído.` });
-      }
+      const ids = Array.from(selectedIds);
+      await markReadBulk(ids);
+      setRows((prev) => prev.map((x) => selectedIds.has(x.id) ? { ...x, unread: false } : x));
+      toast({ title: "Casos actualizados", description: `Se marcaron como leídos ${ids.length} casos.` });
+      setSelectedIds(new Set());
       fetchStats();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "No se pudo cambiar el estado", variant: "destructive" });
+      toast({ title: "Error", description: err.message || "Error al actualizar casos", variant: "destructive" });
+    } finally {
+      setIsMarkingBulk(false);
+    }
+  };
+
+  const handleMarkUnreadBulkClick = async () => {
+    if (selectedIds.size === 0) return;
+    setIsMarkingBulk(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await markUnreadBulk(ids);
+      setRows((prev) => prev.map((x) => selectedIds.has(x.id) ? { ...x, unread: true } : x));
+      toast({ title: "Casos actualizados", description: `Se marcaron como no leídos ${ids.length} casos.` });
+      setSelectedIds(new Set());
+      fetchStats();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Error al actualizar casos", variant: "destructive" });
+    } finally {
+      setIsMarkingBulk(false);
     }
   };
 
@@ -1037,6 +1055,14 @@ export default function CasosPage() {
               )}
               {activeTab !== "no_encontrados" && activeTab !== "pendientes" && selectedIds.size > 0 && (
                 <>
+                  <Button onClick={handleMarkReadBulkClick} disabled={isMarkingBulk} variant="outline" size="sm">
+                    {isMarkingBulk ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MailOpen className="h-4 w-4 mr-2 text-slate-500" />}
+                    Marcar leídos ({selectedIds.size})
+                  </Button>
+                  <Button onClick={handleMarkUnreadBulkClick} disabled={isMarkingBulk} variant="outline" size="sm" className="border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20">
+                    {isMarkingBulk ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2 text-emerald-600 animate-pulse" />}
+                    Marcar NO leídos ({selectedIds.size})
+                  </Button>
                   <Button onClick={() => setIsMassAssignOpen(true)} variant="outline" size="sm" className="border-primary/50 text-primary hover:bg-primary/10">
                     Asignar Abogado
                   </Button>

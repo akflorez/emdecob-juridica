@@ -533,7 +533,14 @@ export function markCaseUnread(caseId: number) {
  * MARCAR COMO LEÍDOS (varios)
  * -------------------------- */
 export function markReadBulk(caseIds: number[]) {
-  return apiFetch<{ ok: boolean; updated: number }>("/cases/mark-read-bulk", {
+  return apiFetch<{ ok: boolean; updated: number }>("/api/cases/mark-read-bulk", {
+    method: "POST",
+    body: JSON.stringify({ case_ids: caseIds }),
+  });
+}
+
+export function markUnreadBulk(caseIds: number[]) {
+  return apiFetch<{ ok: boolean; updated: number }>("/api/cases/mark-unread-bulk", {
     method: "POST",
     body: JSON.stringify({ case_ids: caseIds }),
   });

@@ -4,7 +4,7 @@ import {
   ArrowLeft, Calendar, Clock, FileText, Loader2, Filter, AlertCircle, 
   Download, User as UserIcon, Users, Building2, Hash, Paperclip, ChevronDown,
   FileDown, RefreshCw, ArrowRight, UserCheck, Edit3, ChevronRight,
-  ExternalLink
+  ExternalLink, Mail, MailOpen
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import {
   getCaseSourcesHistory,
   buscarNuevamente,
   markCaseRead,
+  markCaseUnread,
   updateCaseActiveStatus,
   type User,
   type Task as TaskType,
@@ -804,6 +805,28 @@ export default function CasoDetailPage() {
     );
   }
 
+  const [isMarkingUnreadDetail, setIsMarkingUnreadDetail] = useState(false);
+
+  const handleToggleReadStatusDetail = async () => {
+    if (!caseData?.id) return;
+    setIsMarkingUnreadDetail(true);
+    try {
+      if (caseData.unread) {
+        await markCaseRead(caseData.id);
+        setCaseData((prev: any) => prev ? { ...prev, unread: false } : null);
+        toast({ title: "Marcado como leído", description: `El radicado ${caseData.radicado} ahora está marcado como leído.` });
+      } else {
+        await markCaseUnread(caseData.id);
+        setCaseData((prev: any) => prev ? { ...prev, unread: true } : null);
+        toast({ title: "Marcado como no leído", description: `El radicado ${caseData.radicado} ahora está marcado como no leído.` });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "No se pudo cambiar el estado", variant: "destructive" });
+    } finally {
+      setIsMarkingUnreadDetail(false);
+    }
+  };
+
   if (!caseData) return null;
 
   return (
@@ -833,6 +856,25 @@ export default function CasoDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button 
+            onClick={handleToggleReadStatusDetail} 
+            disabled={isMarkingUnreadDetail} 
+            variant="outline" 
+            size="sm"
+            className={caseData.unread ? "border-amber-500/50 text-amber-700 bg-amber-50 dark:bg-amber-950/20" : ""}
+          >
+            {caseData.unread ? (
+              <>
+                <Mail className="h-4 w-4 mr-2 text-emerald-600 animate-pulse" />
+                Marcar como leído
+              </>
+            ) : (
+              <>
+                <MailOpen className="h-4 w-4 mr-2 text-slate-500" />
+                Marcar como no leído
+              </>
+            )}
+          </Button>
           {caseData.encontrado_en_fuente_alternativa && (
             <Button 
               onClick={handleBuscarNuevamente} 
