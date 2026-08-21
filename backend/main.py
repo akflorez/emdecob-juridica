@@ -9764,6 +9764,32 @@ async def get_admin_monitoring(
                 except Exception:
                     meta_dict = {"raw": l.metadata_json}
             
+            radicado_str = None
+            if meta_dict:
+                if meta_dict.get("radicado"):
+                    radicado_str = meta_dict.get("radicado")
+                elif meta_dict.get("case_id"):
+                    c = db.query(Case).filter(Case.id == meta_dict["case_id"]).first()
+                    if c: radicado_str = c.radicado
+                elif meta_dict.get("task_id"):
+                    t = db.query(Task).filter(Task.id == meta_dict["task_id"]).first()
+                    if t and t.case_id:
+                        c = db.query(Case).filter(Case.id == t.case_id).first()
+                        if c: radicado_str = c.radicado
+
+            if not radicado_str and l.entidad == "Task" and l.entidad_id:
+                t = db.query(Task).filter(Task.id == l.entidad_id).first()
+                if t and t.case_id:
+                    c = db.query(Case).filter(Case.id == t.case_id).first()
+                    if c: radicado_str = c.radicado
+            elif not radicado_str and l.entidad == "TaskComment" and l.entidad_id:
+                tc = db.query(TaskComment).filter(TaskComment.id == l.entidad_id).first()
+                if tc:
+                    t = db.query(Task).filter(Task.id == tc.task_id).first()
+                    if t and t.case_id:
+                        c = db.query(Case).filter(Case.id == t.case_id).first()
+                        if c: radicado_str = c.radicado
+
             audit_records.append({
                 "id": l.id,
                 "user_name": user_obj.nombre or user_obj.username if user_obj else "Desconocido",
@@ -9771,6 +9797,7 @@ async def get_admin_monitoring(
                 "accion": l.accion,
                 "entidad": l.entidad,
                 "entidad_id": l.entidad_id,
+                "radicado": radicado_str or "—",
                 "ip": l.ip,
                 "created_at": (l.created_at.isoformat() + "Z") if l.created_at else None,
                 "detalles": meta_dict

@@ -840,184 +840,81 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Estado de Usuarios (En Línea / Activos Recientemente) */}
-            <Card className="xl:col-span-1 border-slate-100 shadow-sm flex flex-col">
+          {/* Fila Superior: Presencia de Usuarios y Conteo de Acciones */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Presencia Reciente */}
+            <Card className="border-slate-100 shadow-sm flex flex-col">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-bold text-slate-800">Estado de Usuarios</CardTitle>
+                <CardTitle className="text-lg font-bold text-slate-800">Presencia de Usuarios</CardTitle>
                 <CardDescription>Usuarios conectados o activos recientemente</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 flex-1">
-                {/* Conectados Ahora */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Presencia Reciente</h4>
-                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    {monitoring?.online_users?.map((u) => (
-                      <div key={u.username} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs">
-                              {u.nombre.charAt(0).toUpperCase()}
-                            </div>
-                            <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white ${
-                              u.is_online ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
-                            }`} />
+              <CardContent className="flex-1">
+                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                  {monitoring?.online_users?.map((u) => (
+                    <div key={u.username} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs">
+                            {u.nombre.charAt(0).toUpperCase()}
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-slate-800">{u.nombre}</span>
-                            <span className="text-[10px] text-slate-500 truncate max-w-[120px]">{u.company_name}</span>
-                          </div>
+                          <span className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white ${
+                            u.is_online ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                          }`} />
                         </div>
-                        <div className="text-right flex flex-col items-end">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                            u.is_online ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {u.is_online ? 'Conectado' : 'Ausente'}
-                          </span>
-                          <span className="text-[9px] text-slate-400 mt-1">
-                            {formatAuditTimeOnly(u.last_active)}
-                          </span>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-slate-800">{u.nombre}</span>
+                          <span className="text-[10px] text-slate-500 truncate max-w-[160px]">{u.company_name}</span>
                         </div>
                       </div>
-                    ))}
-                    {(!monitoring?.online_users || monitoring.online_users.length === 0) && (
-                      <div className="text-center py-4 text-xs text-slate-400">
-                        Ningún usuario activo recientemente
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                          u.is_online ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {u.is_online ? 'Conectado' : 'Ausente'}
+                        </span>
+                        <span className="text-[9px] text-slate-400 mt-1">
+                          {formatAuditTimeOnly(u.last_active)}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Tabla de Cantidad de Acciones */}
-                <div className="space-y-3 pt-4 border-t border-slate-100">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Acciones Hoy</h4>
-                  <div className="overflow-hidden rounded-lg border border-slate-100 bg-white">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead className="text-xs font-bold text-slate-700 py-1.5">Usuario</TableHead>
-                          <TableHead className="text-xs font-bold text-slate-700 text-right py-1.5">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {monitoring?.user_activity_today?.map((u, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="py-1.5 text-xs">
-                              <span className="font-semibold text-slate-800">{u.nombre || u.username}</span>
-                            </TableCell>
-                            <TableCell className="text-right font-black text-slate-800 py-1.5 text-xs">{u.count}</TableCell>
-                          </TableRow>
-                        ))}
-                        {(!monitoring?.user_activity_today || monitoring.user_activity_today.length === 0) && (
-                          <TableRow>
-                            <TableCell colSpan={2} className="text-center py-4 text-xs text-slate-400">
-                              Sin actividad hoy
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                    </div>
+                  ))}
+                  {(!monitoring?.online_users || monitoring.online_users.length === 0) && (
+                    <div className="text-center py-6 text-xs text-slate-400">
+                      Ningún usuario activo recientemente
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Historial de Auditoría en Tiempo Real */}
-            <Card className="xl:col-span-2 border-slate-100 shadow-sm overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg font-bold text-slate-800">Historial de Auditoría</CardTitle>
-                  <CardDescription>
-                    Registro en tiempo real de las últimas 100 acciones · Auto-actualización cada 30s
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isRefreshingMonitoring && (
-                    <span className="text-xs text-slate-400 animate-pulse">Actualizando...</span>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={refreshMonitoring}
-                    disabled={isRefreshingMonitoring}
-                    className="text-slate-600 hover:text-slate-800 flex items-center gap-2"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isRefreshingMonitoring ? 'animate-spin' : ''}`} />
-                    {isRefreshingMonitoring ? 'Cargando...' : 'Recargar'}
-                  </Button>
-                </div>
+            {/* Acciones Registradas Hoy */}
+            <Card className="border-slate-100 shadow-sm flex flex-col">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-bold text-slate-800">Acciones Hoy</CardTitle>
+                <CardDescription>Total de operaciones por usuario durante el día</CardDescription>
               </CardHeader>
-              {monitoringError && (
-                <div className="mx-6 mb-2 px-4 py-2 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-semibold">
-                  ⚠️ Error al cargar datos: {monitoringError}
-                </div>
-              )}
-              <CardContent>
-                <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[500px] overflow-y-auto">
-                  <Table className="min-w-full">
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+              <CardContent className="flex-1">
+                <div className="overflow-hidden rounded-lg border border-slate-100 bg-white max-h-[260px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10">
                       <TableRow>
-                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[140px]">Fecha/Hora</TableHead>
-                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[130px]">Usuario</TableHead>
-                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[110px]">Empresa</TableHead>
-                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[100px]">Acción</TableHead>
-                        <TableHead className="font-bold text-slate-700 min-w-[220px]">Detalles</TableHead>
-                        <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[90px]">IP</TableHead>
+                        <TableHead className="text-xs font-bold text-slate-700 py-2">Usuario</TableHead>
+                        <TableHead className="text-xs font-bold text-slate-700 text-right py-2">Acciones Hoy</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {monitoring?.recent_logs?.map((log) => (
-                        <TableRow key={log.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-xs text-slate-600 font-mono whitespace-nowrap py-2">
-                            {formatAuditDate(log.created_at)}
+                      {monitoring?.user_activity_today?.map((u, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="py-2 text-xs">
+                            <span className="font-semibold text-slate-800">{u.nombre || u.username}</span>
                           </TableCell>
-                          <TableCell className="font-semibold text-slate-800 text-xs py-2 whitespace-nowrap max-w-[140px] truncate" title={log.user_name}>
-                            {log.user_name}
-                          </TableCell>
-                          <TableCell className="text-slate-600 text-xs py-2 whitespace-nowrap max-w-[120px] truncate" title={log.company_name}>
-                            {log.company_name}
-                          </TableCell>
-                          <TableCell className="py-2 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                              log.accion === 'LOGIN' ? 'bg-indigo-50 text-indigo-700' :
-                              log.accion === 'CREATE_TASK' ? 'bg-emerald-50 text-emerald-700' :
-                              log.accion === 'DELETE_TASK' ? 'bg-rose-50 text-rose-700' :
-                              log.accion === 'COMPLETE_TASK' ? 'bg-teal-50 text-teal-700' :
-                              log.accion === 'ADD_COMMENT' ? 'bg-sky-50 text-sky-700' :
-                              log.accion === 'UPDATE_COMMENT' ? 'bg-amber-50 text-amber-700' :
-                              log.accion === 'DELETE_COMMENT' ? 'bg-red-50 text-red-700' :
-                              'bg-slate-100 text-slate-800'
-                            }`}>
-                              {log.accion}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs text-slate-600 py-2 max-w-[280px] break-words">
-                            {log.detalles ? (
-                              <div className="flex flex-col text-xs space-y-0.5">
-                                {log.detalles.task_title && (
-                                  <span className="font-semibold text-slate-700">Tarea: {log.detalles.task_title}</span>
-                                )}
-                                {log.detalles.title && (
-                                  <span className="font-semibold text-slate-700">Tarea: {log.detalles.title}</span>
-                                )}
-                                {log.detalles.content && (
-                                  <span className="text-slate-500 italic break-words">"{log.detalles.content}"</span>
-                                )}
-                                {log.detalles.duration_hours !== undefined && (
-                                  <span className="text-emerald-600 font-bold">Resuelto en: {log.detalles.duration_hours} horas</span>
-                                )}
-                              </div>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
-                          <TableCell className="text-[11px] text-slate-500 font-mono py-2 whitespace-nowrap">{log.ip || '—'}</TableCell>
+                          <TableCell className="text-right font-black text-slate-800 py-2 text-xs">{u.count}</TableCell>
                         </TableRow>
                       ))}
-                      {(!monitoring?.recent_logs || monitoring.recent_logs.length === 0) && (
+                      {(!monitoring?.user_activity_today || monitoring.user_activity_today.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-slate-400">
-                            No hay registros de auditoría disponibles
+                          <TableCell colSpan={2} className="text-center py-6 text-xs text-slate-400">
+                            Sin actividad hoy
                           </TableCell>
                         </TableRow>
                       )}
@@ -1027,6 +924,115 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Historial de Auditoría (Ancho Completo w-full) */}
+          <Card className="w-full border-slate-100 shadow-sm overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-bold text-slate-800">Historial de Auditoría</CardTitle>
+                <CardDescription>
+                  Registro en tiempo real de las últimas 100 acciones · Auto-actualización cada 30s
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {isRefreshingMonitoring && (
+                  <span className="text-xs text-slate-400 animate-pulse">Actualizando...</span>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshMonitoring}
+                  disabled={isRefreshingMonitoring}
+                  className="text-slate-600 hover:text-slate-800 flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshingMonitoring ? 'animate-spin' : ''}`} />
+                  {isRefreshingMonitoring ? 'Cargando...' : 'Recargar'}
+                </Button>
+              </div>
+            </CardHeader>
+            {monitoringError && (
+              <div className="mx-6 mb-2 px-4 py-2 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-semibold">
+                ⚠️ Error al cargar datos: {monitoringError}
+              </div>
+            )}
+            <CardContent>
+              <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[550px] overflow-y-auto">
+                <Table className="w-full">
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableRow>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[140px]">Fecha/Hora</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[130px]">Usuario</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[110px]">Empresa</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[100px]">Acción</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[150px]">Radicado</TableHead>
+                      <TableHead className="font-bold text-slate-700 min-w-[240px]">Detalles</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[90px]">IP</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {monitoring?.recent_logs?.map((log) => (
+                      <TableRow key={log.id} className="hover:bg-slate-50/50">
+                        <TableCell className="text-xs text-slate-600 font-mono whitespace-nowrap py-2.5">
+                          {formatAuditDate(log.created_at)}
+                        </TableCell>
+                        <TableCell className="font-semibold text-slate-800 text-xs py-2.5 whitespace-nowrap max-w-[150px] truncate" title={log.user_name}>
+                          {log.user_name}
+                        </TableCell>
+                        <TableCell className="text-slate-600 text-xs py-2.5 whitespace-nowrap max-w-[130px] truncate" title={log.company_name}>
+                          {log.company_name}
+                        </TableCell>
+                        <TableCell className="py-2.5 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                            log.accion === 'LOGIN' ? 'bg-indigo-50 text-indigo-700' :
+                            log.accion === 'CREATE_TASK' ? 'bg-emerald-50 text-emerald-700' :
+                            log.accion === 'DELETE_TASK' ? 'bg-rose-50 text-rose-700' :
+                            log.accion === 'COMPLETE_TASK' ? 'bg-teal-50 text-teal-700' :
+                            log.accion === 'ADD_COMMENT' ? 'bg-sky-50 text-sky-700' :
+                            log.accion === 'UPDATE_COMMENT' ? 'bg-amber-50 text-amber-700' :
+                            log.accion === 'DELETE_COMMENT' ? 'bg-red-50 text-red-700' :
+                            'bg-slate-100 text-slate-800'
+                          }`}>
+                            {log.accion}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-indigo-700 font-mono font-bold whitespace-nowrap py-2.5">
+                          {log.radicado || '—'}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 py-2.5 max-w-[320px] break-words">
+                          {log.detalles ? (
+                            <div className="flex flex-col text-xs space-y-0.5">
+                              {log.detalles.task_title && (
+                                <span className="font-semibold text-slate-700">Tarea: {log.detalles.task_title}</span>
+                              )}
+                              {log.detalles.title && (
+                                <span className="font-semibold text-slate-700">Tarea: {log.detalles.title}</span>
+                              )}
+                              {log.detalles.content && (
+                                <span className="text-slate-500 italic break-words">"{log.detalles.content}"</span>
+                              )}
+                              {log.detalles.duration_hours !== undefined && (
+                                <span className="text-emerald-600 font-bold">Resuelto en: {log.detalles.duration_hours} horas</span>
+                              )}
+                            </div>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell className="text-[11px] text-slate-500 font-mono py-2.5 whitespace-nowrap">{log.ip || '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(!monitoring?.recent_logs || monitoring.recent_logs.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12 text-slate-400">
+                          No hay registros de auditoría disponibles
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Rendimiento de Tareas y Comentarios por Radicado */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
