@@ -105,9 +105,11 @@ try:
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clickup_id VARCHAR(100)")
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(200)")
         try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_fields TEXT")
+        try_execute(conn, "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP")
         
         # General
         try_execute(conn, "ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER")
+        try_execute(conn, "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
         try_execute(conn, "ALTER TABLE cases ADD COLUMN IF NOT EXISTS company_id INTEGER")
         try_execute(conn, "ALTER TABLE publicaciones_busquedas ADD COLUMN IF NOT EXISTS company_id INTEGER")
         
@@ -2174,6 +2176,16 @@ def get_current_user(
         if not user:
             print(f"[AUTH-DEBUG] Usuario ID {user_id} no encontrado en BD")
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
+        
+        try:
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            if not user.last_active_at or (now - user.last_active_at) > timedelta(minutes=1):
+                user.last_active_at = now
+                db.commit()
+        except Exception as db_err:
+            db.rollback()
+            print(f"[ERROR] Failed to update user last_active_at: {str(db_err)}")
         
         # Validar suspensión de la empresa (Excepto Superadmin)
         if not is_global_superadmin(user) and user.company_id is not None and user.company:
@@ -8997,18 +9009,25 @@ async def create_task(
 
     print(f"[DEBUG] Creating task: title={t_data.title}, parent_id={t_data.parent_id}, case_id={t_data.case_id}")
     try:
+        status_val = (t_data.status or "ABIERTO").upper()
+        completed_at_val = None
+        if status_val in ["COMPLETADA", "COMPLETADO", "HECHO", "DONE", "COMPLETED"]:
+            from datetime import datetime
+            completed_at_val = datetime.now()
+
         task = Task(
             title=t_data.title,
             description=t_data.description,
             list_id=lid,
             assignee_id=t_data.assignee_id,
             priority=t_data.priority,
-            status=(t_data.status or "ABIERTO").upper(),
+            status=status_val,
             due_date=t_data.due_date,
             case_id=t_data.case_id,
             parent_id=t_data.parent_id,
             creator_id=current_user.id,
-            company_id=comp_id
+            company_id=comp_id,
+            completed_at=completed_at_val
         )
         
         # Auditoría de identidad: Poblar assignee_name automáticamente
@@ -9019,7 +9038,7 @@ async def create_task(
         db.add(task)
         db.commit()
         db.refresh(task)
-        log_audit_action(db, current_user.id, current_user.company_id, "CREATE_TASK", "Task", task.id)
+        log_audit_action(db, current_user.id, current_user.company_id, "CREATE_TASK", "Task", task.id, metadata_val={"title": task.title, "case_id": task.case_id})
         return task
     except Exception as e:
         db.rollback()
@@ -9058,7 +9077,7 @@ async def delete_task(
         
         db.delete(task)
         db.commit()
-        log_audit_action(db, current_user.id, current_user.company_id, "DELETE_TASK", "Task", task_id)
+        log_audit_action(db, current_user.id, current_user.company_id, "DELETE_TASK", "Task", task_id, metadata_val={"title": task.title, "case_id": task.case_id})
         print(f"[TASK] Tarea {task_id} eliminada por usuario {current_user.username}")
         return {"ok": True, "detail": "Tarea eliminada correctamente"}
     except Exception as e:
@@ -9095,6 +9114,7 @@ async def add_task_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+    log_audit_action(db, current_user.id, current_user.company_id, "ADD_COMMENT", "TaskComment", comment.id, request, metadata_val={"task_title": task.title, "task_id": task_id, "content": comment.content})
 
     # Sincronización con ClickUp si la tarea tiene clickup_id
     if task.clickup_id:
@@ -9168,6 +9188,7 @@ async def delete_task_comment(comment_id: int, db: Session = Depends(get_db), cu
         
     db.delete(comment)
     db.commit()
+    log_audit_action(db, current_user.id, current_user.company_id, "DELETE_COMMENT", "TaskComment", comment_id, metadata_val={"task_title": task.title, "task_id": comment.task_id})
     return {"ok": True}
 
 @app.patch("/api/tasks/comments/{comment_id}")
@@ -9189,6 +9210,7 @@ async def update_task_comment(comment_id: int, data: dict = Body(...), db: Sessi
         
     comment.content = data.get("content", comment.content)
     db.commit()
+    log_audit_action(db, current_user.id, current_user.company_id, "UPDATE_COMMENT", "TaskComment", comment_id, metadata_val={"task_title": task.title, "task_id": comment.task_id, "content": comment.content})
     return comment
 
 @app.patch("/api/tasks/checklists/{item_id}")
@@ -9249,7 +9271,20 @@ async def update_task(
     try:
         if t_data.title is not None: task.title = t_data.title
         if t_data.description is not None: task.description = t_data.description
-        if t_data.status is not None: task.status = t_data.status.upper()
+        if t_data.status is not None:
+            new_status = t_data.status.upper()
+            is_completed_now = new_status in ["COMPLETADA", "COMPLETADO", "HECHO", "DONE", "COMPLETED"]
+            is_currently_completed = task.status.upper() in ["COMPLETADA", "COMPLETADO", "HECHO", "DONE", "COMPLETED"] if task.status else False
+            
+            task.status = new_status
+            if is_completed_now and not is_currently_completed:
+                from datetime import datetime
+                task.completed_at = datetime.now()
+                diff = task.completed_at - task.created_at
+                duration_hours = diff.total_seconds() / 3600.0
+                log_audit_action(db, current_user.id, current_user.company_id, "COMPLETE_TASK", "Task", task.id, metadata_val={"title": task.title, "duration_hours": round(duration_hours, 2), "case_id": task.case_id})
+            elif not is_completed_now:
+                task.completed_at = None
         if t_data.priority is not None: task.priority = t_data.priority
         if t_data.due_date is not None: task.due_date = t_data.due_date
         if hasattr(t_data, 'case_id') and t_data.case_id is not None:
@@ -9288,6 +9323,7 @@ async def update_task(
 
         db.commit()
         db.refresh(task)
+        log_audit_action(db, current_user.id, current_user.company_id, "UPDATE_TASK", "Task", task_id)
         return task
     except Exception as e:
         db.rollback()
@@ -9719,6 +9755,14 @@ async def get_admin_monitoring(
         for l in logs:
             user_obj = db.query(User).filter(User.id == l.user_id).first() if l.user_id else None
             comp_obj = db.query(Company).filter(Company.id == l.company_id).first() if l.company_id else None
+            import json
+            meta_dict = None
+            if l.metadata_json:
+                try:
+                    meta_dict = json.loads(l.metadata_json)
+                except Exception:
+                    meta_dict = {"raw": l.metadata_json}
+            
             audit_records.append({
                 "id": l.id,
                 "user_name": user_obj.nombre or user_obj.username if user_obj else "Desconocido",
@@ -9727,7 +9771,8 @@ async def get_admin_monitoring(
                 "entidad": l.entidad,
                 "entidad_id": l.entidad_id,
                 "ip": l.ip,
-                "created_at": l.created_at.isoformat() if l.created_at else None
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+                "detalles": meta_dict
             })
             
         # 5. Estadísticas agregadas por usuario
@@ -9750,6 +9795,79 @@ async def get_admin_monitoring(
                     "count": count
                 })
         
+        # 6. Tareas completadas y su duración
+        completed_tasks = db.query(Task).filter(Task.completed_at != None).order_by(desc(Task.completed_at)).limit(50).all()
+        completed_tasks_list = []
+        for ct in completed_tasks:
+            case_num = "Sin Radicado"
+            if ct.case_id:
+                c = db.query(Case).filter(Case.id == ct.case_id).first()
+                if c:
+                    case_num = c.radicado
+            
+            duration_str = "—"
+            if ct.completed_at and ct.created_at:
+                diff = ct.completed_at - ct.created_at
+                total_secs = diff.total_seconds()
+                if total_secs < 3600:
+                    duration_str = f"{round(total_secs / 60.0)} min"
+                elif total_secs < 86400:
+                    duration_str = f"{round(total_secs / 3600.0, 1)} horas"
+                else:
+                    duration_str = f"{round(total_secs / 86400.0, 1)} días"
+            
+            assignee = ct.assignee_name or "Sin asignar"
+            completed_tasks_list.append({
+                "id": ct.id,
+                "title": ct.title,
+                "radicado": case_num,
+                "assignee": assignee,
+                "created_at": ct.created_at.isoformat() if ct.created_at else None,
+                "completed_at": ct.completed_at.isoformat() if ct.completed_at else None,
+                "duration": duration_str
+            })
+
+        # 7. Historial de comentarios por radicado (casos)
+        comments_history = db.query(TaskComment).join(Task).filter(Task.case_id != None).order_by(desc(TaskComment.created_at)).limit(100).all()
+        comments_list = []
+        for comm in comments_history:
+            task_obj = db.query(Task).filter(Task.id == comm.task_id).first()
+            case_radicado = "Sin Radicado"
+            if task_obj and task_obj.case_id:
+                c = db.query(Case).filter(Case.id == task_obj.case_id).first()
+                if c:
+                    case_radicado = c.radicado
+            comments_list.append({
+                "id": comm.id,
+                "radicado": case_radicado,
+                "task_title": task_obj.title if task_obj else "Tarea eliminada",
+                "user_name": comm.user_name or f"Usuario #{comm.user_id}",
+                "content": comm.content,
+                "created_at": comm.created_at.isoformat() if comm.created_at else None
+            })
+
+        # 8. Usuarios en línea (activos últimos 5 mins) o recientemente activos (últimas 24h)
+        limite_en_linea = datetime.now() - timedelta(minutes=5)
+        limite_reciente = datetime.now() - timedelta(hours=24)
+        
+        users_online = db.query(User).filter(User.last_active_at >= limite_reciente).order_by(desc(User.last_active_at)).all()
+        online_users_list = []
+        for u in users_online:
+            comp_name = "Global (SuperAdmin)"
+            if u.company_id:
+                c = db.query(Company).filter(Company.id == u.company_id).first()
+                if c:
+                    comp_name = c.nombre
+            
+            is_online = u.last_active_at >= limite_en_linea
+            online_users_list.append({
+                "username": u.username,
+                "nombre": u.nombre or u.username,
+                "company_name": comp_name,
+                "last_active": u.last_active_at.isoformat() if u.last_active_at else None,
+                "is_online": is_online
+            })
+
         return {
             "stats": {
                 "logins_today": total_logins_hoy,
@@ -9757,7 +9875,10 @@ async def get_admin_monitoring(
                 "cases_created_today": total_cases_hoy
             },
             "recent_logs": audit_records,
-            "user_activity_today": user_stats
+            "user_activity_today": user_stats,
+            "completed_tasks": completed_tasks_list,
+            "comments_by_radicado": comments_list,
+            "online_users": online_users_list
         }
     except Exception as e:
         import traceback

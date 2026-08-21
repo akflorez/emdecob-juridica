@@ -270,6 +270,7 @@ class User(Base):
     cases_view_scope = Column(String(50), default="OWN")
     sync_with_clickup = Column(Boolean, default=True, nullable=False)
     clickup_api_token = Column(String(255), nullable=True)
+    last_active_at = Column(DateTime, nullable=True)
     
     company = relationship("Company", back_populates="users")
     roles = relationship("Role", secondary=user_roles, backref="users")
@@ -559,6 +560,7 @@ class Task(Base):
     priority = Column(String(50), nullable=True) # Low, Normal, High, Urgent
     
     due_date = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
     
     list_id = Column(Integer, ForeignKey("project_lists.id", ondelete="CASCADE"), nullable=False)
     assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

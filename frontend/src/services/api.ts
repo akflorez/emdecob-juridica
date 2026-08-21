@@ -201,6 +201,30 @@ export type AdminMonitoringStats = {
     nombre: string;
     count: number;
   }>;
+  completed_tasks: Array<{
+    id: number;
+    title: string;
+    radicado: string;
+    assignee: string;
+    created_at: string | null;
+    completed_at: string | null;
+    duration: string;
+  }>;
+  comments_by_radicado: Array<{
+    id: number;
+    radicado: string;
+    task_title: string;
+    user_name: string;
+    content: string;
+    created_at: string | null;
+  }>;
+  online_users: Array<{
+    username: string;
+    nombre: string;
+    company_name: string;
+    last_active: string | null;
+    is_online: boolean;
+  }>;
 };
 
 export function getAdminMonitoring() {
