@@ -796,10 +796,10 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="monitoreo" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-indigo-500/5 to-indigo-500/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Inicios de Sesión Hoy</CardTitle>
+                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Inicios de Sesión Hoy</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -811,9 +811,26 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
+            <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-amber-500/5 to-amber-500/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Radicados Gestionados Hoy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <div className="text-3xl font-black text-slate-800">{monitoring?.stats?.radicados_managed_today ?? 0}</div>
+                    <span className="text-[10px] text-slate-500 mt-0.5">Total acumulado: {monitoring?.stats?.radicados_managed_total ?? 0}</span>
+                  </div>
+                  <div className="p-3 bg-amber-500/10 rounded-xl text-amber-600">
+                    <Users className="w-6 h-6" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-emerald-500/5 to-emerald-500/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Tareas Creadas Hoy</CardTitle>
+                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tareas Creadas Hoy</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -827,7 +844,7 @@ export default function AdminDashboard() {
 
             <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-blue-500/5 to-blue-500/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Nuevos Casos Hoy</CardTitle>
+                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nuevos Casos Hoy</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -1025,6 +1042,89 @@ export default function AdminDashboard() {
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-12 text-slate-400">
                           No hay registros de auditoría disponibles
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* TABLA RESUMEN DE RADICADOS GESTIONADOS */}
+          <Card className="w-full border-slate-100 shadow-sm overflow-hidden mt-6">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-lg font-bold text-slate-800 font-sans">Tabla Resumen de Radicados Gestionados</CardTitle>
+                <CardDescription>
+                  Resumen de expedientes que tienen tareas creadas o comentarios registrados (Total: {monitoring?.stats?.radicados_managed_total ?? 0})
+                </CardDescription>
+              </div>
+              <span className="text-xs px-3 py-1 bg-amber-50 text-amber-800 font-bold border border-amber-200 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                {monitoring?.stats?.radicados_managed_today ?? 0} con gestión hoy
+              </span>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white max-h-[480px] overflow-y-auto">
+                <Table className="w-full">
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <TableRow>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap">Radicado</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap">Empresa</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[180px]">Demandante / Demandado</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[200px]">Usuarios Involucrados</TableHead>
+                      <TableHead className="font-bold text-slate-700 text-center whitespace-nowrap">Tareas</TableHead>
+                      <TableHead className="font-bold text-slate-700 text-center whitespace-nowrap">Comentarios</TableHead>
+                      <TableHead className="font-bold text-slate-700 text-center whitespace-nowrap">Total Gestiones</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap min-w-[140px]">Última Gestión</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap">Último Usuario</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {monitoring?.managed_cases_summary?.map((m) => (
+                      <TableRow key={m.case_id} className="hover:bg-slate-50/50">
+                        <TableCell className="font-mono text-xs font-bold text-indigo-700 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span>{m.radicado}</span>
+                            {m.has_activity_today && (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded">
+                                Hoy
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 py-2.5 whitespace-nowrap">{m.company_name}</TableCell>
+                        <TableCell className="text-xs text-slate-700 py-2.5 max-w-[200px] truncate" title={`${m.demandante} vs ${m.demandado}`}>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800 truncate">{m.demandante}</span>
+                            <span className="text-[10px] text-slate-500 truncate">vs {m.demandado}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-700 py-2.5 max-w-[220px] break-words">
+                          <span className="inline-block bg-slate-100 px-2 py-0.5 rounded text-[11px] font-medium text-slate-700">
+                            {m.users_involved || '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center font-bold text-slate-800 text-xs py-2.5 whitespace-nowrap">{m.task_count}</TableCell>
+                        <TableCell className="text-center font-bold text-slate-800 text-xs py-2.5 whitespace-nowrap">{m.comment_count}</TableCell>
+                        <TableCell className="text-center font-black text-indigo-600 text-xs py-2.5 whitespace-nowrap">
+                          <span className="bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                            {m.total_gestiones}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500 font-mono py-2.5 whitespace-nowrap">
+                          {formatAuditDate(m.last_date)}
+                        </TableCell>
+                        <TableCell className="text-xs font-semibold text-slate-800 py-2.5 whitespace-nowrap">
+                          {m.last_user}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!monitoring?.managed_cases_summary || monitoring.managed_cases_summary.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-12 text-slate-400">
+                          No hay radicados gestionados con tareas o comentarios aún.
                         </TableCell>
                       </TableRow>
                     )}

@@ -9896,17 +9896,103 @@ async def get_admin_monitoring(
                 "is_online": is_online
             })
 
+        # 9. Tabla resumen de radicados gestionados (con tareas o comentarios)
+        task_cases = db.query(Task.case_id).filter(Task.case_id != None).distinct().all()
+        comm_cases = db.query(Task.case_id).join(TaskComment, TaskComment.task_id == Task.id).filter(Task.case_id != None).distinct().all()
+        
+        all_managed_case_ids = set([c[0] for c in task_cases if c[0]]).union(
+            set([c[0] for c in comm_cases if c[0]])
+        )
+        
+        managed_cases_summary = []
+        for cid in all_managed_case_ids:
+            case_obj = db.query(Case).filter(Case.id == cid).first()
+            if not case_obj:
+                continue
+                
+            comp_obj = db.query(Company).filter(Company.id == case_obj.company_id).first() if case_obj.company_id else None
+            
+            task_count = db.query(Task).filter(Task.case_id == cid).count()
+            comment_count = db.query(TaskComment).join(Task).filter(Task.case_id == cid).count()
+            
+            task_today_count = db.query(Task).filter(Task.case_id == cid, Task.created_at >= inicio_hoy).count()
+            comment_today_count = db.query(TaskComment).join(Task).filter(Task.case_id == cid, TaskComment.created_at >= inicio_hoy).count()
+            has_activity_today = (task_today_count > 0 or comment_today_count > 0)
+            
+            last_task = db.query(Task).filter(Task.case_id == cid).order_by(desc(Task.created_at)).first()
+            last_comment = db.query(TaskComment).join(Task).filter(Task.case_id == cid).order_by(desc(TaskComment.created_at)).first()
+            
+            last_date = None
+            last_user_name = "—"
+            
+            t_date = last_task.created_at if last_task else None
+            c_date = last_comment.created_at if last_comment else None
+            
+            if t_date and (not c_date or t_date >= c_date):
+                last_date = t_date
+                if last_task.creator_id:
+                    u = db.query(User).filter(User.id == last_task.creator_id).first()
+                    if u: last_user_name = u.nombre or u.username
+                elif last_task.assignee_name:
+                    last_user_name = last_task.assignee_name
+            elif c_date:
+                last_date = c_date
+                last_user_name = last_comment.user_name or f"Usuario #{last_comment.user_id}"
+                
+            # Obtener usuarios involucrados en las tareas y comentarios de este radicado
+            task_users = db.query(Task.assignee_name, Task.creator_id).filter(Task.case_id == cid).all()
+            comment_users = db.query(TaskComment.user_name, TaskComment.user_id).join(Task).filter(Task.case_id == cid).all()
+            
+            user_names_set = set()
+            for tu in task_users:
+                if tu[0]:
+                    user_names_set.add(tu[0])
+                elif tu[1]:
+                    u = db.query(User).filter(User.id == tu[1]).first()
+                    if u: user_names_set.add(u.nombre or u.username)
+                    
+            for cu in comment_users:
+                if cu[0]:
+                    user_names_set.add(cu[0])
+                elif cu[1]:
+                    u = db.query(User).filter(User.id == cu[1]).first()
+                    if u: user_names_set.add(u.nombre or u.username)
+                    
+            all_users_str = ", ".join(sorted(list(user_names_set))) if user_names_set else "—"
+
+            managed_cases_summary.append({
+                "case_id": cid,
+                "radicado": case_obj.radicado,
+                "company_name": comp_obj.nombre if comp_obj else "Empresa Default",
+                "demandante": case_obj.demandante or "—",
+                "demandado": case_obj.demandado or "—",
+                "task_count": task_count,
+                "comment_count": comment_count,
+                "total_gestiones": task_count + comment_count,
+                "has_activity_today": has_activity_today,
+                "last_date": (last_date.isoformat() + "Z") if last_date else None,
+                "last_user": last_user_name,
+                "users_involved": all_users_str
+            })
+            
+        managed_cases_summary.sort(key=lambda x: x["last_date"] or "", reverse=True)
+        radicados_managed_today = len([x for x in managed_cases_summary if x["has_activity_today"]])
+        radicados_managed_total = len(managed_cases_summary)
+
         return {
             "stats": {
                 "logins_today": total_logins_hoy,
                 "tasks_created_today": total_tasks_created_hoy,
-                "cases_created_today": total_cases_hoy
+                "cases_created_today": total_cases_hoy,
+                "radicados_managed_today": radicados_managed_today,
+                "radicados_managed_total": radicados_managed_total
             },
             "recent_logs": audit_records,
             "user_activity_today": user_stats,
             "completed_tasks": completed_tasks_list,
             "comments_by_radicado": comments_list,
-            "online_users": online_users_list
+            "online_users": online_users_list,
+            "managed_cases_summary": managed_cases_summary
         }
     except Exception as e:
         import traceback

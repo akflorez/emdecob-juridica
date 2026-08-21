@@ -185,6 +185,8 @@ export type AdminMonitoringStats = {
     logins_today: number;
     tasks_created_today: number;
     cases_created_today: number;
+    radicados_managed_today?: number;
+    radicados_managed_total?: number;
   };
   recent_logs: Array<{
     id: number;
@@ -226,6 +228,20 @@ export type AdminMonitoringStats = {
     company_name: string;
     last_active: string | null;
     is_online: boolean;
+  }>;
+  managed_cases_summary?: Array<{
+    case_id: number;
+    radicado: string;
+    company_name: string;
+    demandante: string;
+    demandado: string;
+    task_count: number;
+    comment_count: number;
+    total_gestiones: number;
+    has_activity_today: boolean;
+    last_date: string | null;
+    last_user: string;
+    users_involved?: string;
   }>;
 };
 
