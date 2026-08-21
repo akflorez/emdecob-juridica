@@ -195,6 +195,7 @@ export type AdminMonitoringStats = {
     entidad_id: number | null;
     ip: string | null;
     created_at: string;
+    detalles: Record<string, any> | null;
   }>;
   user_activity_today: Array<{
     username: string;

@@ -25,6 +25,8 @@ export default function AdminDashboard() {
   const [monitoring, setMonitoring] = useState<AdminMonitoringStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingTiers, setSavingTiers] = useState(false);
+  const [isRefreshingMonitoring, setIsRefreshingMonitoring] = useState(false);
+  const [monitoringError, setMonitoringError] = useState<string | null>(null);
 
   const getCompanyName = (companyId: number | null) => {
     if (!companyId) return 'Global (SuperAdmin)';
@@ -81,26 +83,50 @@ export default function AdminDashboard() {
     }
   }, [user]);
 
+  // Auto-refresco del monitoreo cada 30 segundos
+  useEffect(() => {
+    if (!user?.is_admin && !user?.is_superadmin) return;
+    const interval = setInterval(() => {
+      refreshMonitoring();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const refreshMonitoring = async () => {
+    setIsRefreshingMonitoring(true);
+    setMonitoringError(null);
+    try {
+      const monRes = await getAdminMonitoring();
+      setMonitoring(monRes);
+    } catch (error: any) {
+      const msg = error?.message || 'Error al cargar datos de monitoreo';
+      setMonitoringError(msg);
+      toast({ title: 'Error de Monitoreo', description: msg, variant: 'destructive' });
+    } finally {
+      setIsRefreshingMonitoring(false);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [compRes, usrRes, tiersRes, simRes, monRes] = await Promise.all([
+      const [compRes, usrRes, tiersRes, simRes] = await Promise.all([
         apiFetch<any[]>('/api/admin/companies'),
         apiFetch<any[]>('/api/admin/users'),
         getBillingTiers().catch(() => ({ tiers: [] as BillingTier[] })),
-        getBillingSimulator().catch(() => ({ simulator: [] as BillingSimulatorResult[] })),
-        getAdminMonitoring().catch(() => null)
+        getBillingSimulator().catch(() => ({ simulator: [] as BillingSimulatorResult[] }))
       ]);
       setCompanies(compRes || []);
       setUsers(usrRes || []);
       if (tiersRes && 'tiers' in tiersRes) setTiers(tiersRes.tiers);
       if (simRes && 'simulator' in simRes) setSimulatorData(simRes.simulator);
-      if (monRes) setMonitoring(monRes);
     } catch (error: any) {
       toast({ title: "Error", description: "No se pudieron cargar los datos.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
+    // Carga el monitoreo por separado para no bloquear el resto
+    refreshMonitoring();
   };
 
   const handleCreateCompany = async () => {
@@ -878,12 +904,31 @@ export default function AdminDashboard() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-lg font-bold text-slate-800">Historial de Auditoría</CardTitle>
-                  <CardDescription>Registro en tiempo real de las últimas 100 acciones en el aplicativo</CardDescription>
+                  <CardDescription>
+                    Registro en tiempo real de las últimas 100 acciones · Auto-actualización cada 30s
+                  </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchData} className="text-slate-600 hover:text-slate-800 flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4" /> Recargar
-                </Button>
+                <div className="flex items-center gap-2">
+                  {isRefreshingMonitoring && (
+                    <span className="text-xs text-slate-400 animate-pulse">Actualizando...</span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshMonitoring}
+                    disabled={isRefreshingMonitoring}
+                    className="text-slate-600 hover:text-slate-800 flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isRefreshingMonitoring ? 'animate-spin' : ''}`} />
+                    {isRefreshingMonitoring ? 'Cargando...' : 'Recargar'}
+                  </Button>
+                </div>
               </CardHeader>
+              {monitoringError && (
+                <div className="mx-6 mb-2 px-4 py-2 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 font-semibold">
+                  ⚠️ Error al cargar datos: {monitoringError}
+                </div>
+              )}
               <CardContent>
                 <div className="overflow-hidden rounded-xl border border-slate-100 bg-white max-h-[500px] overflow-y-auto">
                   <Table>
